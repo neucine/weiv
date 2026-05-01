@@ -2,15 +2,18 @@ const std = @import("std");
 const template = @import("../parse/template.zig");
 const script_analysis = @import("ts/analysis.zig");
 const sfc = @import("../parse/sfc.zig");
+const slot_manifest = @import("slot_manifest.zig");
 
 pub const BindingResult = struct {
     component_refs: []ComponentRef,
     diagnostics: []Diagnostic,
+    own_slot_manifest: slot_manifest.Manifest,
 
     pub fn deinit(self: *BindingResult, allocator: std.mem.Allocator) void {
         allocator.free(self.component_refs);
         for (self.diagnostics) |*diagnostic| diagnostic.deinit(allocator);
         allocator.free(self.diagnostics);
+        self.own_slot_manifest.deinit(allocator);
         self.* = undefined;
     }
 };
@@ -57,11 +60,25 @@ pub fn bind(
     var scopes = std.ArrayList(Scope){};
     defer scopes.deinit(allocator);
 
+    const manifest_result = try slot_manifest.build(document, allocator);
+    defer {
+        for (manifest_result.duplicates) |dup| {
+            if (dup.name) |n| allocator.free(n);
+        }
+        allocator.free(manifest_result.duplicates);
+    }
+
+    for (manifest_result.duplicates) |dup| {
+        const name_for_diag = dup.name orelse "default";
+        try appendDiagnostic(&diagnostics, "slot.duplicate_outlet", name_for_diag, "Slot outlet declared more than once with the same name", dup.span, allocator);
+    }
+
     try bindNodes(document.nodes, script, &component_refs, &diagnostics, &scopes, false, allocator);
 
     return .{
         .component_refs = try component_refs.toOwnedSlice(allocator),
         .diagnostics = try diagnostics.toOwnedSlice(allocator),
+        .own_slot_manifest = manifest_result.manifest,
     };
 }
 

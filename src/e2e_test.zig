@@ -1018,6 +1018,34 @@ test "<template slot:foo> outside component emits slot.template_outside_componen
     try std.testing.expect(found);
 }
 
+test "duplicate <slot name> in a component emits slot.duplicate_outlet" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <section>
+        \\    <slot name="header"/>
+        \\    <slot name="header"/>
+        \\  </section>
+        \\</template>
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        \\<style></style>
+    ;
+    var model = try component.build(source, "test:duplicate_outlet.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var found = false;
+    for (model.binding_result.diagnostics) |d| {
+        if (std.mem.eql(u8, d.kind, "slot.duplicate_outlet")) found = true;
+    }
+    try std.testing.expect(found);
+}
+
 test "duplicate bare slot:name without template grouping emits slot.duplicate_provision" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
