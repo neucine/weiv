@@ -881,3 +881,54 @@ test "Card.weiv lowers to header named slot and default slot with fallbacks" {
         else => return error.UnexpectedIrShape,
     }
 }
+
+test "EmptyState.weiv lowers with named message slot and default slot, both with fallbacks" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/slots/EmptyState.weiv");
+    defer allocator.free(source);
+    var model = try component.build(source, "examples/slots/EmptyState.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
+    switch (model.ir_document.nodes[0]) {
+        .element => |root| {
+            try std.testing.expect(std.mem.eql(u8, root.tag_name, "section"));
+            try std.testing.expectEqual(@as(usize, 2), root.children.len);
+
+            switch (root.children[0]) {
+                .element => |header| {
+                    try std.testing.expect(std.mem.eql(u8, header.tag_name, "header"));
+                    try std.testing.expectEqual(@as(usize, 1), header.children.len);
+                    switch (header.children[0]) {
+                        .slot_outlet => |out| {
+                            try std.testing.expect(out.name != null);
+                            try std.testing.expect(std.mem.eql(u8, out.name.?, "message"));
+                            try std.testing.expectEqual(@as(usize, 1), out.fallback_children.len);
+                        },
+                        else => return error.UnexpectedIrShape,
+                    }
+                },
+                else => return error.UnexpectedIrShape,
+            }
+
+            switch (root.children[1]) {
+                .element => |body| {
+                    try std.testing.expect(std.mem.eql(u8, body.tag_name, "div"));
+                    try std.testing.expectEqual(@as(usize, 1), body.children.len);
+                    switch (body.children[0]) {
+                        .slot_outlet => |out| {
+                            try std.testing.expect(out.name == null);
+                            try std.testing.expectEqual(@as(usize, 1), out.fallback_children.len);
+                        },
+                        else => return error.UnexpectedIrShape,
+                    }
+                },
+                else => return error.UnexpectedIrShape,
+            }
+        },
+        else => return error.UnexpectedIrShape,
+    }
+}

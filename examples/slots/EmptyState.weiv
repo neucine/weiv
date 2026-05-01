@@ -1,0 +1,32 @@
+<template>
+  <section class="empty-state">
+    <header class="empty-state__header">
+      <slot name="message">
+        <p class="empty-state__fallback-message">Nothing here yet.</p>
+      </slot>
+    </header>
+    <div class="empty-state__body">
+      <slot>
+        <p class="empty-state__fallback-body">No additional details.</p>
+      </slot>
+    </div>
+  </section>
+</template>
+
+<script lang="ts">
+  export interface Props {}
+
+  export let props: Props;
+</script>
+
+<style>
+  .empty-state {
+    border: 1px dashed #aaa;
+    padding: 1rem;
+  }
+
+  .empty-state__fallback-message,
+  .empty-state__fallback-body {
+    color: #999;
+  }
+</style>

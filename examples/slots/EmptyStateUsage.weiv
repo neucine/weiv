@@ -1,0 +1,18 @@
+<template>
+  <EmptyState>
+    <h2 slot:message>{{ props.heading }}</h2>
+  </EmptyState>
+</template>
+
+<script lang="ts">
+  import EmptyState from "./EmptyState.weiv";
+
+  export interface Props {
+    heading: string;
+  }
+
+  export let props: Props;
+</script>
+
+<style>
+</style>
