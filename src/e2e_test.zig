@@ -1074,3 +1074,78 @@ test "duplicate bare slot:name without template grouping emits slot.duplicate_pr
     }
     try std.testing.expect(found);
 }
+
+test "slot:foo with no matching child outlet emits slot.unknown_name" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    // Card has slots "header" and default. Use "title" which is unknown.
+    const source =
+        \\<template>
+        \\  <Card>
+        \\    <h2 slot:title>oops</h2>
+        \\  </Card>
+        \\</template>
+        \\<script lang="ts">
+        \\  import Card from "./Card.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        \\<style></style>
+    ;
+    var model = try component.build(source, "examples/slots/CardUsageInvalid.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var found = false;
+    for (model.binding_result.diagnostics) |d| {
+        if (std.mem.eql(u8, d.kind, "slot.unknown_name")) found = true;
+    }
+    try std.testing.expect(found);
+}
+
+test "providing default content to a child without default slot emits slot.default_not_supported" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const child_source =
+        \\<template>
+        \\  <header><slot name="title"/></header>
+        \\</template>
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        \\<style></style>
+    ;
+    try tmp.dir.writeFile(.{ .sub_path = "OnlyNamed.weiv", .data = child_source });
+
+    const parent_source =
+        \\<template>
+        \\  <OnlyNamed>plain text</OnlyNamed>
+        \\</template>
+        \\<script lang="ts">
+        \\  import OnlyNamed from "./OnlyNamed.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        \\<style></style>
+    ;
+    try tmp.dir.writeFile(.{ .sub_path = "Parent.weiv", .data = parent_source });
+
+    // Build absolute path to the parent file so the binder can resolve "./OnlyNamed.weiv"
+    const tmp_dir_path = try tmp.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(tmp_dir_path);
+    const parent_path = try std.fs.path.join(allocator, &.{ tmp_dir_path, "Parent.weiv" });
+    defer allocator.free(parent_path);
+
+    var model = try component.build(parent_source, parent_path, allocator);
+    defer model.deinit(allocator);
+
+    var found = false;
+    for (model.binding_result.diagnostics) |d| {
+        if (std.mem.eql(u8, d.kind, "slot.default_not_supported")) found = true;
+    }
+    try std.testing.expect(found);
+}

@@ -30,7 +30,7 @@ pub fn build(
         temp.deinit(allocator);
     }
 
-    const binding_result = try binding.bind(&normalized_template, &script, allocator);
+    const binding_result = try binding.bind(&normalized_template, &script, source_path, allocator);
     errdefer {
         var temp = binding_result;
         temp.deinit(allocator);
