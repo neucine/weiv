@@ -57,7 +57,7 @@ pub fn bind(
     var scopes = std.ArrayList(Scope){};
     defer scopes.deinit(allocator);
 
-    try bindNodes(document.nodes, script, &component_refs, &diagnostics, &scopes, allocator);
+    try bindNodes(document.nodes, script, &component_refs, &diagnostics, &scopes, false, allocator);
 
     return .{
         .component_refs = try component_refs.toOwnedSlice(allocator),
@@ -71,6 +71,7 @@ fn bindNodes(
     component_refs: *std.ArrayList(ComponentRef),
     diagnostics: *std.ArrayList(Diagnostic),
     scopes: *std.ArrayList(Scope),
+    parent_is_component: bool,
     allocator: std.mem.Allocator,
 ) anyerror!void {
     for (nodes) |node| {
@@ -78,21 +79,21 @@ fn bindNodes(
             .text => {},
             .interpolation => |interp| try bindExpression(interp.expression, interp.span, script, diagnostics, scopes.items, allocator),
             .slot_outlet => |slot_outlet| {
-                try bindNodes(slot_outlet.fallback_children, script, component_refs, diagnostics, scopes, allocator);
+                try bindNodes(slot_outlet.fallback_children, script, component_refs, diagnostics, scopes, false, allocator);
             },
             .conditional => |conditional| {
                 try bindExpression(conditional.condition, conditional.span, script, diagnostics, scopes.items, allocator);
-                try bindNodes(conditional.consequent, script, component_refs, diagnostics, scopes, allocator);
-                try bindNodes(conditional.alternate, script, component_refs, diagnostics, scopes, allocator);
+                try bindNodes(conditional.consequent, script, component_refs, diagnostics, scopes, false, allocator);
+                try bindNodes(conditional.alternate, script, component_refs, diagnostics, scopes, false, allocator);
             },
             .for_loop => |for_loop| {
                 try bindExpression(for_loop.iterable_expr, for_loop.span, script, diagnostics, scopes.items, allocator);
                 var loop_scope_names = [1][]const u8{for_loop.item_name};
                 try scopes.append(allocator, .{ .names = loop_scope_names[0..1] });
                 defer _ = scopes.pop();
-                try bindNodes(for_loop.body, script, component_refs, diagnostics, scopes, allocator);
+                try bindNodes(for_loop.body, script, component_refs, diagnostics, scopes, false, allocator);
             },
-            .element => |element| try bindElement(&element, script, component_refs, diagnostics, scopes, allocator),
+            .element => |element| try bindElement(&element, script, component_refs, diagnostics, scopes, parent_is_component, allocator),
         }
     }
 }
@@ -103,6 +104,7 @@ fn bindElement(
     component_refs: *std.ArrayList(ComponentRef),
     diagnostics: *std.ArrayList(Diagnostic),
     scopes: *std.ArrayList(Scope),
+    parent_is_component: bool,
     allocator: std.mem.Allocator,
 ) anyerror!void {
     if (isComponentTag(element.tag_name)) {
@@ -125,12 +127,48 @@ fn bindElement(
             .event => |event_dir| {
                 try bindExpression(event_dir.expression, element.span, script, diagnostics, scopes.items, allocator);
             },
-            .slot_assign => {},
+            .slot_assign => |sa| {
+                if (!parent_is_component) {
+                    const code = if (std.mem.eql(u8, element.tag_name, "template"))
+                        "slot.template_outside_component"
+                    else
+                        "slot.assign_outside_component";
+                    const msg = if (std.mem.eql(u8, element.tag_name, "template"))
+                        "<template slot:<name>> may only appear as a direct child of a component usage"
+                    else
+                        "slot:<name> may only appear on a direct child of a component";
+                    try appendDiagnostic(diagnostics, code, sa.slot_name, msg, sa.span, allocator);
+                }
+            },
             .if_expr, .else_branch, .for_expr => unreachable,
         }
     }
 
-    try bindNodes(element.children, script, component_refs, diagnostics, scopes, allocator);
+    if (isComponentTag(element.tag_name)) {
+        var seen = std.StringHashMap(bool).init(allocator);
+        defer seen.deinit();
+        for (element.children) |child| {
+            switch (child) {
+                .element => |child_el| {
+                    for (child_el.directives) |dir| {
+                        if (dir == .slot_assign) {
+                            const sa = dir.slot_assign;
+                            const is_template_group = std.mem.eql(u8, child_el.tag_name, "template");
+                            if (seen.get(sa.slot_name)) |previous_was_template| {
+                                if (!(previous_was_template and is_template_group)) {
+                                    try appendDiagnostic(diagnostics, "slot.duplicate_provision", sa.slot_name, "Slot is provided more than once; use <template slot:<name>> to group multi-node content", sa.span, allocator);
+                                }
+                            }
+                            try seen.put(sa.slot_name, is_template_group);
+                        }
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+
+    try bindNodes(element.children, script, component_refs, diagnostics, scopes, isComponentTag(element.tag_name), allocator);
 }
 
 fn bindExpression(

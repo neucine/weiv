@@ -105,7 +105,9 @@ fn lowerEffects(directives: []const template.Directive, allocator: std.mem.Alloc
                     .expression = event_dir.expression,
                 },
             }),
-            .if_expr, .else_branch, .for_expr, .slot_assign => unreachable,
+            // slot_assign on a non-component element is a binder diagnostic; skip silently here.
+            .if_expr, .else_branch, .for_expr => unreachable,
+            .slot_assign => {},
         }
     }
 
