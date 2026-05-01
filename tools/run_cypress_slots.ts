@@ -1,0 +1,76 @@
+import { createServer } from "node:net";
+
+const cwd = process.cwd();
+const outDir = ".zig-cache/cypress-slots-direct";
+const entry = "examples/slots/ReactiveCardUsage.weiv";
+const specPath = "cypress/e2e/slots-direct.cy.js";
+
+async function findFreePort(): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const server = createServer();
+    server.unref();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Failed to determine a free port")));
+        return;
+      }
+      const { port } = address;
+      server.close((error) => (error ? reject(error) : resolve(port)));
+    });
+  });
+}
+
+async function waitForServer(url: string, timeoutMs: number) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return;
+    } catch {}
+    await Bun.sleep(300);
+  }
+  throw new Error(`Timed out waiting for ${url}`);
+}
+
+async function main() {
+  const port = String(await findFreePort());
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const server = Bun.spawn({
+    cmd: ["zig", "build", "run", "--", "dev", entry, outDir],
+    cwd,
+    env: { ...process.env, PORT: port },
+    stdout: "inherit",
+    stderr: "inherit",
+    stdin: "ignore",
+  });
+
+  const stop = () => {
+    try {
+      server.kill("SIGTERM");
+    } catch {}
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+
+  try {
+    await waitForServer(baseUrl, 60_000);
+    const cypress = Bun.spawn({
+      cmd: ["bunx", "cypress", "run", "--headless", "--browser", "electron", "--spec", specPath],
+      cwd,
+      env: { ...process.env, CYPRESS_BASE_URL: baseUrl },
+      stdout: "inherit",
+      stderr: "inherit",
+      stdin: "ignore",
+    });
+    const exitCode = await cypress.exited;
+    if (exitCode !== 0) throw new Error(`Cypress exited with code ${exitCode}`);
+  } finally {
+    stop();
+    await server.exited;
+  }
+}
+
+await main();

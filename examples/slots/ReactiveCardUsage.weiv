@@ -1,0 +1,30 @@
+<template>
+  <Card>
+    <template slot:header>
+      <h2 data-test="header-title">{{ title }}</h2>
+      <p data-test="header-eyebrow">Updated {{ updateCount }} time(s)</p>
+    </template>
+    <p data-test="body">{{ body }}</p>
+    <button data-test="bump" on:click="bump">Bump</button>
+  </Card>
+</template>
+
+<script lang="ts">
+  import Card from "./Card.weiv";
+
+  export interface Props {}
+
+  export let props: Props;
+
+  let title = "Initial";
+  let body = "Body 0";
+  let updateCount = 0;
+
+  function bump() {
+    updateCount += 1;
+    title = `Bumped ${updateCount}`;
+    body = `Body ${updateCount}`;
+  }
+</script>
+
+<style></style>
