@@ -88,11 +88,10 @@ fn parseSection(source: []const u8, index: *usize) ParseError!Section {
     const attrs_start = open_start + 1 + tag_name.len;
     const attrs_raw = std.mem.trim(u8, source[attrs_start..gt_rel], &std.ascii.whitespace);
 
+    const content_start = open_end;
+    const close_start = findMatchingCloseTag(source, content_start, tag_name) orelse return error.UnterminatedCloseTag;
     const close_tag = try std.fmt.allocPrint(std.heap.page_allocator, "</{s}>", .{tag_name});
     defer std.heap.page_allocator.free(close_tag);
-
-    const content_start = open_end;
-    const close_start = std.mem.indexOfPos(u8, source, content_start, close_tag) orelse return error.UnterminatedCloseTag;
     const close_end = close_start + close_tag.len;
 
     index.* = close_end;
@@ -113,4 +112,55 @@ fn skipWhitespace(source: []const u8, index: *usize) void {
 
 fn isValidScriptAttributes(attributes: []const u8) bool {
     return std.mem.eql(u8, attributes, "lang=\"ts\"");
+}
+
+fn findMatchingCloseTag(source: []const u8, content_start: usize, tag_name: []const u8) ?usize {
+    var depth: usize = 1;
+    var pos = content_start;
+
+    while (pos < source.len) {
+        const next_open = std.mem.indexOfPos(u8, source, pos, "<") orelse return null;
+        pos = next_open;
+
+        if (matchesOpenTag(source, pos, tag_name)) {
+            const gt = std.mem.indexOfScalarPos(u8, source, pos, '>') orelse return null;
+            if (gt > pos and source[gt - 1] != '/') {
+                depth += 1;
+            }
+            pos = gt + 1;
+            continue;
+        }
+
+        if (matchesCloseTag(source, pos, tag_name)) {
+            if (depth == 1) return pos;
+            depth -= 1;
+            const gt = std.mem.indexOfScalarPos(u8, source, pos, '>') orelse return null;
+            pos = gt + 1;
+            continue;
+        }
+
+        pos += 1;
+    }
+
+    return null;
+}
+
+fn matchesOpenTag(source: []const u8, index: usize, tag_name: []const u8) bool {
+    if (index + 1 + tag_name.len > source.len) return false;
+    if (source[index] != '<') return false;
+    if (index + 1 < source.len and source[index + 1] == '/') return false;
+    if (!std.mem.eql(u8, source[index + 1 .. index + 1 + tag_name.len], tag_name)) return false;
+    return hasTagBoundary(source, index + 1 + tag_name.len);
+}
+
+fn matchesCloseTag(source: []const u8, index: usize, tag_name: []const u8) bool {
+    if (index + 2 + tag_name.len > source.len) return false;
+    if (source[index] != '<' or source[index + 1] != '/') return false;
+    if (!std.mem.eql(u8, source[index + 2 .. index + 2 + tag_name.len], tag_name)) return false;
+    return hasTagBoundary(source, index + 2 + tag_name.len);
+}
+
+fn hasTagBoundary(source: []const u8, index: usize) bool {
+    if (index >= source.len) return false;
+    return std.ascii.isWhitespace(source[index]) or source[index] == '>' or source[index] == '/';
 }

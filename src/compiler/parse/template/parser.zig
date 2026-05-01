@@ -13,6 +13,7 @@ pub const ParseError = error{
     UnterminatedInterpolation,
     MismatchedCloseTag,
     InvalidDirective,
+    InvalidSlotOutlet,
 };
 
 pub fn parse(source: []const u8, allocator: std.mem.Allocator) ParseError!ast.Document {
@@ -94,6 +95,10 @@ fn parseElement(source: []const u8, allocator: std.mem.Allocator, index: *usize)
         try consumeCloseTag(source, index, tag_name);
     }
 
+    if (std.mem.eql(u8, tag_name, "slot")) {
+        return try parseSlotOutlet(tag_name, split_attributes.attributes, split_attributes.directives, children, open_start, index.*, allocator);
+    }
+
     return .{
         .element = .{
             .tag_name = tag_name,
@@ -101,6 +106,36 @@ fn parseElement(source: []const u8, allocator: std.mem.Allocator, index: *usize)
             .directives = split_attributes.directives,
             .children = children,
             .span = .{ .start = open_start, .end = index.* },
+        },
+    };
+}
+
+fn parseSlotOutlet(
+    tag_name: []const u8,
+    attributes: []ast.Attribute,
+    slot_directives: []directives.Directive,
+    children: []ast.Node,
+    start: usize,
+    end: usize,
+    allocator: std.mem.Allocator,
+) ParseError!ast.Node {
+    _ = tag_name;
+    if (slot_directives.len != 0) return error.InvalidSlotOutlet;
+    allocator.free(slot_directives);
+
+    var slot_name: ?[]const u8 = null;
+    for (attributes) |attribute| {
+        if (!std.mem.eql(u8, attribute.name, "name")) return error.InvalidSlotOutlet;
+        if (slot_name != null) return error.InvalidSlotOutlet;
+        slot_name = attribute.value orelse return error.InvalidSlotOutlet;
+    }
+    allocator.free(attributes);
+
+    return .{
+        .slot_outlet = .{
+            .name = slot_name,
+            .fallback_children = children,
+            .span = .{ .start = start, .end = end },
         },
     };
 }

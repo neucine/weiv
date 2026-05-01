@@ -109,6 +109,8 @@ function doubled() {
 - instance lifecycle syntax
 - context/injection APIs
 - async setup semantics
+- composition model details:
+  - see [Composition Model](./composition-model.md)
 
 ## 3. Template Syntax
 

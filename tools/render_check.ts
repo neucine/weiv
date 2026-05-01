@@ -173,16 +173,24 @@ class FakeDocument extends FakeNode {
 }
 
 function adoptNode(parent: FakeElement | FakeDocumentFragment, node: FakeNode) {
+  if (node.parentNode) {
+    const currentParent = node.parentNode;
+    const currentIndex = currentParent.childNodes.indexOf(node);
+    if (currentIndex !== -1) {
+      currentParent.childNodes.splice(currentIndex, 1);
+    }
+  }
   node.parentNode = parent;
 }
 
 function appendChild(parent: FakeElement | FakeDocumentFragment, node: FakeNode) {
   if (node instanceof FakeDocumentFragment) {
-    for (const child of [...node.childNodes]) {
+    const children = [...node.childNodes];
+    node.childNodes = [];
+    for (const child of children) {
       adoptNode(parent, child);
       parent.childNodes.push(child);
     }
-    node.childNodes = [];
     return;
   }
   adoptNode(parent, node);
@@ -199,15 +207,20 @@ function insertBeforeNode(parent: FakeElement | FakeDocumentFragment, node: Fake
     throw new Error("reference node is not a child of parent");
   }
   if (node instanceof FakeDocumentFragment) {
-    for (const child of [...node.childNodes]) {
+    const children = [...node.childNodes];
+    node.childNodes = [];
+    for (const child of children) {
       adoptNode(parent, child);
     }
-    parent.childNodes.splice(index, 0, ...node.childNodes);
-    node.childNodes = [];
+    parent.childNodes.splice(index, 0, ...children);
     return;
   }
   adoptNode(parent, node);
-  parent.childNodes.splice(index, 0, node);
+  const nextIndex = parent.childNodes.indexOf(reference);
+  if (nextIndex === -1) {
+    throw new Error("reference node was detached during insert");
+  }
+  parent.childNodes.splice(nextIndex, 0, node);
 }
 
 function removeChildNode(parent: FakeElement | FakeDocumentFragment, node: FakeNode) {
@@ -311,11 +324,19 @@ function emitRenderModule(componentPath: string): string {
   return emitCommand(["emit-render-js", componentPath]);
 }
 
+function emitDirectBrowserModule(componentPath: string): string {
+  return emitCommand(["emit-browser-direct-js", componentPath]);
+}
+
 function emitRuntimeModule(): string {
   return emitCommand(["emit-runtime-js"]);
 }
 
 function emitAppBundle(rootPath: string, outDir: string): void {
+  emitCommand(["emit-app-legacy", rootPath, outDir]);
+}
+
+function emitDirectAppBundle(rootPath: string, outDir: string): void {
   emitCommand(["emit-app", rootPath, outDir]);
 }
 
@@ -358,13 +379,36 @@ async function main() {
   const modules = await loadModules({
     "weiv-runtime.mjs": emitRuntimeModule(),
     "BasicCounter.mjs": emitRenderModule("examples/basic-counter.weiv"),
+    "BasicCounterDirect.mjs": emitDirectBrowserModule("examples/basic-counter.weiv"),
+    "ConditionalToggleDirect.mjs": emitDirectBrowserModule("examples/conditional-toggle.weiv"),
+    "Card.mjs": emitDirectBrowserModule("examples/slots/Card.weiv"),
+    "CardUsage.mjs": emitDirectBrowserModule("examples/slots/CardUsage.weiv"),
+    "Panel.mjs": emitDirectBrowserModule("examples/slots/Panel.weiv"),
+    "PanelUsage.mjs": emitDirectBrowserModule("examples/slots/PanelUsage.weiv"),
+    "TodoListDirect.mjs": emitDirectBrowserModule("examples/todo-list.weiv"),
     "TodoItem.mjs": emitRenderModule("examples/classic-todo/TodoItem.weiv"),
     "TodoList.mjs": emitRenderModule("examples/classic-todo/TodoList.weiv"),
   });
 
   const basicCounterModule = modules["BasicCounter.mjs"];
+  const basicCounterDirectModule = modules["BasicCounterDirect.mjs"];
+  const conditionalToggleDirectModule = modules["ConditionalToggleDirect.mjs"];
+  const cardDirectModule = modules["Card.mjs"];
+  const cardUsageDirectModule = modules["CardUsage.mjs"];
+  const panelDirectModule = modules["Panel.mjs"];
+  const panelUsageDirectModule = modules["PanelUsage.mjs"];
+  const todoListDirectModule = modules["TodoListDirect.mjs"];
   const todoItemModule = modules["TodoItem.mjs"];
   const todoListModule = modules["TodoList.mjs"];
+  const todomvcDirectModules = await loadModules({
+    "App.mjs": emitDirectBrowserModule("examples/todomvc/App.weiv"),
+    "TodoFooter.mjs": emitDirectBrowserModule("examples/todomvc/TodoFooter.weiv"),
+    "TodoHeader.mjs": emitDirectBrowserModule("examples/todomvc/TodoHeader.weiv"),
+    "TodoItem.mjs": emitDirectBrowserModule("examples/todomvc/TodoItem.weiv"),
+    "TodoList.mjs": emitDirectBrowserModule("examples/todomvc/TodoList.weiv"),
+    "TodoTextInput.mjs": emitDirectBrowserModule("examples/todomvc/TodoTextInput.weiv"),
+  });
+  const todomvcDirectAppModule = todomvcDirectModules["App.mjs"];
 
   if (!basicCounterModule.css.includes(`[data-weiv-scope="${basicCounterModule.scopeId}"] .counter-card`)) {
     throw new Error("BasicCounter CSS scope mismatch");
@@ -385,6 +429,235 @@ async function main() {
     `<section${scopeAttr(basicCounterModule.scopeId)} class="counter-card"><h2${scopeAttr(basicCounterModule.scopeId)}>Counter</h2><p${scopeAttr(basicCounterModule.scopeId)}>Current count: 2</p><p${scopeAttr(basicCounterModule.scopeId)}>Doubled: 4</p><button${scopeAttr(basicCounterModule.scopeId)}>\n      Increment\n    </button></section>`,
     "BasicCounter render"
   );
+
+  const directDocument = new FakeDocument();
+  const directTarget = directDocument.createElement("div");
+  directDocument.body.append(directTarget);
+  (globalThis as any).document = directDocument;
+
+  const directMount = basicCounterDirectModule.mount(directTarget, {
+    title: "Counter",
+    initialCount: 2,
+  });
+  if (directTarget.replaceChildrenCalls !== 1) {
+    throw new Error(`BasicCounter direct mount expected 1 root replaceChildren call, found ${directTarget.replaceChildrenCalls}`);
+  }
+  if (!directTarget.textContent.includes("Current count: 2") || !directTarget.textContent.includes("Doubled: 4")) {
+    throw new Error("BasicCounter direct mount initial content mismatch");
+  }
+
+  const directButton = findElement(directDocument.body, byTag("button"));
+  if (!directButton) throw new Error("BasicCounter direct mount missing button");
+  click(directButton);
+
+  if (directTarget.replaceChildrenCalls !== 1) {
+    throw new Error("BasicCounter direct update rerendered the root instead of patching in place");
+  }
+  if (!directTarget.textContent.includes("Current count: 3") || !directTarget.textContent.includes("Doubled: 6")) {
+    throw new Error("BasicCounter direct click did not patch the updated text");
+  }
+
+  for (let i = 0; i < 7; i += 1) {
+    click(directButton);
+  }
+  if (directButton.disabled !== true) {
+    throw new Error("BasicCounter direct update did not patch the disabled property");
+  }
+  if ((directMount.instance.refs as any[]).length === 0) {
+    throw new Error("BasicCounter direct mount did not record instance refs");
+  }
+
+  const conditionalDocument = new FakeDocument();
+  const conditionalTarget = conditionalDocument.createElement("div");
+  conditionalDocument.body.append(conditionalTarget);
+  (globalThis as any).document = conditionalDocument;
+
+  conditionalToggleDirectModule.mount(conditionalTarget, {});
+  if (conditionalTarget.replaceChildrenCalls !== 1) {
+    throw new Error(`ConditionalToggle direct mount expected 1 root replaceChildren call, found ${conditionalTarget.replaceChildrenCalls}`);
+  }
+  if (!conditionalTarget.textContent.includes("Panel is closed")) {
+    throw new Error("ConditionalToggle direct mount initial branch mismatch");
+  }
+
+  const conditionalButton = findElement(conditionalDocument.body, byTag("button"));
+  if (!conditionalButton) throw new Error("ConditionalToggle direct mount missing button");
+  click(conditionalButton);
+
+  if (conditionalTarget.replaceChildrenCalls !== 1) {
+    throw new Error("ConditionalToggle direct update rerendered the root instead of replacing the conditional block");
+  }
+  if (!conditionalTarget.textContent.includes("Panel is open")) {
+    throw new Error("ConditionalToggle direct toggle did not swap to the open branch");
+  }
+  if (conditionalTarget.textContent.includes("Panel is closed")) {
+    throw new Error("ConditionalToggle direct toggle left the closed branch mounted");
+  }
+
+  const panelFallbackDocument = new FakeDocument();
+  const panelFallbackTarget = panelFallbackDocument.createElement("div");
+  panelFallbackDocument.body.append(panelFallbackTarget);
+  (globalThis as any).document = panelFallbackDocument;
+
+  panelDirectModule.mount(panelFallbackTarget, {});
+  if (!panelFallbackTarget.textContent.includes("Fallback")) {
+    throw new Error("Panel direct mount did not render fallback slot content");
+  }
+
+  const panelUsageDocument = new FakeDocument();
+  const panelUsageTarget = panelUsageDocument.createElement("div");
+  panelUsageDocument.body.append(panelUsageTarget);
+  (globalThis as any).document = panelUsageDocument;
+
+  panelUsageDirectModule.mount(panelUsageTarget, { message: "Projected hello" });
+  if (!panelUsageTarget.textContent.includes("Projected hello")) {
+    throw new Error("PanelUsage direct mount did not render projected default slot content");
+  }
+  if (panelUsageTarget.textContent.includes("Fallback")) {
+    throw new Error("PanelUsage direct mount incorrectly left fallback slot content mounted");
+  }
+
+  const cardFallbackDocument = new FakeDocument();
+  const cardFallbackTarget = cardFallbackDocument.createElement("div");
+  cardFallbackDocument.body.append(cardFallbackTarget);
+  (globalThis as any).document = cardFallbackDocument;
+
+  cardDirectModule.mount(cardFallbackTarget, {});
+  if (!cardFallbackTarget.textContent.includes("Untitled") || !cardFallbackTarget.textContent.includes("No body content.")) {
+    throw new Error("Card direct mount did not render named/default fallback slot content");
+  }
+
+  const cardUsageDocument = new FakeDocument();
+  const cardUsageTarget = cardUsageDocument.createElement("div");
+  cardUsageDocument.body.append(cardUsageTarget);
+  (globalThis as any).document = cardUsageDocument;
+
+  cardUsageDirectModule.mount(cardUsageTarget, {
+    title: "Dashboard",
+    eyebrow: "Daily overview",
+    body: "Projected card body",
+  });
+  if (!cardUsageTarget.textContent.includes("Dashboard") ||
+      !cardUsageTarget.textContent.includes("Daily overview") ||
+      !cardUsageTarget.textContent.includes("Projected card body")) {
+    throw new Error("CardUsage direct mount did not render named/default projected slot content");
+  }
+  if (cardUsageTarget.textContent.includes("Untitled") || cardUsageTarget.textContent.includes("No body content.")) {
+    throw new Error("CardUsage direct mount incorrectly left fallback slot content mounted");
+  }
+
+  const todoListDirectDocument = new FakeDocument();
+  const todoListDirectTarget = todoListDirectDocument.createElement("div");
+  todoListDirectDocument.body.append(todoListDirectTarget);
+  (globalThis as any).document = todoListDirectDocument;
+
+  todoListDirectModule.mount(todoListDirectTarget, { title: "Tasks" });
+  if (todoListDirectTarget.replaceChildrenCalls !== 1) {
+    throw new Error(`TodoList direct mount expected 1 root replaceChildren call, found ${todoListDirectTarget.replaceChildrenCalls}`);
+  }
+  if (!todoListDirectTarget.textContent.includes("Showing pending tasks")) {
+    throw new Error("TodoList direct mount initial conditional branch mismatch");
+  }
+  if (!todoListDirectTarget.textContent.includes("Implement template binder") ||
+      !todoListDirectTarget.textContent.includes("Test CSS scoping")) {
+    throw new Error("TodoList direct mount initial visible items mismatch");
+  }
+  if (todoListDirectTarget.textContent.includes("Write parser fixtures")) {
+    throw new Error("TodoList direct mount still shows completed item in pending mode");
+  }
+
+  const todoListDirectButton = findElement(todoListDirectDocument.body, byTag("button"));
+  if (!todoListDirectButton) throw new Error("TodoList direct mount missing toggle button");
+  click(todoListDirectButton);
+
+  if (todoListDirectTarget.replaceChildrenCalls !== 1) {
+    throw new Error("TodoList direct toggle rerendered the root instead of replacing only list/conditional blocks");
+  }
+  if (!todoListDirectTarget.textContent.includes("Showing completed tasks")) {
+    throw new Error("TodoList direct toggle did not switch the conditional branch");
+  }
+  if (!todoListDirectTarget.textContent.includes("Write parser fixtures")) {
+    throw new Error("TodoList direct toggle did not swap in the completed-item list");
+  }
+  if (todoListDirectTarget.textContent.includes("Implement template binder")) {
+    throw new Error("TodoList direct toggle left pending items mounted");
+  }
+
+  const todomvcDirectDocument = new FakeDocument();
+  const todomvcDirectTarget = todomvcDirectDocument.createElement("div");
+  todomvcDirectDocument.body.append(todomvcDirectTarget);
+  (globalThis as any).document = todomvcDirectDocument;
+
+  todomvcDirectAppModule.mount(todomvcDirectTarget, { title: "todos" });
+  if (todomvcDirectTarget.replaceChildrenCalls !== 1) {
+    throw new Error(`TodoMVC direct mount expected 1 root replaceChildren call, found ${todomvcDirectTarget.replaceChildrenCalls}`);
+  }
+
+  let directLabels = findElements(todomvcDirectDocument.body, byTag("label")).map((element) => element.textContent.trim());
+  if (directLabels.length !== 5) {
+    throw new Error(`TodoMVC direct mount expected 5 labels, found ${directLabels.length}`);
+  }
+
+  const directNewTodoInput = findElement(todomvcDirectDocument.body, byClass("newtodo"));
+  if (!directNewTodoInput) throw new Error("TodoMVC direct mount missing newtodo input");
+  directNewTodoInput.value = "Direct DOM codegen path";
+  keydown(directNewTodoInput, "Enter");
+
+  if (todomvcDirectTarget.replaceChildrenCalls !== 1) {
+    throw new Error("TodoMVC direct create flow rerendered the root");
+  }
+  directLabels = findElements(todomvcDirectDocument.body, byTag("label")).map((element) => element.textContent.trim());
+  if (directLabels[0] !== "Direct DOM codegen path") {
+    throw new Error("TodoMVC direct create flow did not prepend the new todo");
+  }
+
+  let directFilterButtons = findElements(todomvcDirectDocument.body, byTag("button")).filter((element) =>
+    ["All", "Active", "Completed"].includes(element.textContent.trim())
+  );
+  const directActiveButton = directFilterButtons.find((element) => element.textContent.trim() === "Active");
+  if (!directActiveButton) throw new Error("TodoMVC direct active filter button missing");
+  click(directActiveButton);
+
+  if (todomvcDirectTarget.replaceChildrenCalls !== 1) {
+    throw new Error("TodoMVC direct filter change rerendered the root");
+  }
+  directLabels = findElements(todomvcDirectDocument.body, byTag("label")).map((element) => element.textContent.trim());
+  if (directLabels.some((text) => text.includes("Port TodoMVC into the verification suite"))) {
+    throw new Error("TodoMVC direct active filter still shows completed items");
+  }
+
+  const directEditLabel = findElements(todomvcDirectDocument.body, byTag("label")).find((element) =>
+    element.textContent.includes("Exercise edit, filter, and clear-completed flows")
+  );
+  if (!directEditLabel) throw new Error("TodoMVC direct edit target label missing");
+  dblclick(directEditLabel);
+
+  if (todomvcDirectTarget.replaceChildrenCalls !== 1) {
+    throw new Error("TodoMVC direct edit-mode entry rerendered the root");
+  }
+  const directEditInput = findElement(todomvcDirectDocument.body, byClass("edit"));
+  if (!directEditInput) throw new Error("TodoMVC direct edit flow did not open edit input");
+  directEditInput.value = "Direct path edit flow";
+  keydown(directEditInput, "Enter");
+
+  directLabels = findElements(todomvcDirectDocument.body, byTag("label")).map((element) => element.textContent.trim());
+  if (!directLabels.includes("Direct path edit flow")) {
+    throw new Error("TodoMVC direct edit flow did not persist the updated text");
+  }
+
+  const directToggles = findElements(todomvcDirectDocument.body, byClass("toggle"));
+  const directCreatedToggle = directToggles[0];
+  if (!directCreatedToggle) throw new Error("TodoMVC direct toggle flow missing active toggle");
+  directCreatedToggle.checked = true;
+  change(directCreatedToggle);
+
+  if (todomvcDirectTarget.replaceChildrenCalls !== 1) {
+    throw new Error("TodoMVC direct toggle flow rerendered the root");
+  }
+  directLabels = findElements(todomvcDirectDocument.body, byTag("label")).map((element) => element.textContent.trim());
+  if (directLabels.includes("Direct DOM codegen path")) {
+    throw new Error("TodoMVC direct active filter did not drop toggled completed item");
+  }
 
   const todoItemHtml = todoItemModule.renderToString({
     item: { id: "a", title: "Write tests", completed: false },
@@ -660,6 +933,38 @@ async function main() {
     }
   } finally {
     rmSync(todomvcBundleDir, { recursive: true, force: true });
+  }
+
+  const todomvcDirectBundleDir = mkdtempSync(join(tmpdir(), "weiv-todomvc-direct-bundle-"));
+  try {
+    emitDirectAppBundle("examples/todomvc/App.weiv", todomvcDirectBundleDir);
+    const directBundleModule = await importModule(join(todomvcDirectBundleDir, "bundle.mjs"));
+    const directBundleMain = readFileSync(join(todomvcDirectBundleDir, "main.mjs"), "utf8");
+    if (!directBundleMain.includes("AppBundle.mount(target, props);")) {
+      throw new Error("TodoMVC direct bundle missing browser bootstrap");
+    }
+
+    const directBundleDocument = new FakeDocument();
+    const directBundleTarget = directBundleDocument.createElement("div");
+    directBundleDocument.body.append(directBundleTarget);
+    (globalThis as any).document = directBundleDocument;
+
+    directBundleModule.mount(directBundleTarget, { title: "todos" });
+    if (directBundleTarget.replaceChildrenCalls !== 1) {
+      throw new Error(`TodoMVC direct bundle mount expected 1 root replaceChildren call, found ${directBundleTarget.replaceChildrenCalls}`);
+    }
+
+    const bundledDirectNewTodoInput = findElement(directBundleDocument.body, byClass("newtodo"));
+    if (!bundledDirectNewTodoInput) throw new Error("TodoMVC direct bundle missing newtodo input");
+    bundledDirectNewTodoInput.value = "Direct app bundle path";
+    keydown(bundledDirectNewTodoInput, "Enter");
+
+    const bundledDirectLabels = findElements(directBundleDocument.body, byTag("label")).map((element) => element.textContent.trim());
+    if (bundledDirectLabels[0] !== "Direct app bundle path") {
+      throw new Error("TodoMVC direct bundle create flow did not prepend the new todo");
+    }
+  } finally {
+    rmSync(todomvcDirectBundleDir, { recursive: true, force: true });
   }
 
   process.stdout.write("render checks passed\n");

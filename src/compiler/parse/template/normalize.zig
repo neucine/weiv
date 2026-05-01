@@ -28,6 +28,17 @@ fn normalizeNodes(nodes: []const ast.Node, allocator: std.mem.Allocator) Normali
             .interpolation => |interp| try out.append(allocator, .{
                 .interpolation = .{ .expression = interp.expression, .span = interp.span },
             }),
+            .slot_outlet => |slot_outlet| {
+                const fallback_nodes = try normalizeNodes(slot_outlet.fallback_children, allocator);
+                errdefer freeNormalizedNodes(fallback_nodes, allocator);
+                try out.append(allocator, .{
+                    .slot_outlet = .{
+                        .name = slot_outlet.name,
+                        .fallback_children = fallback_nodes,
+                        .span = slot_outlet.span,
+                    },
+                });
+            },
             .element => |element| {
                 if (findIfDirective(element.directives)) |if_dir| {
                     var alternate_nodes: []normalized.Node = &.{};
@@ -106,6 +117,20 @@ fn normalizeNodeAsBranch(node: ast.Node, allocator: std.mem.Allocator, filter: D
             single[0] = .{ .interpolation = .{ .expression = interp.expression, .span = interp.span } };
             return single;
         },
+        .slot_outlet => |slot_outlet| {
+            var single = try allocator.alloc(normalized.Node, 1);
+            errdefer allocator.free(single);
+            const fallback_nodes = try normalizeNodes(slot_outlet.fallback_children, allocator);
+            errdefer freeNormalizedNodes(fallback_nodes, allocator);
+            single[0] = .{
+                .slot_outlet = .{
+                    .name = slot_outlet.name,
+                    .fallback_children = fallback_nodes,
+                    .span = slot_outlet.span,
+                },
+            };
+            return single;
+        },
     }
 }
 
@@ -155,7 +180,7 @@ fn filterDirectives(input: []const directives.Directive, allocator: std.mem.Allo
 fn isStructuralDirective(directive: directives.Directive) bool {
     return switch (directive) {
         .if_expr, .else_branch, .for_expr => true,
-        .event, .bind => false,
+        .event, .bind, .slot_assign => false,
     };
 }
 

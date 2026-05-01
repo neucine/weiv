@@ -1,0 +1,29 @@
+<template>
+  <section class="conditional-toggle">
+    <button on:click="toggleOpen">
+      Toggle details
+    </button>
+
+    <p if="open">Panel is open</p>
+    <p else>Panel is closed</p>
+  </section>
+</template>
+
+<script lang="ts">
+  export interface Props {}
+
+  export let props: Props;
+
+  let open = false;
+
+  function toggleOpen() {
+    open = !open;
+  }
+</script>
+
+<style>
+  .conditional-toggle {
+    display: grid;
+    gap: 0.75rem;
+  }
+</style>

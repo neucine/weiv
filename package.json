@@ -1,0 +1,11 @@
+{
+  "name": "weiv",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cypress:direct": "bun tools/run_cypress_direct.ts"
+  },
+  "devDependencies": {
+    "cypress": "^14.5.0"
+  }
+}

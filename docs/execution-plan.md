@@ -21,6 +21,10 @@ The plan stays aligned with the current project constraints:
 - Bun-friendly TypeScript workflow
 - no router, SSR, forms stack, or ecosystem expansion in MVP
 
+Scope guard:
+
+- use [Framework Scope](./framework-scope.md) to decide whether a feature is required, later, or intentionally not planned
+
 ## Execution Rules
 
 These rules apply across every phase:

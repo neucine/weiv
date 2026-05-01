@@ -1,9 +1,10 @@
 const std = @import("std");
 const component = @import("compiler/pipeline.zig");
 const app_emit = @import("compiler/emit/browser/app_bundle.zig");
-const emit_js = @import("compiler/emit/browser/document_js.zig");
-const emit_module_js = @import("compiler/emit/browser/component_module_js.zig");
-const runtime_js = @import("compiler/emit/browser/shared_runtime_js.zig");
+const emit_direct_js = @import("compiler/emit/browser/direct_component_js.zig");
+const legacy_emit_js = @import("compiler/emit/browser/legacy/document_js.zig");
+const legacy_emit_module_js = @import("compiler/emit/browser/legacy/component_module_js.zig");
+const legacy_runtime_js = @import("compiler/emit/browser/legacy/shared_runtime_js.zig");
 const style = @import("compiler/emit/browser/scoped_css.zig");
 const sfc = @import("compiler/parse/sfc.zig");
 const parser_backend = @import("ffi/parser_backend.zig");
@@ -75,7 +76,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
         var model = try component.build(source, path, allocator);
         defer model.deinit(allocator);
 
-        const js = try emit_js.emitDocument(&model.ir_document, allocator);
+        const js = try legacy_emit_js.emitDocument(&model.ir_document, allocator);
         defer allocator.free(js);
         try std.fs.File.stdout().writeAll(js);
         return;
@@ -92,7 +93,24 @@ pub fn run(allocator: std.mem.Allocator) !void {
         var model = try component.build(source, path, allocator);
         defer model.deinit(allocator);
 
-        const js = try emit_module_js.emitModule(&model, allocator);
+        const js = try legacy_emit_module_js.emitModule(&model, allocator);
+        defer allocator.free(js);
+        try std.fs.File.stdout().writeAll(js);
+        return;
+    }
+
+    if (std.mem.eql(u8, command, "emit-browser-direct-js")) {
+        const path = args.next() orelse {
+            try printUsage();
+            return;
+        };
+        const source = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
+        defer allocator.free(source);
+
+        var model = try component.build(source, path, allocator);
+        defer model.deinit(allocator);
+
+        const js = try emit_direct_js.emitModule(&model, allocator);
         defer allocator.free(js);
         try std.fs.File.stdout().writeAll(js);
         return;
@@ -116,7 +134,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
     }
 
     if (std.mem.eql(u8, command, "emit-runtime-js")) {
-        const js = try runtime_js.emitSharedRuntime(allocator);
+        const js = try legacy_runtime_js.emitSharedRuntime(allocator);
         defer allocator.free(js);
         try std.fs.File.stdout().writeAll(js);
         return;
@@ -135,13 +153,37 @@ pub fn run(allocator: std.mem.Allocator) !void {
         return;
     }
 
+    if (std.mem.eql(u8, command, "emit-app-legacy")) {
+        const root_path = args.next() orelse {
+            try printUsage();
+            return;
+        };
+        const out_dir = args.next() orelse {
+            try printUsage();
+            return;
+        };
+        try app_emit.emitAppLegacy(root_path, out_dir, allocator);
+        return;
+    }
+
     if (std.mem.eql(u8, command, "dev")) {
         const root_path = args.next() orelse {
             try printUsage();
             return;
         };
-        const out_dir = args.next() orelse ".zig-cache/weiv-dev";
+        const out_dir = args.next() orelse ".zig-cache/weiv-dev-direct";
         try app_emit.emitApp(root_path, out_dir, allocator);
+        try runDevServer(root_path, out_dir, allocator);
+        return;
+    }
+
+    if (std.mem.eql(u8, command, "dev-legacy")) {
+        const root_path = args.next() orelse {
+            try printUsage();
+            return;
+        };
+        const out_dir = args.next() orelse ".zig-cache/weiv-dev-legacy";
+        try app_emit.emitAppLegacy(root_path, out_dir, allocator);
         try runDevServer(root_path, out_dir, allocator);
         return;
     }
@@ -156,11 +198,16 @@ fn printUsage() !void {
         \\  weiv analyze-component <path>
         \\  weiv dump-ir <path>
         \\  weiv emit-js <path>
-        \\  weiv emit-render-js <path>
+        \\  weiv emit-browser-direct-js <path>
         \\  weiv emit-css <path>
-        \\  weiv emit-runtime-js
         \\  weiv emit-app <root.weiv> <out-dir>
         \\  weiv dev <root.weiv> [out-dir]
+        \\
+        \\Compatibility / internal:
+        \\  weiv emit-render-js <path>
+        \\  weiv emit-runtime-js
+        \\  weiv emit-app-legacy <root.weiv> <out-dir>
+        \\  weiv dev-legacy <root.weiv> [out-dir]
         \\
     );
 }
@@ -227,6 +274,14 @@ fn printNormalizedNodes(nodes: []const @import("compiler/parse/template.zig").No
         switch (node) {
             .text => |text| try writer.interface.print("text [{d}..{d}]\n", .{ text.span.start, text.span.end }),
             .interpolation => |interp| try writer.interface.print("interpolation `{s}` [{d}..{d}]\n", .{ interp.expression, interp.span.start, interp.span.end }),
+            .slot_outlet => |slot_outlet| {
+                if (slot_outlet.name) |name| {
+                    try writer.interface.print("slot name=\"{s}\"\n", .{name});
+                } else {
+                    try writer.interface.print("slot <default>\n", .{});
+                }
+                try printNormalizedNodes(slot_outlet.fallback_children, indent + 1, writer);
+            },
             .element => |element| {
                 try writer.interface.print("element <{s}> children={d}\n", .{ element.tag_name, element.children.len });
                 for (element.directives) |directive| {
@@ -234,6 +289,7 @@ fn printNormalizedNodes(nodes: []const @import("compiler/parse/template.zig").No
                     switch (directive) {
                         .bind => |bind_dir| try writer.interface.print("directive bind:{s}=\"{s}\"\n", .{ bind_dir.target_name, bind_dir.expression }),
                         .event => |event_dir| try writer.interface.print("directive on:{s}=\"{s}\"\n", .{ event_dir.event_name, event_dir.expression }),
+                        .slot_assign => |slot_assign| try writer.interface.print("directive slot:{s}\n", .{slot_assign.slot_name}),
                         .if_expr, .else_branch, .for_expr => unreachable,
                     }
                 }
@@ -280,9 +336,26 @@ fn printIrNodes(nodes: []const @import("compiler/lower/ir.zig").Node, indent: us
         switch (node) {
             .text => |text| try writer.interface.print("text `{s}`\n", .{text.content}),
             .interpolation => |interp| try writer.interface.print("interpolation `{s}`\n", .{interp.expression}),
+            .slot_outlet => |slot_outlet| {
+                if (slot_outlet.name) |name| {
+                    try writer.interface.print("slot name=\"{s}\"\n", .{name});
+                } else {
+                    try writer.interface.print("slot <default>\n", .{});
+                }
+                try printIrNodes(slot_outlet.fallback_children, indent + 1, writer);
+            },
             .component => |component_node| {
                 try writer.interface.print("component <{s}>\n", .{component_node.tag_name});
                 try printIrEffects(component_node.effects, indent + 1, writer);
+                for (component_node.slot_provisions) |slot_provision| {
+                    try printIndent(indent + 1, writer);
+                    if (slot_provision.name) |name| {
+                        try writer.interface.print("slot provision {s}\n", .{name});
+                    } else {
+                        try writer.interface.print("slot provision <default>\n", .{});
+                    }
+                    try printIrNodes(slot_provision.children, indent + 2, writer);
+                }
             },
             .element => |element| {
                 try writer.interface.print("element <{s}>\n", .{element.tag_name});

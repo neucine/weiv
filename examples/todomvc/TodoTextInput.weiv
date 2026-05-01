@@ -10,6 +10,7 @@
   }
 
   export let props: Props;
+  let suppressBlurSubmit = false;
 
   function inputClass() {
     if (props.editing) {
@@ -23,18 +24,21 @@
   }
 
   function handleBlur(event: any) {
-    if (props.editing) {
+    if (props.editing && !suppressBlurSubmit) {
       emit("submit", readValue(event));
     }
+    suppressBlurSubmit = false;
   }
 
   function handleKeydown(event: any) {
     if (event.key === "Enter") {
+      suppressBlurSubmit = true;
       emit("submit", readValue(event));
       return;
     }
 
     if (event.key === "Escape") {
+      suppressBlurSubmit = true;
       emit("cancel", null);
     }
   }

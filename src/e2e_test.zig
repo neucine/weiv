@@ -1,6 +1,7 @@
 const std = @import("std");
 const app_emit = @import("compiler/emit/browser/app_bundle.zig");
 const component = @import("compiler/pipeline.zig");
+const emit_direct_js = @import("compiler/emit/browser/direct_component_js.zig");
 const emit_js = @import("compiler/emit/browser/document_js.zig");
 const emit_module_js = @import("compiler/emit/browser/component_module_js.zig");
 const style = @import("compiler/emit/browser/scoped_css.zig");
@@ -185,9 +186,321 @@ test "basic counter render module exposes renderToString contract" {
     try std.testing.expect(std.mem.indexOf(u8, js, "import { renderNodes, mountNodes, createBoundary, replaceBoundary } from \"./weiv-runtime.mjs\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "export const scopeId = ") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "export const css = ") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "export function mount(target, props = {}, components = {}, eventHandlers = {})") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "export function mountIntoBoundary(start, end, props = {}, components = {}, eventHandlers = {})") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "export function mount(target, props = {}, components = {}, eventHandlers = {}, slots = {})") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "export function mountIntoBoundary(start, end, props = {}, components = {}, eventHandlers = {}, slots = {})") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "kind: \"interpolation\"") != null);
+}
+
+test "basic counter direct browser module emits create/update DOM contract" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/basic-counter.weiv");
+    defer allocator.free(source);
+
+    var model = try component.build(source, "examples/basic-counter.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "function createDom(instance)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateDom(instance)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "document.createElement(\"section\")") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "addEventListener(\"click\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "refs[") != null);
+}
+
+test "conditional toggle direct browser module emits conditional boundary helpers" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/conditional-toggle.weiv");
+    defer allocator.free(source);
+
+    var model = try component.build(source, "examples/conditional-toggle.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "createConditionalFragment_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "updateConditional_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "document.createComment(\"if:start\")") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "replaceBetween(") != null);
+}
+
+test "todo list direct browser module emits loop boundary helpers" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/todo-list.weiv");
+    defer allocator.free(source);
+
+    var model = try component.build(source, "examples/todo-list.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "createForEntry_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "updateForLoop_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "document.createComment(\"for:start\")") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const loopScope = { ...nextScope, [\"item\"]: currentItem };") != null);
+}
+
+test "slot outlet and default projection survive through normalized template and IR" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <Panel>
+        \\    <p>{{ props.message }}</p>
+        \\  </Panel>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import Panel from "./Panel.weiv";
+        \\
+        \\  export interface Props {
+        \\    message: string;
+        \\  }
+        \\
+        \\  export let props: Props;
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/slots/PanelUsage.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), model.normalized_template.nodes.len);
+    switch (model.normalized_template.nodes[0]) {
+        .element => |element| {
+            try std.testing.expect(std.mem.eql(u8, element.tag_name, "Panel"));
+            try std.testing.expectEqual(@as(usize, 1), element.children.len);
+        },
+        else => return error.UnexpectedNormalizedShape,
+    }
+
+    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
+    switch (model.ir_document.nodes[0]) {
+        .component => |component_node| {
+            try std.testing.expect(std.mem.eql(u8, component_node.tag_name, "Panel"));
+            try std.testing.expectEqual(@as(usize, 1), component_node.slot_provisions.len);
+            try std.testing.expect(component_node.slot_provisions[0].name == null);
+            try std.testing.expectEqual(@as(usize, 1), component_node.slot_provisions[0].children.len);
+            switch (component_node.slot_provisions[0].children[0]) {
+                .element => |child| try std.testing.expect(std.mem.eql(u8, child.tag_name, "p")),
+                else => return error.UnexpectedIrShape,
+            }
+        },
+        else => return error.UnexpectedIrShape,
+    }
+}
+
+test "slot outlet parses and lowers fallback content" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <section>
+        \\    <slot>
+        \\      <p>Fallback</p>
+        \\    </slot>
+        \\  </section>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/slots/Panel.weiv", allocator);
+    defer model.deinit(allocator);
+
+    switch (model.normalized_template.nodes[0]) {
+        .element => |root| {
+            try std.testing.expectEqual(@as(usize, 1), root.children.len);
+            switch (root.children[0]) {
+                .slot_outlet => |slot_outlet| {
+                    try std.testing.expect(slot_outlet.name == null);
+                    try std.testing.expectEqual(@as(usize, 1), slot_outlet.fallback_children.len);
+                },
+                else => return error.UnexpectedNormalizedShape,
+            }
+        },
+        else => return error.UnexpectedNormalizedShape,
+    }
+
+    switch (model.ir_document.nodes[0]) {
+        .element => |root| {
+            try std.testing.expectEqual(@as(usize, 1), root.children.len);
+            switch (root.children[0]) {
+                .slot_outlet => |slot_outlet| {
+                    try std.testing.expect(slot_outlet.name == null);
+                    try std.testing.expectEqual(@as(usize, 1), slot_outlet.fallback_children.len);
+                },
+                else => return error.UnexpectedIrShape,
+            }
+        },
+        else => return error.UnexpectedIrShape,
+    }
+}
+
+test "legacy render module supports default slot projection and fallback" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const panel_source = try readFixture(allocator, "examples/slots/Panel.weiv");
+    defer allocator.free(panel_source);
+    var panel_model = try component.build(panel_source, "examples/slots/Panel.weiv", allocator);
+    defer panel_model.deinit(allocator);
+
+    const panel_usage_source = try readFixture(allocator, "examples/slots/PanelUsage.weiv");
+    defer allocator.free(panel_usage_source);
+    var usage_model = try component.build(panel_usage_source, "examples/slots/PanelUsage.weiv", allocator);
+    defer usage_model.deinit(allocator);
+
+    const panel_js = try emit_module_js.emitModule(&panel_model, allocator);
+    defer allocator.free(panel_js);
+    const usage_js = try emit_module_js.emitModule(&usage_model, allocator);
+    defer allocator.free(usage_js);
+
+    try std.testing.expect(std.mem.indexOf(u8, panel_js, "renderToString(props = {}, components = {}, slots = {})") != null);
+    try std.testing.expect(std.mem.indexOf(u8, usage_js, "slots: {\"default\": { nodes: [") != null);
+}
+
+test "direct browser modules expose default slot projection contract" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const panel_source = try readFixture(allocator, "examples/slots/Panel.weiv");
+    defer allocator.free(panel_source);
+    var panel_model = try component.build(panel_source, "examples/slots/Panel.weiv", allocator);
+    defer panel_model.deinit(allocator);
+
+    const panel_usage_source = try readFixture(allocator, "examples/slots/PanelUsage.weiv");
+    defer allocator.free(panel_usage_source);
+    var usage_model = try component.build(panel_usage_source, "examples/slots/PanelUsage.weiv", allocator);
+    defer usage_model.deinit(allocator);
+
+    const panel_js = try emit_direct_js.emitModule(&panel_model, allocator);
+    defer allocator.free(panel_js);
+    const usage_js = try emit_direct_js.emitModule(&usage_model, allocator);
+    defer allocator.free(usage_js);
+
+    try std.testing.expect(std.mem.indexOf(u8, panel_js, "const __slot = instance.slots?.default;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, panel_js, "export function mountIntoBoundary(start, end, props = {}, eventHandlers = {}, slots = {})") != null);
+    try std.testing.expect(std.mem.indexOf(u8, panel_js, "setSlots: instance.setSlots") != null);
+    try std.testing.expect(std.mem.indexOf(u8, usage_js, "mountProjectedSlot_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, usage_js, ".mountIntoBoundary(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, usage_js, "default: { mountIntoBoundary: (start, end) => mountProjectedSlot_") != null);
+}
+
+test "named slot grouping lowers into explicit slot provisions" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/slots/CardUsage.weiv");
+    defer allocator.free(source);
+
+    var model = try component.build(source, "examples/slots/CardUsage.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
+    switch (model.ir_document.nodes[0]) {
+        .component => |component_node| {
+            try std.testing.expect(std.mem.eql(u8, component_node.tag_name, "Card"));
+            try std.testing.expectEqual(@as(usize, 2), component_node.slot_provisions.len);
+            try std.testing.expect(std.mem.eql(u8, component_node.slot_provisions[0].name.?, "header"));
+            try std.testing.expectEqual(@as(usize, 2), component_node.slot_provisions[0].children.len);
+            try std.testing.expect(component_node.slot_provisions[1].name == null);
+            try std.testing.expectEqual(@as(usize, 1), component_node.slot_provisions[1].children.len);
+        },
+        else => return error.UnexpectedIrShape,
+    }
+}
+
+test "named slot browser modules expose slot map contract" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const card_source = try readFixture(allocator, "examples/slots/Card.weiv");
+    defer allocator.free(card_source);
+    var card_model = try component.build(card_source, "examples/slots/Card.weiv", allocator);
+    defer card_model.deinit(allocator);
+
+    const card_usage_source = try readFixture(allocator, "examples/slots/CardUsage.weiv");
+    defer allocator.free(card_usage_source);
+    var usage_model = try component.build(card_usage_source, "examples/slots/CardUsage.weiv", allocator);
+    defer usage_model.deinit(allocator);
+
+    const card_js = try emit_direct_js.emitModule(&card_model, allocator);
+    defer allocator.free(card_js);
+    const usage_js = try emit_direct_js.emitModule(&usage_model, allocator);
+    defer allocator.free(usage_js);
+
+    try std.testing.expect(std.mem.indexOf(u8, card_js, "const __slot = instance.slots?.[\"header\"];") != null);
+    try std.testing.expect(std.mem.indexOf(u8, usage_js, "mountProjectedSlot_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, usage_js, "\"header\": { mountIntoBoundary: (start, end) => mountProjectedSlot_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, usage_js, "default: { mountIntoBoundary: (start, end) => mountProjectedSlot_") != null);
+}
+
+test "todomvc app direct browser module preserves child component imports" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/todomvc/App.weiv");
+    defer allocator.free(source);
+
+    var model = try component.build(source, "examples/todomvc/App.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "import * as TodoHeader from \"./TodoHeader.mjs\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "import * as TodoList from \"./TodoList.mjs\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "import * as TodoFooter from \"./TodoFooter.mjs\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, ".mountIntoBoundary(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, ".setProps(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, ".setEventHandlers(") != null);
+}
+
+test "todomvc direct app bundle emits browser-direct entry files" {
+    const allocator = std.testing.allocator;
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    const tmp_root = try std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", tmp_dir.sub_path[0..] });
+    defer allocator.free(tmp_root);
+    const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "direct-bundle" });
+    defer allocator.free(out_dir);
+
+    try app_emit.emitAppDirect("examples/todomvc/App.weiv", out_dir, allocator);
+
+    const bundle_js = try tmp_dir.dir.readFileAlloc(allocator, "direct-bundle/bundle.mjs", 1024 * 1024);
+    defer allocator.free(bundle_js);
+    const main_js = try tmp_dir.dir.readFileAlloc(allocator, "direct-bundle/main.mjs", 1024 * 1024);
+    defer allocator.free(main_js);
+
+    try std.testing.expect(std.mem.indexOf(u8, bundle_js, "export function mount(target, props = {})") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bundle_js, "Root.mount(target, props)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bundle_js, "export const components = {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, main_js, "AppBundle.mount(target, props);") != null);
 }
 
 test "imported helper render module preserves runtime JS imports" {
@@ -259,7 +572,7 @@ test "classic todo app emits multi-file app bundle" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("examples/classic-todo/App.weiv", out_dir, allocator);
+    try app_emit.emitAppLegacy("examples/classic-todo/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "bundle/bundle.mjs", 1024 * 1024);
     defer allocator.free(app_js);
@@ -313,7 +626,7 @@ test "todomvc verification app emits multi-file app bundle" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "todomvc-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("examples/todomvc/App.weiv", out_dir, allocator);
+    try app_emit.emitAppLegacy("examples/todomvc/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/bundle.mjs", 1024 * 1024);
     defer allocator.free(app_js);
@@ -382,7 +695,7 @@ test "basic counter app bundle emits inferred preview props" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "counter-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("examples/basic-counter.weiv", out_dir, allocator);
+    try app_emit.emitAppLegacy("examples/basic-counter.weiv", out_dir, allocator);
 
     const props_js = try tmp_dir.dir.readFileAlloc(allocator, "counter-bundle/props.mjs", 1024 * 1024);
     defer allocator.free(props_js);
@@ -400,7 +713,7 @@ test "imported helper app bundle copies runtime JS dependencies" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "imported-helper-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("examples/imported-helper/App.weiv", out_dir, allocator);
+    try app_emit.emitAppLegacy("examples/imported-helper/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-helper-bundle/App.mjs", 1024 * 1024);
     defer allocator.free(app_js);
@@ -429,7 +742,7 @@ test "imported TS helper app bundle transpiles and copies TS dependencies" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "imported-ts-helper-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("examples/imported-ts-helper/App.weiv", out_dir, allocator);
+    try app_emit.emitAppLegacy("examples/imported-ts-helper/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-ts-helper-bundle/App.mjs", 1024 * 1024);
     defer allocator.free(app_js);
@@ -460,7 +773,7 @@ test "emit app rejects unsupported bare runtime imports" {
 
     try std.testing.expectError(
         error.UnsupportedRuntimeImport,
-        app_emit.emitApp("examples/unsupported-import/App.weiv", out_dir, allocator),
+        app_emit.emitAppLegacy("examples/unsupported-import/App.weiv", out_dir, allocator),
     );
 }
 

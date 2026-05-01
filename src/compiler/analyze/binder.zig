@@ -77,6 +77,9 @@ fn bindNodes(
         switch (node) {
             .text => {},
             .interpolation => |interp| try bindExpression(interp.expression, interp.span, script, diagnostics, scopes.items, allocator),
+            .slot_outlet => |slot_outlet| {
+                try bindNodes(slot_outlet.fallback_children, script, component_refs, diagnostics, scopes, allocator);
+            },
             .conditional => |conditional| {
                 try bindExpression(conditional.condition, conditional.span, script, diagnostics, scopes.items, allocator);
                 try bindNodes(conditional.consequent, script, component_refs, diagnostics, scopes, allocator);
@@ -122,6 +125,7 @@ fn bindElement(
             .event => |event_dir| {
                 try bindExpression(event_dir.expression, element.span, script, diagnostics, scopes.items, allocator);
             },
+            .slot_assign => {},
             .if_expr, .else_branch, .for_expr => unreachable,
         }
     }

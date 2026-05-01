@@ -6,6 +6,7 @@ pub const NodeTag = enum {
     element,
     text,
     interpolation,
+    slot_outlet,
 };
 
 pub const Attribute = struct {
@@ -31,10 +32,17 @@ pub const InterpolationNode = struct {
     span: sfc.Span,
 };
 
+pub const SlotOutletNode = struct {
+    name: ?[]const u8,
+    fallback_children: []Node,
+    span: sfc.Span,
+};
+
 pub const Node = union(NodeTag) {
     element: ElementNode,
     text: TextNode,
     interpolation: InterpolationNode,
+    slot_outlet: SlotOutletNode,
 
     pub fn deinit(self: *Node, allocator: std.mem.Allocator) void {
         switch (self.*) {
@@ -43,6 +51,10 @@ pub const Node = union(NodeTag) {
                 allocator.free(element.directives);
                 for (element.children) |*child| child.deinit(allocator);
                 allocator.free(element.children);
+            },
+            .slot_outlet => |*slot_outlet| {
+                for (slot_outlet.fallback_children) |*child| child.deinit(allocator);
+                allocator.free(slot_outlet.fallback_children);
             },
             .text, .interpolation => {},
         }

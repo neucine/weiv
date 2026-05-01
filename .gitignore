@@ -6,3 +6,5 @@ dist
 .zig-cache
 zig-out
 libs/parser-backend/target
+cypress/screenshots
+cypress/videos

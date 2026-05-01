@@ -7,6 +7,7 @@ pub const NodeTag = enum {
     conditional,
     for_loop,
     component,
+    slot_outlet,
 };
 
 pub const DirectiveEffect = union(enum) {
@@ -55,6 +56,17 @@ pub const ForLoopNode = struct {
 pub const ComponentNode = struct {
     tag_name: []const u8,
     effects: []DirectiveEffect,
+    slot_provisions: []SlotProvision,
+};
+
+pub const SlotOutletNode = struct {
+    name: ?[]const u8,
+    fallback_children: []Node,
+};
+
+pub const SlotProvision = struct {
+    name: ?[]const u8,
+    children: []Node,
 };
 
 pub const Node = union(NodeTag) {
@@ -64,6 +76,7 @@ pub const Node = union(NodeTag) {
     conditional: ConditionalNode,
     for_loop: ForLoopNode,
     component: ComponentNode,
+    slot_outlet: SlotOutletNode,
 
     pub fn deinit(self: *Node, allocator: std.mem.Allocator) void {
         switch (self.*) {
@@ -85,6 +98,15 @@ pub const Node = union(NodeTag) {
             },
             .component => |*component| {
                 allocator.free(component.effects);
+                for (component.slot_provisions) |*slot_provision| {
+                    for (slot_provision.children) |*child| child.deinit(allocator);
+                    allocator.free(slot_provision.children);
+                }
+                allocator.free(component.slot_provisions);
+            },
+            .slot_outlet => |*slot_outlet| {
+                for (slot_outlet.fallback_children) |*child| child.deinit(allocator);
+                allocator.free(slot_outlet.fallback_children);
             },
             .text, .interpolation => {},
         }

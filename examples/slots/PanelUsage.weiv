@@ -1,0 +1,21 @@
+<template>
+  <Panel>
+    <p class="panel-usage__message">{{ props.message }}</p>
+  </Panel>
+</template>
+
+<script lang="ts">
+  import Panel from "./Panel.weiv";
+
+  export interface Props {
+    message: string;
+  }
+
+  export let props: Props;
+</script>
+
+<style>
+  .panel-usage__message {
+    font-weight: 600;
+  }
+</style>

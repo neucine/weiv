@@ -1,0 +1,36 @@
+<template>
+  <section class="card">
+    <header class="card__header">
+      <slot name="header">
+        <h2 class="card__fallback-title">Untitled</h2>
+      </slot>
+    </header>
+    <div class="card__body">
+      <slot>
+        <p class="card__fallback-body">No body content.</p>
+      </slot>
+    </div>
+  </section>
+</template>
+
+<script lang="ts">
+  export interface Props {}
+
+  export let props: Props;
+</script>
+
+<style>
+  .card {
+    border: 1px solid #ddd;
+    padding: 1rem;
+  }
+
+  .card__header {
+    margin-bottom: 0.75rem;
+  }
+
+  .card__fallback-title,
+  .card__fallback-body {
+    color: #666;
+  }
+</style>

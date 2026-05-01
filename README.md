@@ -102,6 +102,9 @@ tools/     render harness and test fixtures
 - [Execution Plan](./docs/execution-plan.md)
 - [Compiler Architecture](./docs/compiler-architecture.md)
 - [Browser Codegen Direction](./docs/browser-codegen.md)
+- [Composition Model](./docs/composition-model.md)
+- [Composition Implementation](./docs/composition-implementation.md)
+- [Framework Scope](./docs/framework-scope.md)
 - [Syntax Decisions](./docs/syntax-decisions.md)
 - [FFI Design](./docs/ffi-design.md)
 - [Backend API: Script Analysis](./docs/backend-api-script-analysis.md)
@@ -109,5 +112,8 @@ tools/     render harness and test fixtures
 ## Near-Term Focus
 
 - replace generic browser subtree rerendering with compiled DOM update paths
+- add a real composition model, likely slots or an equivalent content projection mechanism
+- define the public state/reactivity model after composition is clearer
+- harden `weiv dev` into a stronger watch/rebuild workflow
 - keep TodoMVC as the forcing-function verification app
 - preserve a small runtime boundary and move complexity into compiler output

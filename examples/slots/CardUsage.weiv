@@ -1,0 +1,36 @@
+<template>
+  <Card>
+    <template slot:header>
+      <h2 class="card-usage__title">{{ props.title }}</h2>
+      <p class="card-usage__eyebrow">{{ props.eyebrow }}</p>
+    </template>
+
+    <p class="card-usage__body">{{ props.body }}</p>
+  </Card>
+</template>
+
+<script lang="ts">
+  import Card from "./Card.weiv";
+
+  export interface Props {
+    title: string;
+    eyebrow: string;
+    body: string;
+  }
+
+  export let props: Props;
+</script>
+
+<style>
+  .card-usage__title {
+    font-weight: 700;
+  }
+
+  .card-usage__eyebrow {
+    color: #666;
+  }
+
+  .card-usage__body {
+    line-height: 1.5;
+  }
+</style>

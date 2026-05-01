@@ -1,0 +1,23 @@
+<template>
+  <section class="panel">
+    <slot>
+      <p class="panel__fallback">Fallback panel content</p>
+    </slot>
+  </section>
+</template>
+
+<script lang="ts">
+  export interface Props {}
+
+  export let props: Props;
+</script>
+
+<style>
+  .panel {
+    padding: 1rem;
+  }
+
+  .panel__fallback {
+    color: #666;
+  }
+</style>

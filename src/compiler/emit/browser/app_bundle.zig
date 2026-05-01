@@ -1,11 +1,16 @@
 const std = @import("std");
 const component = @import("../../pipeline.zig");
-const emit_module_js = @import("component_module_js.zig");
+const emit_direct_js = @import("direct_component_js.zig");
+const legacy_emit_module_js = @import("legacy/component_module_js.zig");
 const parser_backend = @import("../../../ffi/parser_backend.zig");
-const runtime_js = @import("shared_runtime_js.zig");
+const legacy_runtime_js = @import("legacy/shared_runtime_js.zig");
 const style = @import("scoped_css.zig");
 
 pub fn emitApp(root_component_path: []const u8, out_dir_path: []const u8, allocator: std.mem.Allocator) !void {
+    return emitAppDirect(root_component_path, out_dir_path, allocator);
+}
+
+pub fn emitAppLegacy(root_component_path: []const u8, out_dir_path: []const u8, allocator: std.mem.Allocator) !void {
     const root_abs_path = try std.fs.cwd().realpathAlloc(allocator, root_component_path);
     defer allocator.free(root_abs_path);
 
@@ -19,7 +24,7 @@ pub fn emitApp(root_component_path: []const u8, out_dir_path: []const u8, alloca
     var out_dir = try std.fs.cwd().makeOpenPath(out_dir_path, .{});
     defer out_dir.close();
 
-    const runtime_source = try runtime_js.emitSharedRuntime(allocator);
+    const runtime_source = try legacy_runtime_js.emitSharedRuntime(allocator);
     defer allocator.free(runtime_source);
     try out_dir.writeFile(.{ .sub_path = "weiv-runtime.mjs", .data = runtime_source });
 
@@ -30,6 +35,53 @@ pub fn emitApp(root_component_path: []const u8, out_dir_path: []const u8, alloca
     try graph.writeComponentModules(out_dir, allocator);
 
     const entry_source = try graph.emitEntry(root_index, allocator);
+    defer allocator.free(entry_source);
+    try out_dir.writeFile(.{ .sub_path = "bundle.mjs", .data = entry_source });
+
+    const browser_entry_source = try graph.emitBrowserEntry(allocator);
+    defer allocator.free(browser_entry_source);
+    try out_dir.writeFile(.{ .sub_path = "main.mjs", .data = browser_entry_source });
+
+    const props_source = try graph.emitPropsModule(root_index, allocator);
+    defer allocator.free(props_source);
+    try out_dir.writeFile(.{ .sub_path = "props.mjs", .data = props_source });
+
+    const html_source = try graph.emitIndexHtml(root_index, allocator);
+    defer allocator.free(html_source);
+    try out_dir.writeFile(.{ .sub_path = "index.html", .data = html_source });
+
+    try graph.writeRuntimeImports(out_dir, allocator);
+
+    const package_json = try graph.emitPackageJson(allocator);
+    defer allocator.free(package_json);
+    try out_dir.writeFile(.{ .sub_path = "package.json", .data = package_json });
+
+    const dev_server = try graph.emitDevServer(allocator);
+    defer allocator.free(dev_server);
+    try out_dir.writeFile(.{ .sub_path = "server.ts", .data = dev_server });
+}
+
+pub fn emitAppDirect(root_component_path: []const u8, out_dir_path: []const u8, allocator: std.mem.Allocator) !void {
+    const root_abs_path = try std.fs.cwd().realpathAlloc(allocator, root_component_path);
+    defer allocator.free(root_abs_path);
+
+    const root_dir = std.fs.path.dirname(root_abs_path) orelse return error.InvalidRootPath;
+    var graph = Graph.init(root_dir, allocator);
+    defer graph.deinit();
+
+    const root_index = try graph.collect(root_abs_path);
+    try graph.validateRuntimeImports();
+
+    var out_dir = try std.fs.cwd().makeOpenPath(out_dir_path, .{});
+    defer out_dir.close();
+
+    const styles_css = try graph.emitStylesheet(allocator);
+    defer allocator.free(styles_css);
+    try out_dir.writeFile(.{ .sub_path = "styles.css", .data = styles_css });
+
+    try graph.writeComponentModulesDirect(out_dir, allocator);
+
+    const entry_source = try graph.emitDirectEntry(root_index, allocator);
     defer allocator.free(entry_source);
     try out_dir.writeFile(.{ .sub_path = "bundle.mjs", .data = entry_source });
 
@@ -165,7 +217,15 @@ const Graph = struct {
             const runtime_specifier = try ensureRelativeSpecifier(runtime_import, allocator);
             defer allocator.free(runtime_specifier);
 
-            const js = try emit_module_js.emitModuleWithRuntimeImport(&node.model, runtime_specifier, allocator);
+            const js = try legacy_emit_module_js.emitModuleWithRuntimeImport(&node.model, runtime_specifier, allocator);
+            defer allocator.free(js);
+            try out_dir.writeFile(.{ .sub_path = node.module_rel_path, .data = js });
+        }
+    }
+
+    fn writeComponentModulesDirect(self: *Graph, out_dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
+        for (self.nodes.items) |*node| {
+            const js = try emit_direct_js.emitModule(&node.model, allocator);
             defer allocator.free(js);
             try out_dir.writeFile(.{ .sub_path = node.module_rel_path, .data = js });
         }
@@ -316,6 +376,63 @@ const Graph = struct {
             \\export default AppBundle;
             \\
         , .{});
+    }
+
+    fn emitDirectEntry(self: *Graph, root_index: usize, allocator: std.mem.Allocator) ![]u8 {
+        var out = std.ArrayList(u8){};
+        defer out.deinit(allocator);
+
+        const root_import_path = try ensureRelativeSpecifier(self.nodes.items[root_index].module_rel_path, allocator);
+        defer allocator.free(root_import_path);
+        try out.writer(allocator).print("import * as Root from \"{s}\";\n", .{root_import_path});
+
+        var sorted = std.ArrayList(ComponentImport){};
+        defer sorted.deinit(allocator);
+
+        var iter = self.component_registry.iterator();
+        while (iter.next()) |entry| {
+            try sorted.append(allocator, .{
+                .tag_name = entry.key_ptr.*,
+                .node_index = entry.value_ptr.*,
+            });
+        }
+
+        std.mem.sort(ComponentImport, sorted.items, {}, compareComponentImport);
+
+        for (sorted.items, 0..) |entry, idx| {
+            const import_alias = try std.fmt.allocPrint(allocator, "Component_{d}", .{idx});
+            defer allocator.free(import_alias);
+            const import_path = try ensureRelativeSpecifier(self.nodes.items[entry.node_index].module_rel_path, allocator);
+            defer allocator.free(import_path);
+            try out.writer(allocator).print("import * as {s} from \"{s}\";\n", .{ import_alias, import_path });
+        }
+
+        try out.appendSlice(allocator,
+            \\
+            \\export const components = {
+            \\
+        );
+        for (sorted.items, 0..) |entry, idx| {
+            try out.writer(allocator).print("  \"{s}\": Component_{d}", .{ entry.tag_name, idx });
+            if (idx + 1 < sorted.items.len) {
+                try out.appendSlice(allocator, ",\n");
+            } else {
+                try out.appendSlice(allocator, "\n");
+            }
+        }
+        try out.appendSlice(allocator,
+            \\};
+            \\
+            \\export const root = Root;
+            \\export const cssPath = "./styles.css";
+            \\
+            \\export function mount(target, props = {}) {
+            \\  return Root.mount(target, props);
+            \\}
+            \\
+        );
+
+        return try out.toOwnedSlice(allocator);
     }
 
     fn emitPropsModule(self: *Graph, root_index: usize, allocator: std.mem.Allocator) ![]u8 {

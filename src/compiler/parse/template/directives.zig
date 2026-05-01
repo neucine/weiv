@@ -7,6 +7,7 @@ pub const DirectiveTag = enum {
     for_expr,
     event,
     bind,
+    slot_assign,
 };
 
 pub const IfDirective = struct {
@@ -30,12 +31,17 @@ pub const BindDirective = struct {
     expression: []const u8,
 };
 
+pub const SlotAssignDirective = struct {
+    slot_name: []const u8,
+};
+
 pub const Directive = union(DirectiveTag) {
     if_expr: IfDirective,
     else_branch: ElseDirective,
     for_expr: ForDirective,
     event: EventDirective,
     bind: BindDirective,
+    slot_assign: SlotAssignDirective,
 };
 
 pub const SplitAttributes = struct {
@@ -96,6 +102,18 @@ pub fn split(raw_attributes: []const ast.Attribute, allocator: std.mem.Allocator
                 .bind = .{
                     .target_name = attribute.name["bind:".len..],
                     .expression = value,
+                },
+            });
+            continue;
+        }
+
+        if (std.mem.startsWith(u8, attribute.name, "slot:")) {
+            if (attribute.value != null) return error.InvalidDirective;
+            const slot_name = attribute.name["slot:".len..];
+            if (slot_name.len == 0) return error.InvalidDirective;
+            try directives.append(allocator, .{
+                .slot_assign = .{
+                    .slot_name = slot_name,
                 },
             });
             continue;
