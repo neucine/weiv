@@ -349,6 +349,7 @@ Status as of 2026-05-01:
 - MVP checklist: created
 - canonical example expansion: created
 - Zig interop direction: FFI selected
+- composition milestone (slots): completed
 
 ## Risks To Manage
 

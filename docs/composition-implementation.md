@@ -207,6 +207,25 @@ The first composition milestone is complete when:
 - slot diagnostics are clear
 - the direct browser path supports projected content without regressing the compiler-driven direction
 
+## Status
+
+Completed on 2026-05-01 by the composition milestone hardening plan
+(`docs/superpowers/plans/2026-05-01-composition-milestone-hardening.md`).
+
+- default and named slots: verified in Cypress + IR snapshot tests
+- fallback content: verified in Cypress (SlotShowcase) and IR snapshots
+- grouped `<template slot:name>`: verified in CardUsage IR snapshot + Cypress reactive test
+- diagnostics: 6 codes implemented and unit-tested
+  - `slot.unknown_name`
+  - `slot.duplicate_outlet`
+  - `slot.assign_outside_component`
+  - `slot.template_outside_component`
+  - `slot.duplicate_provision`
+  - `slot.default_not_supported`
+- direct browser path supports projected content end to end, including
+  parent-state-driven updates without remount (DOM identity verified by
+  Cypress)
+
 ## Explicitly Deferred
 
 Do not add in this milestone:
