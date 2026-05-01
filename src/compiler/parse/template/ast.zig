@@ -12,6 +12,7 @@ pub const NodeTag = enum {
 pub const Attribute = struct {
     name: []const u8,
     value: ?[]const u8,
+    span: sfc.Span,
 };
 
 pub const ElementNode = struct {

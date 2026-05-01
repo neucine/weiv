@@ -5,6 +5,9 @@ const emit_direct_js = @import("compiler/emit/browser/direct_component_js.zig");
 const emit_js = @import("compiler/emit/browser/document_js.zig");
 const emit_module_js = @import("compiler/emit/browser/component_module_js.zig");
 const style = @import("compiler/emit/browser/scoped_css.zig");
+const directives = @import("compiler/parse/template/directives.zig");
+const ast = @import("compiler/parse/template/ast.zig");
+const sfc = @import("compiler/parse/sfc.zig");
 
 test "classic todo app components build through current pipeline" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -880,6 +883,34 @@ test "Card.weiv lowers to header named slot and default slot with fallbacks" {
         },
         else => return error.UnexpectedIrShape,
     }
+}
+
+test "slot:name directive carries a non-empty source span" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    // Construct a hand-built attribute slice that represents `slot:header` at offset 42.
+    const input_attrs = [_]ast.Attribute{
+        .{
+            .name = "slot:header",
+            .value = null,
+            .span = .{ .start = 42, .end = 53 },
+        },
+    };
+
+    const result = try directives.split(&input_attrs, allocator);
+    defer allocator.free(result.attributes);
+    defer allocator.free(result.directives);
+
+    try std.testing.expectEqual(@as(usize, 0), result.attributes.len);
+    try std.testing.expectEqual(@as(usize, 1), result.directives.len);
+
+    const slot_dir = result.directives[0].slot_assign;
+    try std.testing.expectEqualStrings("header", slot_dir.slot_name);
+    try std.testing.expectEqual(@as(usize, 42), slot_dir.span.start);
+    try std.testing.expectEqual(@as(usize, 53), slot_dir.span.end);
+    try std.testing.expect(slot_dir.span.end > slot_dir.span.start);
 }
 
 test "EmptyState.weiv lowers with named message slot and default slot, both with fallbacks" {

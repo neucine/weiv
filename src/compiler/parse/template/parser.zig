@@ -75,7 +75,8 @@ fn parseElement(source: []const u8, allocator: std.mem.Allocator, index: *usize)
     var parts = std.mem.tokenizeAny(u8, inner, &std.ascii.whitespace);
     const tag_name = parts.next() orelse return error.UnterminatedTag;
     const attrs_source = std.mem.trim(u8, inner[tag_name.len..], &std.ascii.whitespace);
-    const raw_attributes = try attrs.parseAttributes(attrs_source, allocator);
+    const attrs_base_offset = @intFromPtr(attrs_source.ptr) - @intFromPtr(source.ptr);
+    const raw_attributes = try attrs.parseAttributes(attrs_source, attrs_base_offset, allocator);
     defer allocator.free(raw_attributes);
     const split_attributes = try directives.split(raw_attributes, allocator);
     errdefer {
