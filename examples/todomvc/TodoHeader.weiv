@@ -1,0 +1,45 @@
+<template>
+  <header class="todo-header">
+    <h1>{{ props.title || "todos" }}</h1>
+    <TodoTextInput bind:initialValue="''" bind:placeholder="'What needs to be done?'" on:submit="handleCreate" />
+  </header>
+</template>
+
+<script lang="ts">
+  import TodoTextInput from "./TodoTextInput.weiv";
+
+  export interface Props {
+    title: string;
+  }
+
+  export let props: Props;
+
+  function handleCreate(text: string) {
+    emit("create", text);
+  }
+</script>
+
+<style>
+  .todo-header {
+    position: relative;
+  }
+
+  .todo-header h1 {
+    position: absolute;
+    top: -155px;
+    width: 100%;
+    margin: 0;
+    font-size: 100px;
+    font-weight: 100;
+    text-align: center;
+    text-rendering: optimizeLegibility;
+    color: rgba(175, 47, 47, 0.15);
+  }
+
+  @media (max-width: 640px) {
+    .todo-header h1 {
+      top: -125px;
+      font-size: 76px;
+    }
+  }
+</style>

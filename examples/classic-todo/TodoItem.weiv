@@ -1,0 +1,76 @@
+<template>
+  <article class="todo-item">
+    <label class="todo-item__label">
+      <input bind:checked="props.item.completed" on:change="emit('toggle', props.item.id)" type="checkbox" />
+      <span class="todo-item__copy">
+        <strong>{{ props.item.title }}</strong>
+        <em>{{ props.item.completed ? "Completed" : "In progress" }}</em>
+      </span>
+    </label>
+  </article>
+</template>
+
+<script lang="ts">
+  export interface Todo {
+    id: string;
+    title: string;
+    completed: boolean;
+  }
+
+  export interface Props {
+    item: Todo;
+  }
+
+  export let props: Props;
+</script>
+
+<style>
+  .todo-item {
+    display: flex;
+    align-items: center;
+    padding: 0.95rem 1rem;
+    border: 1px solid rgba(77, 52, 24, 0.12);
+    border-radius: 22px;
+    background: linear-gradient(180deg, #fffefb 0%, #fff8ef 100%);
+    box-shadow: 0 14px 30px rgba(56, 36, 17, 0.06);
+  }
+
+  .todo-item__label {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  .todo-item__label input {
+    width: 1.2rem;
+    height: 1.2rem;
+    margin: 0;
+    accent-color: #1f7a45;
+    flex: none;
+  }
+
+  .todo-item__copy {
+    display: grid;
+    gap: 0.18rem;
+  }
+
+  .todo-item__copy strong {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #20140b;
+  }
+
+  .todo-item__copy em {
+    font-style: normal;
+    font-size: 0.84rem;
+    color: #7b6652;
+  }
+
+  .todo-item__label input:checked + .todo-item__copy strong {
+    text-decoration: line-through;
+    text-decoration-thickness: 2px;
+    color: #7b6652;
+  }
+</style>

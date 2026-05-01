@@ -1,0 +1,175 @@
+<template>
+  <li bind:class="itemClass()">
+    <TodoTextInput if="props.editing" autofocus bind:editing="true" bind:initialValue="props.todo.title" bind:placeholder="'Edit task'" on:cancel="handleCancel" on:submit="handleSubmit" />
+
+    <div else class="view">
+      <input bind:checked="props.todo.completed" class="toggle" on:change="handleToggle" type="checkbox" />
+      <label on:dblclick="startEdit">{{ props.todo.title }}</label>
+      <button class="destroy" on:click="handleDestroy"></button>
+    </div>
+  </li>
+</template>
+
+<script lang="ts">
+  import TodoTextInput from "./TodoTextInput.weiv";
+
+  export interface Todo {
+    id: string;
+    title: string;
+    completed: boolean;
+  }
+
+  export interface Props {
+    todo: Todo;
+    editing: boolean;
+  }
+
+  export let props: Props;
+
+  function itemClass() {
+    if (props.editing) {
+      return "editing";
+    }
+    if (props.todo.completed) {
+      return "completed";
+    }
+    return null;
+  }
+
+  function startEdit() {
+    emit("start-edit", props.todo.id);
+  }
+
+  function handleToggle() {
+    emit("toggle", props.todo.id);
+  }
+
+  function handleDestroy() {
+    emit("destroy", props.todo.id);
+  }
+
+  function handleSubmit(text: string) {
+    emit("save-edit", { id: props.todo.id, text });
+  }
+
+  function handleCancel() {
+    emit("cancel-edit", null);
+  }
+</script>
+
+<style>
+  li {
+    position: relative;
+    font-size: 24px;
+    border-bottom: 1px solid #ededed;
+  }
+
+  li:last-child {
+    border-bottom: none;
+  }
+
+  li.editing {
+    border-bottom: none;
+    padding: 0;
+  }
+
+  li.editing .view {
+    display: none;
+  }
+
+  .view {
+    display: grid;
+    grid-template-columns: 40px 1fr 40px;
+    align-items: center;
+    column-gap: 8px;
+    min-height: 58px;
+    padding: 0 10px 0 6px;
+  }
+
+  .toggle {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    margin: 0 auto;
+    border: none;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: inset 0 0 0 2px #ededed;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 9px;
+    width: 7px;
+    height: 13px;
+    border-right: 2px solid transparent;
+    border-bottom: 2px solid transparent;
+    transform: rotate(45deg);
+  }
+
+  .toggle:checked::after {
+    border-color: #5dc2af;
+  }
+
+  .toggle:checked {
+    box-shadow: inset 0 0 0 2px #bddad5;
+  }
+
+  label {
+    display: block;
+    margin: 0;
+    padding: 15px 12px 15px 0;
+    line-height: 1.2;
+    white-space: pre-line;
+    word-break: break-all;
+    transition: color 0.4s;
+  }
+
+  li.completed label {
+    color: #d9d9d9;
+    text-decoration: line-through;
+  }
+
+  .destroy {
+    display: none;
+    width: 32px;
+    height: 32px;
+    margin: 0 0 0 auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #cc9a9a;
+    font: inherit;
+    font-size: 30px;
+    line-height: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    transition: color 0.2s ease-out;
+  }
+
+  .destroy:hover {
+    color: #af5b5e;
+  }
+
+  .destroy::after {
+    content: "×";
+  }
+
+  li:hover .destroy {
+    display: block;
+  }
+
+  @media (max-width: 640px) {
+    .destroy {
+      display: block;
+    }
+  }
+
+</style>

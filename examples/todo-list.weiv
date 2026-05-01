@@ -1,0 +1,61 @@
+<template>
+  <section class="todo-list">
+    <header class="todo-list__header">
+      <h2>{{ props.title }}</h2>
+      <button on:click="toggleCompleted">
+        Toggle completed
+      </button>
+    </header>
+
+    <p if="showCompleted">Showing completed tasks</p>
+    <p else>Showing pending tasks</p>
+
+    <ul>
+      <li for="item in visibleItems()">
+        <span>{{ item.label }}</span>
+      </li>
+    </ul>
+  </section>
+</template>
+
+<script lang="ts">
+  export interface TodoItem {
+    label: string;
+    completed: boolean;
+  }
+
+  export interface Props {
+    title: string;
+  }
+
+  export let props: Props;
+
+  let showCompleted = false;
+  let items: TodoItem[] = [
+    { label: "Write parser fixtures", completed: true },
+    { label: "Implement template binder", completed: false },
+    { label: "Test CSS scoping", completed: false }
+  ];
+
+  function visibleItems() {
+    return items.filter((item) => item.completed === showCompleted);
+  }
+
+  function toggleCompleted() {
+    showCompleted = !showCompleted;
+  }
+</script>
+
+<style>
+  .todo-list {
+    padding: 1rem;
+    border-radius: 20px;
+    background: #fafaf9;
+  }
+
+  .todo-list__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+</style>

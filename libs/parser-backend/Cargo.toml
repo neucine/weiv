@@ -1,0 +1,19 @@
+[package]
+name = "parser-backend"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+name = "weiv_parser_backend"
+
+[dependencies]
+oxc_allocator = "0.116"
+oxc_ast = "0.116"
+oxc_codegen = "0.116"
+oxc_parser = "0.116"
+oxc_semantic = "0.116"
+oxc_span = "0.116"
+oxc_transformer = "0.116"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

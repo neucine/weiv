@@ -1,0 +1,71 @@
+<template>
+  <section class="todo-list">
+    <div if="props.items.length === 0" class="todo-list__empty">
+      <p class="todo-list__empty-title">Nothing in this lane yet</p>
+      <span class="todo-list__empty-copy">{{ props.showCompleted ? "Completed work will land here." : "Active work will land here." }}</span>
+    </div>
+    <ul else class="todo-list__items">
+      <li for="item in props.items">
+        <TodoItem bind:item="item" on:toggle="emitToggle" />
+      </li>
+    </ul>
+  </section>
+</template>
+
+<script lang="ts">
+  import TodoItem from "./TodoItem.weiv";
+
+  export interface Todo {
+    id: string;
+    title: string;
+    completed: boolean;
+  }
+
+  export interface Props {
+    items: Todo[];
+    showCompleted: boolean;
+  }
+
+  export let props: Props;
+
+  function emitToggle(itemId: string) {
+    emit("toggle", itemId);
+  }
+</script>
+
+<style>
+  .todo-list {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .todo-list__empty {
+    display: grid;
+    gap: 0.45rem;
+    padding: 1.25rem;
+    border: 1px dashed rgba(154, 106, 40, 0.26);
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(250, 241, 225, 0.7), rgba(255, 253, 248, 0.92));
+  }
+
+  .todo-list__empty-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #2d1d10;
+  }
+
+  .todo-list__empty-copy {
+    font-size: 0.94rem;
+    line-height: 1.5;
+    color: #725741;
+  }
+
+  .todo-list__items {
+    display: grid;
+    gap: 0.85rem;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+</style>

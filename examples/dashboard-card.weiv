@@ -1,0 +1,65 @@
+<template>
+  <article class="dashboard-card">
+    <MetricBadge bind:label="props.statusLabel" bind:tone="tone()" />
+
+    <h3>{{ props.title }}</h3>
+    <p>{{ props.description }}</p>
+
+    <ul class="dashboard-card__stats">
+      <li for="stat in props.stats">
+        <span>{{ stat.name }}</span>
+        <strong>{{ stat.value }}</strong>
+      </li>
+    </ul>
+
+    <button if="props.actionEnabled" on:click="handleOpen">
+      Open details
+    </button>
+    <p else>Action unavailable</p>
+  </article>
+</template>
+
+<script lang="ts">
+  import MetricBadge from "./MetricBadge.weiv";
+
+  export interface Stat {
+    name: string;
+    value: string;
+  }
+
+  export interface Props {
+    title: string;
+    description: string;
+    statusLabel: string;
+    actionEnabled: boolean;
+    stats: Stat[];
+  }
+
+  export let props: Props;
+
+  function tone() {
+    return props.actionEnabled ? "ready" : "muted";
+  }
+
+  function handleOpen() {
+    console.log("open dashboard details");
+  }
+</script>
+
+<style>
+  .dashboard-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid #e4e4e7;
+    border-radius: 24px;
+  }
+
+  .dashboard-card__stats {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+</style>

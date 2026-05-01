@@ -1,0 +1,23 @@
+<template>
+  <span class="metric-badge">
+    {{ props.label }}
+  </span>
+</template>
+
+<script lang="ts">
+  export interface Props {
+    label: string;
+    tone: string;
+  }
+
+  export let props: Props;
+</script>
+
+<style>
+  .metric-badge {
+    display: inline-flex;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    background: #f4f4f5;
+  }
+</style>

@@ -1,0 +1,19 @@
+<template>
+  <section>
+    <h1>{{ headline() }}</h1>
+  </section>
+</template>
+
+<script lang="ts">
+  import { camelCase } from "lodash-es";
+
+  export interface Props {
+    title: string;
+  }
+
+  export let props: Props;
+
+  function headline() {
+    return camelCase(props.title);
+  }
+</script>

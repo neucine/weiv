@@ -1,0 +1,141 @@
+<template>
+  <footer class="todo-footer">
+    <span class="todo-count"><strong>{{ props.activeCount }}</strong><span class="todo-count__suffix">{{ props.activeCount === 1 ? " item left" : " items left" }}</span></span>
+    <ul class="filters">
+      <li><button bind:class="filterClass('all')" on:click="selectAll">All</button></li>
+      <li><button bind:class="filterClass('active')" on:click="selectActive">Active</button></li>
+      <li><button bind:class="filterClass('completed')" on:click="selectCompleted">Completed</button></li>
+    </ul>
+    <button if="props.completedCount > 0" class="clear-completed" on:click="clearCompleted">Clear completed</button>
+  </footer>
+</template>
+
+<script lang="ts">
+  export interface Props {
+    activeCount: number;
+    completedCount: number;
+    filter: string;
+  }
+
+  export let props: Props;
+
+  function filterClass(name: string) {
+    if (props.filter === name) {
+      return "selected";
+    }
+    return "";
+  }
+
+  function selectAll() {
+    emit("filter-change", "all");
+  }
+
+  function selectActive() {
+    emit("filter-change", "active");
+  }
+
+  function selectCompleted() {
+    emit("filter-change", "completed");
+  }
+
+  function clearCompleted() {
+    emit("clear-completed", null);
+  }
+</script>
+
+<style>
+  .todo-footer {
+    position: relative;
+    height: 20px;
+    padding: 10px 15px;
+    border-top: 1px solid #e6e6e6;
+    color: #777;
+    text-align: center;
+  }
+
+  .todo-footer::before {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 50px;
+    overflow: hidden;
+    box-shadow:
+      0 1px 1px rgba(0, 0, 0, 0.2),
+      0 8px 0 -3px #f6f6f6,
+      0 9px 1px -3px rgba(0, 0, 0, 0.2),
+      0 16px 0 -6px #f6f6f6,
+      0 17px 2px -6px rgba(0, 0, 0, 0.2);
+  }
+
+  .todo-count {
+    float: left;
+    text-align: left;
+  }
+
+  .todo-count strong {
+    font-weight: 300;
+  }
+
+  .filters {
+    position: absolute;
+    right: 0;
+    left: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .filters li {
+    display: inline;
+  }
+
+  .filters li button {
+    margin: 3px;
+    padding: 3px 7px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .filters li button.selected,
+  .filters li button:hover {
+    border-color: rgba(175, 47, 47, 0.1);
+  }
+
+  .filters li button.selected {
+    border-color: rgba(175, 47, 47, 0.2);
+  }
+
+  .clear-completed {
+    position: relative;
+    float: right;
+    line-height: 20px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+  }
+
+  @media (max-width: 430px) {
+    .todo-footer {
+      height: auto;
+      padding-bottom: 48px;
+    }
+
+    .filters {
+      position: static;
+      display: block;
+      margin-top: 8px;
+    }
+  }
+</style>

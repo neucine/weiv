@@ -1,0 +1,28 @@
+<template>
+  <section class="imported-ts-helper">
+    <h1>{{ headline() }}</h1>
+    <p>{{ props.count }}</p>
+  </section>
+</template>
+
+<script lang="ts">
+  import { formatTitle } from "./format.ts";
+
+  export interface Props {
+    title: string;
+    count: number;
+  }
+
+  export let props: Props;
+
+  function headline() {
+    return formatTitle(props.title);
+  }
+</script>
+
+<style>
+  .imported-ts-helper {
+    display: grid;
+    gap: 0.5rem;
+  }
+</style>

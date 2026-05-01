@@ -1,0 +1,84 @@
+<template>
+  <input autofocus bind:class="inputClass()" bind:placeholder="props.placeholder" bind:value="props.initialValue || ''" on:blur="handleBlur" on:keydown="handleKeydown" type="text" />
+</template>
+
+<script lang="ts">
+  export interface Props {
+    initialValue: string;
+    placeholder: string;
+    editing: boolean;
+  }
+
+  export let props: Props;
+
+  function inputClass() {
+    if (props.editing) {
+      return "edit";
+    }
+    return "newtodo";
+  }
+
+  function readValue(event: any) {
+    return String(event.target.value || "").trim();
+  }
+
+  function handleBlur(event: any) {
+    if (props.editing) {
+      emit("submit", readValue(event));
+    }
+  }
+
+  function handleKeydown(event: any) {
+    if (event.key === "Enter") {
+      emit("submit", readValue(event));
+      return;
+    }
+
+    if (event.key === "Escape") {
+      emit("cancel", null);
+    }
+  }
+</script>
+
+<style>
+  input {
+    position: relative;
+    width: 100%;
+    margin: 0;
+    color: inherit;
+    font-family: inherit;
+    font-weight: inherit;
+    line-height: 1.4em;
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    outline: none;
+    border: 1px solid #999;
+    box-shadow: inset 0 -1px 5px 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .newtodo,
+  .edit {
+    outline: none;
+    font-size: 24px;
+  }
+
+  .newtodo {
+    padding: 16px 16px 16px 60px;
+    border: none;
+    background: rgba(0, 0, 0, 0.003);
+    box-shadow: inset 0 -2px 1px rgba(0, 0, 0, 0.03);
+  }
+
+  .edit {
+    display: block;
+    width: calc(100% - 43px);
+    margin: 0 0 0 43px;
+    padding: 13px 17px 12px;
+  }
+
+  input::placeholder {
+    font-style: italic;
+    font-weight: 300;
+    color: #e6e6e6;
+  }
+</style>

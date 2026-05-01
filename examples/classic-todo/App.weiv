@@ -1,0 +1,230 @@
+<template>
+  <main class="todo-app">
+    <div class="todo-app__shell">
+      <header class="todo-app__hero">
+        <p class="todo-app__eyebrow">Verification Example</p>
+        <div class="todo-app__headline">
+          <h1>{{ props.title }}</h1>
+          <p class="todo-app__lede">Client runtime, nested components, scoped styles, and TS-backed helpers in one polished example.</p>
+        </div>
+        <div class="todo-app__summary">
+          <strong>{{ summary() }}</strong>
+          <span>{{ showCompleted ? "Viewing completed tasks" : "Viewing active tasks" }}</span>
+        </div>
+      </header>
+
+      <section class="todo-app__panel">
+        <div class="todo-app__panel-header">
+          <div>
+            <p class="todo-app__panel-label">Inbox</p>
+            <h2>Product Todo Board</h2>
+          </div>
+          <button class="todo-app__filter" on:click="toggleCompletedFilter">
+            {{ showCompleted ? "Show active" : "Show completed" }}
+          </button>
+        </div>
+
+        <TodoList
+          bind:items="visibleItems()"
+          bind:showCompleted="showCompleted"
+          on:toggle="toggleItem"
+        />
+      </section>
+    </div>
+  </main>
+</template>
+
+<script lang="ts">
+  import TodoList from "./TodoList.weiv";
+
+  export interface Todo {
+    id: string;
+    title: string;
+    completed: boolean;
+  }
+
+  export interface Props {
+    title: string;
+  }
+
+  export let props: Props;
+
+  let showCompleted = false;
+  let items: Todo[] = [
+    { id: "1", title: "Ship recursive helper import support", completed: true },
+    { id: "2", title: "Polish the flagship todo verification app", completed: false },
+    { id: "3", title: "Tighten DOM event semantics", completed: false },
+    { id: "4", title: "Document the client preview workflow", completed: true }
+  ];
+
+  function visibleItems() {
+    return items.filter((item) => item.completed === showCompleted);
+  }
+
+  function summary() {
+    return `${visibleItems().length} ${showCompleted ? "completed" : "active"} tasks`;
+  }
+
+  function toggleCompletedFilter() {
+    showCompleted = !showCompleted;
+  }
+
+  function toggleItem(itemId: string) {
+    items = items.map((item) =>
+      item.id === itemId ? { ...item, completed: !item.completed } : item
+    );
+  }
+</script>
+
+<style>
+  .todo-app {
+    min-height: 100vh;
+    padding: 2rem 1.25rem 3rem;
+    background:
+      radial-gradient(circle at top left, rgba(247, 201, 72, 0.24), transparent 24rem),
+      linear-gradient(180deg, #f6efe3 0%, #fffaf1 45%, #f7f1e8 100%);
+    color: #1b1208;
+    font-family: "SF Pro Display", "Avenir Next", "Segoe UI", sans-serif;
+  }
+
+  .todo-app__shell {
+    display: grid;
+    gap: 1.5rem;
+    max-width: 52rem;
+    margin: 0 auto;
+  }
+
+  .todo-app__hero {
+    display: grid;
+    gap: 1rem;
+    padding: 1.5rem;
+    border: 1px solid rgba(77, 52, 24, 0.12);
+    border-radius: 28px;
+    background: rgba(255, 251, 245, 0.88);
+    box-shadow: 0 28px 60px rgba(56, 36, 17, 0.08);
+    backdrop-filter: blur(12px);
+  }
+
+  .todo-app__eyebrow {
+    margin: 0;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #9a6a28;
+  }
+
+  .todo-app__headline {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .todo-app__headline h1 {
+    margin: 0;
+    font-size: clamp(2.4rem, 6vw, 4.4rem);
+    line-height: 0.92;
+    letter-spacing: -0.06em;
+  }
+
+  .todo-app__lede {
+    max-width: 38rem;
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: #70553a;
+  }
+
+  .todo-app__summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .todo-app__summary strong,
+  .todo-app__summary span {
+    padding: 0.7rem 1rem;
+    border-radius: 999px;
+    background: #fffdf8;
+    border: 1px solid rgba(112, 85, 58, 0.16);
+  }
+
+  .todo-app__summary strong {
+    font-size: 1rem;
+  }
+
+  .todo-app__summary span {
+    font-size: 0.92rem;
+    color: #6e5743;
+  }
+
+  .todo-app__panel {
+    display: grid;
+    gap: 1.25rem;
+    padding: 1.4rem;
+    border-radius: 30px;
+    background: #fffdf9;
+    border: 1px solid rgba(77, 52, 24, 0.12);
+    box-shadow: 0 24px 48px rgba(56, 36, 17, 0.08);
+  }
+
+  .todo-app__panel-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: end;
+    justify-content: space-between;
+  }
+
+  .todo-app__panel-label {
+    margin: 0 0 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #9a6a28;
+  }
+
+  .todo-app__panel-header h2 {
+    margin: 0;
+    font-size: 1.45rem;
+    letter-spacing: -0.04em;
+  }
+
+  .todo-app__filter {
+    padding: 0.9rem 1.2rem;
+    border: 0;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #1e1b16 0%, #50331e 100%);
+    color: #fff8ef;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 14px 30px rgba(43, 27, 14, 0.2);
+  }
+
+  .todo-app__filter:active {
+    transform: translateY(1px);
+  }
+
+  @media (max-width: 640px) {
+    .todo-app {
+      padding-inline: 0.9rem;
+    }
+
+    .todo-app__hero,
+    .todo-app__panel {
+      padding: 1.1rem;
+      border-radius: 24px;
+    }
+
+    .todo-app__summary {
+      display: grid;
+    }
+
+    .todo-app__filter {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>

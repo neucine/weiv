@@ -1,0 +1,40 @@
+<template>
+  <section class="counter-card">
+    <h2>{{ props.title }}</h2>
+
+    <p>Current count: {{ count }}</p>
+    <p>Doubled: {{ doubled() }}</p>
+
+    <button on:click="increment" bind:disabled="count >= limit">
+      Increment
+    </button>
+  </section>
+</template>
+
+<script lang="ts">
+  export interface Props {
+    title: string;
+    initialCount?: number;
+  }
+
+  export let props: Props;
+
+  let count = props.initialCount ?? 0;
+  let limit = 10;
+
+  function doubled() {
+    return count * 2;
+  }
+
+  function increment() {
+    count += 1;
+  }
+</script>
+
+<style>
+  .counter-card {
+    padding: 1rem;
+    border: 1px solid #d4d4d8;
+    border-radius: 16px;
+  }
+</style>

@@ -1,0 +1,64 @@
+<template>
+  <ul class="todo-list">
+    <TodoItem
+      for="item in props.items"
+      bind:editing="props.editingId === item.id"
+      bind:todo="item"
+      on:cancel-edit="emitCancel"
+      on:destroy="emitDestroy"
+      on:save-edit="emitSave"
+      on:start-edit="emitStartEdit"
+      on:toggle="emitToggle"
+    />
+  </ul>
+</template>
+
+<script lang="ts">
+  import TodoItem from "./TodoItem.weiv";
+
+  export interface Todo {
+    id: string;
+    title: string;
+    completed: boolean;
+  }
+
+  export interface SavePayload {
+    id: string;
+    text: string;
+  }
+
+  export interface Props {
+    items: Todo[];
+    editingId: string;
+  }
+
+  export let props: Props;
+
+  function emitToggle(todoId: string) {
+    emit("toggle", todoId);
+  }
+
+  function emitDestroy(todoId: string) {
+    emit("destroy", todoId);
+  }
+
+  function emitStartEdit(todoId: string) {
+    emit("start-edit", todoId);
+  }
+
+  function emitSave(payload: SavePayload) {
+    emit("save-edit", payload);
+  }
+
+  function emitCancel() {
+    emit("cancel-edit", null);
+  }
+</script>
+
+<style>
+  .todo-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+</style>

@@ -1,0 +1,209 @@
+<template>
+  <main class="todomvc-page">
+    <section class="todoapp">
+      <TodoHeader bind:title="props.title" on:create="addTodo" />
+
+      <section if="todos.length > 0" class="main">
+        <input bind:checked="isAllCompleted()" class="toggle-all" on:change="toggleAll" type="checkbox" />
+
+        <TodoList
+          bind:editingId="editingId"
+          bind:items="visibleTodos()"
+          on:cancel-edit="cancelEditing"
+          on:destroy="destroyTodo"
+          on:save-edit="saveTodo"
+          on:start-edit="startEditing"
+          on:toggle="toggleTodo"
+        />
+      </section>
+
+      <TodoFooter
+        if="todos.length > 0"
+        bind:activeCount="activeCount()"
+        bind:completedCount="completedCount()"
+        bind:filter="filter"
+        on:clear-completed="clearCompleted"
+        on:filter-change="setFilter"
+      />
+    </section>
+  </main>
+</template>
+
+<script lang="ts">
+  import TodoFooter from "./TodoFooter.weiv";
+  import TodoHeader from "./TodoHeader.weiv";
+  import TodoList from "./TodoList.weiv";
+
+  export interface Todo {
+    id: string;
+    title: string;
+    completed: boolean;
+  }
+
+  export type Filter = "all" | "active" | "completed";
+
+  export interface SavePayload {
+    id: string;
+    text: string;
+  }
+
+  export interface Props {
+    title: string;
+  }
+
+  export let props: Props;
+
+  let nextId = 6;
+  let filter: Filter = "all";
+  let editingId = "";
+  let todos: Todo[] = [
+    { id: "1", title: "Port TodoMVC into the verification suite", completed: true },
+    { id: "2", title: "Verify root-owned state updates across nested components", completed: false },
+    { id: "3", title: "Exercise edit, filter, and clear-completed flows", completed: false },
+    { id: "4", title: "Keep scoped CSS realistic under a larger tree", completed: false },
+    { id: "5", title: "Expose the polished preview on the LAN server", completed: true }
+  ];
+
+  function visibleTodos() {
+    if (filter === "active") {
+      return todos.filter((todo) => !todo.completed);
+    }
+    if (filter === "completed") {
+      return todos.filter((todo) => todo.completed);
+    }
+    return todos;
+  }
+
+  function activeCount() {
+    return todos.filter((todo) => !todo.completed).length;
+  }
+
+  function completedCount() {
+    return todos.filter((todo) => todo.completed).length;
+  }
+
+  function isAllCompleted() {
+    return todos.length > 0 && completedCount() === todos.length;
+  }
+
+  function addTodo(text: string) {
+    const title = text.trim();
+    if (title.length === 0) {
+      return;
+    }
+
+    todos = [{ id: String(nextId), title, completed: false }, ...todos];
+    nextId += 1;
+  }
+
+  function toggleTodo(todoId: string) {
+    todos = todos.map((todo) =>
+      todo.id === todoId ? { ...todo, completed: !todo.completed } : todo
+    );
+  }
+
+  function destroyTodo(todoId: string) {
+    todos = todos.filter((todo) => todo.id !== todoId);
+    if (editingId === todoId) {
+      editingId = "";
+    }
+  }
+
+  function startEditing(todoId: string) {
+    editingId = todoId;
+  }
+
+  function cancelEditing() {
+    editingId = "";
+  }
+
+  function saveTodo(payload: SavePayload) {
+    const title = payload.text.trim();
+    if (title.length === 0) {
+      destroyTodo(payload.id);
+      return;
+    }
+
+    todos = todos.map((todo) =>
+      todo.id === payload.id ? { ...todo, title } : todo
+    );
+    editingId = "";
+  }
+
+  function setFilter(nextFilter: Filter) {
+    filter = nextFilter;
+  }
+
+  function clearCompleted() {
+    todos = todos.filter((todo) => !todo.completed);
+  }
+
+  function toggleAll() {
+    const shouldComplete = !isAllCompleted();
+    todos = todos.map((todo) => ({ ...todo, completed: shouldComplete }));
+  }
+</script>
+
+<style>
+  .todomvc-page {
+    min-height: 100vh;
+    padding: 0 1rem 4rem;
+    background: #f5f5f5;
+    color: #4d4d4d;
+    font: 14px "Helvetica Neue", Helvetica, Arial, sans-serif;
+    line-height: 1.4em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .todoapp {
+    max-width: 550px;
+    margin: 0 auto;
+    margin-top: 170px;
+    position: relative;
+    background: #fff;
+    box-shadow:
+      0 2px 4px 0 rgba(0, 0, 0, 0.2),
+      0 25px 50px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  .main {
+    position: relative;
+    z-index: 2;
+    border-top: 1px solid #e6e6e6;
+  }
+
+  .toggle-all {
+    position: absolute;
+    top: -55px;
+    left: -12px;
+    width: 60px;
+    height: 34px;
+    text-align: center;
+    border: none;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+  }
+
+  .toggle-all::before {
+    content: "❯";
+    padding: 10px 27px;
+    font-size: 22px;
+    color: #e6e6e6;
+  }
+
+  .toggle-all:checked::before {
+    color: #737373;
+  }
+
+  @media (max-width: 640px) {
+    .todomvc-page {
+      padding-inline: 0.5rem;
+    }
+
+    .todoapp {
+      margin-top: 150px;
+    }
+  }
+</style>
