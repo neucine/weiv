@@ -799,3 +799,85 @@ fn expectComponentBuild(
 fn readFixture(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
 }
+
+test "Panel.weiv lowers to a single default slot outlet" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/slots/Panel.weiv");
+    defer allocator.free(source);
+    var model = try component.build(source, "examples/slots/Panel.weiv", allocator);
+    defer model.deinit(allocator);
+
+    // Top-level: <section><slot><p>...</p></slot></section>
+    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
+    switch (model.ir_document.nodes[0]) {
+        .element => |section| {
+            try std.testing.expect(std.mem.eql(u8, section.tag_name, "section"));
+            try std.testing.expectEqual(@as(usize, 1), section.children.len);
+            switch (section.children[0]) {
+                .slot_outlet => |so| {
+                    try std.testing.expect(so.name == null);
+                    // Panel.weiv fallback: <p class="panel__fallback">...</p>
+                    try std.testing.expectEqual(@as(usize, 1), so.fallback_children.len);
+                },
+                else => return error.UnexpectedIrShape,
+            }
+        },
+        else => return error.UnexpectedIrShape,
+    }
+}
+
+test "Card.weiv lowers to header named slot and default slot with fallbacks" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/slots/Card.weiv");
+    defer allocator.free(source);
+    var model = try component.build(source, "examples/slots/Card.weiv", allocator);
+    defer model.deinit(allocator);
+
+    // Top-level: <section><header><slot name="header">...</slot></header><div><slot>...</slot></div></section>
+    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
+    switch (model.ir_document.nodes[0]) {
+        .element => |root| {
+            try std.testing.expect(std.mem.eql(u8, root.tag_name, "section"));
+            try std.testing.expectEqual(@as(usize, 2), root.children.len);
+
+            switch (root.children[0]) {
+                .element => |header| {
+                    try std.testing.expect(std.mem.eql(u8, header.tag_name, "header"));
+                    try std.testing.expectEqual(@as(usize, 1), header.children.len);
+                    switch (header.children[0]) {
+                        .slot_outlet => |named_outlet| {
+                            try std.testing.expect(std.mem.eql(u8, named_outlet.name.?, "header"));
+                            // Fallback: <h2 class="card__fallback-title">Untitled</h2>
+                            try std.testing.expectEqual(@as(usize, 1), named_outlet.fallback_children.len);
+                        },
+                        else => return error.UnexpectedIrShape,
+                    }
+                },
+                else => return error.UnexpectedIrShape,
+            }
+
+            switch (root.children[1]) {
+                .element => |body| {
+                    try std.testing.expect(std.mem.eql(u8, body.tag_name, "div"));
+                    try std.testing.expectEqual(@as(usize, 1), body.children.len);
+                    switch (body.children[0]) {
+                        .slot_outlet => |default_outlet| {
+                            try std.testing.expect(default_outlet.name == null);
+                            // Fallback: <p class="card__fallback-body">No body content.</p>
+                            try std.testing.expectEqual(@as(usize, 1), default_outlet.fallback_children.len);
+                        },
+                        else => return error.UnexpectedIrShape,
+                    }
+                },
+                else => return error.UnexpectedIrShape,
+            }
+        },
+        else => return error.UnexpectedIrShape,
+    }
+}
