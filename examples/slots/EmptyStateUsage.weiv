@@ -1,17 +1,17 @@
 <template>
   <EmptyState>
-    <h2 slot:message>{{ props.heading }}</h2>
+    <h2 slot:message>{{ heading }}</h2>
   </EmptyState>
 </template>
 
 <script lang="ts">
   import EmptyState from "./EmptyState.weiv";
 
-  export interface Props {
-    heading: string;
-  }
+  export interface Props {}
 
   export let props: Props;
+
+  let heading = "Hello";
 </script>
 
 <style>

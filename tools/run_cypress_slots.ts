@@ -2,7 +2,7 @@ import { createServer } from "node:net";
 
 const cwd = process.cwd();
 const outDir = ".zig-cache/cypress-slots-direct";
-const entry = "examples/slots/ReactiveCardUsage.weiv";
+const entry = "examples/slots/SlotShowcase.weiv";
 const specPath = "cypress/e2e/slots-direct.cy.js";
 
 async function findFreePort(): Promise<number> {

@@ -1,0 +1,24 @@
+<template>
+  <main>
+    <section data-test="reactive">
+      <ReactiveCardUsage />
+    </section>
+    <section data-test="empty-with-named">
+      <EmptyStateUsage />
+    </section>
+    <section data-test="empty-fallback">
+      <EmptyStateFallbackUsage />
+    </section>
+  </main>
+</template>
+
+<script lang="ts">
+  import ReactiveCardUsage from "./ReactiveCardUsage.weiv";
+  import EmptyStateUsage from "./EmptyStateUsage.weiv";
+  import EmptyStateFallbackUsage from "./EmptyStateFallbackUsage.weiv";
+
+  export interface Props {}
+  export let props: Props;
+</script>
+
+<style></style>
