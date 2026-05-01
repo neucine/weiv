@@ -399,7 +399,8 @@ test "direct browser modules expose default slot projection contract" {
     const usage_js = try emit_direct_js.emitModule(&usage_model, allocator);
     defer allocator.free(usage_js);
 
-    try std.testing.expect(std.mem.indexOf(u8, panel_js, "const __slot = instance.slots?.default;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, panel_js, " = instance.slots?.default;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, panel_js, "const __slot_") != null);
     try std.testing.expect(std.mem.indexOf(u8, panel_js, "export function mountIntoBoundary(start, end, props = {}, eventHandlers = {}, slots = {})") != null);
     try std.testing.expect(std.mem.indexOf(u8, panel_js, "setSlots: instance.setSlots") != null);
     try std.testing.expect(std.mem.indexOf(u8, usage_js, "mountProjectedSlot_") != null);
@@ -452,7 +453,8 @@ test "named slot browser modules expose slot map contract" {
     const usage_js = try emit_direct_js.emitModule(&usage_model, allocator);
     defer allocator.free(usage_js);
 
-    try std.testing.expect(std.mem.indexOf(u8, card_js, "const __slot = instance.slots?.[\"header\"];") != null);
+    try std.testing.expect(std.mem.indexOf(u8, card_js, " = instance.slots?.[\"header\"];") != null);
+    try std.testing.expect(std.mem.indexOf(u8, card_js, "const __slot_") != null);
     try std.testing.expect(std.mem.indexOf(u8, usage_js, "mountProjectedSlot_") != null);
     try std.testing.expect(std.mem.indexOf(u8, usage_js, "\"header\": { mountIntoBoundary: (start, end) => mountProjectedSlot_") != null);
     try std.testing.expect(std.mem.indexOf(u8, usage_js, "default: { mountIntoBoundary: (start, end) => mountProjectedSlot_") != null);
