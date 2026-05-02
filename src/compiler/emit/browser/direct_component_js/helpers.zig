@@ -12,33 +12,6 @@ pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void 
         \\  return Function(...names, `return (${expression});`)(...values);
         \\}
         \\
-        \\function applyBoundAttribute(element, name, value) {
-        \\  if (name === "checked" || name === "disabled" || name === "selected") {
-        \\    element[name] = Boolean(value);
-        \\    if (value) {
-        \\      element.setAttribute(name, "");
-        \\    } else {
-        \\      element.removeAttribute(name);
-        \\    }
-        \\    return;
-        \\  }
-        \\  if (name === "value") {
-        \\    const next = value ?? "";
-        \\    element.value = String(next);
-        \\    element.setAttribute(name, String(next));
-        \\    return;
-        \\  }
-        \\  if (value === false || value === null || value === undefined) {
-        \\    element.removeAttribute(name);
-        \\    return;
-        \\  }
-        \\  if (value === true) {
-        \\    element.setAttribute(name, "");
-        \\    return;
-        \\  }
-        \\  element.setAttribute(name, String(value));
-        \\}
-        \\
         \\function replaceBetween(start, end, content) {
         \\  const parent = start.parentNode;
         \\  if (!parent || parent !== end.parentNode) {
@@ -117,6 +90,7 @@ pub fn emitConditionalHelpers(
                 try emitConditionalHelpers(for_loop.body, scope_id, out, allocator);
             },
             .slot_outlet => |slot_outlet| {
+                try emitSingleSlotFallbackHelper(slot_outlet, scope_id, out, allocator);
                 try emitConditionalHelpers(slot_outlet.fallback_children, scope_id, out, allocator);
             },
             .component => |component_node| {
@@ -130,6 +104,25 @@ pub fn emitConditionalHelpers(
             .text, .interpolation => {},
         }
     }
+}
+
+fn emitSingleSlotFallbackHelper(
+    slot_outlet: browser_plan.SlotOutletNode,
+    scope_id: []const u8,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+) !void {
+    try out.writer(allocator).print(
+        "function createSlotFallbackFragment_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const fragment = document.createDocumentFragment();\n",
+        .{slot_outlet.handle_ref_id},
+    );
+    for (slot_outlet.fallback_children) |child| {
+        try node_codegen.emitCreateNode(child, "fragment", scope_id, out, allocator, 1, "scope", "refs");
+    }
+    for (slot_outlet.fallback_children) |child| {
+        try node_codegen.emitUpdateNode(child, out, allocator, 1, "scope", "refs");
+    }
+    try out.appendSlice(allocator, "  return fragment;\n}\n\n");
 }
 
 fn emitProjectedSlotHelpers(
@@ -151,7 +144,11 @@ fn emitProjectedSlotHelpers(
         for (slot_provision.children) |child| {
             try node_codegen.emitUpdateNode(child, out, allocator, 2, "scope", "refs");
         }
-        try out.appendSlice(allocator, "  }\n  update();\n  return { update, start, end };\n}\n\n");
+        try out.appendSlice(allocator, "  }\n  function destroy() {\n    const refs = instance.refs;\n");
+        for (slot_provision.children) |child| {
+            try node_codegen.emitDestroyNode(child, out, allocator, 2, "refs");
+        }
+        try out.appendSlice(allocator, "  }\n  update();\n  return { update, destroy, start, end };\n}\n\n");
     }
 }
 
@@ -169,17 +166,24 @@ fn emitSingleConditionalHelper(
     for (conditional.consequent) |node| {
         try node_codegen.emitCreateNode(node, "fragment", scope_id, out, allocator, 2, "scope", "refs");
     }
-    for (conditional.consequent) |node| {
-        try node_codegen.emitUpdateNode(node, out, allocator, 2, "scope", "refs");
-    }
     try out.appendSlice(allocator, "  } else {\n");
     for (conditional.alternate) |node| {
         try node_codegen.emitCreateNode(node, "fragment", scope_id, out, allocator, 2, "scope", "refs");
     }
-    for (conditional.alternate) |node| {
-        try node_codegen.emitUpdateNode(node, out, allocator, 2, "scope", "refs");
-    }
     try out.appendSlice(allocator, "  }\n  return fragment;\n}\n\n");
+
+    try out.writer(allocator).print(
+        "function destroyConditionalBranch_{d}(instance, wasConsequent) {{\n  const refs = instance.refs;\n  if (wasConsequent) {{\n",
+        .{conditional.start_ref_id},
+    );
+    for (conditional.consequent) |node| {
+        try node_codegen.emitDestroyNode(node, out, allocator, 2, "refs");
+    }
+    try out.appendSlice(allocator, "  } else {\n");
+    for (conditional.alternate) |node| {
+        try node_codegen.emitDestroyNode(node, out, allocator, 2, "refs");
+    }
+    try out.appendSlice(allocator, "  }\n}\n\n");
 
     try out.writer(allocator).print(
         "function updateConditional_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const next = Boolean(evaluate(",
@@ -187,9 +191,11 @@ fn emitSingleConditionalHelper(
     );
     try common.emitString(conditional.condition, out, allocator);
     try out.writer(allocator).print(
-        ", scope));\n  if (refs[{d}] !== next) {{\n    refs[{d}] = next;\n    replaceBetween(refs[{d}], refs[{d}], createConditionalFragment_{d}(instance, scope, next));\n  }}\n",
+        ", scope));\n  if (refs[{d}] !== next) {{\n    const previous = refs[{d}];\n    destroyConditionalBranch_{d}(instance, previous === true);\n    refs[{d}] = next;\n    replaceBetween(refs[{d}], refs[{d}], createConditionalFragment_{d}(instance, scope, next));\n  }}\n",
         .{
             conditional.state_ref_id,
+            conditional.state_ref_id,
+            conditional.start_ref_id,
             conditional.state_ref_id,
             conditional.start_ref_id,
             conditional.end_ref_id,
@@ -227,24 +233,38 @@ fn emitKeyedComponentLoopHelper(
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
+    const has_props = node_codegen.componentHasProps(component_node);
+    const has_handlers = node_codegen.componentHasEventHandlers(component_node);
+    const has_slots = node_codegen.componentHasSlots(component_node);
+    const needs_update = node_codegen.componentNeedsParentUpdate(component_node);
     try out.writer(allocator).print(
         "function createForComponentEntry_{d}(instance, scope, item, reference) {{\n  const refs = instance.refs;\n  const parent = reference.parentNode;\n  const start = document.createComment(\"for:item:start\");\n  const end = document.createComment(\"for:item:end\");\n  parent.insertBefore(start, reference);\n  parent.insertBefore(end, reference);\n  const loopScope = {{ ...scope, [",
         .{for_loop.start_ref_id},
     );
     try common.emitString(for_loop.item_name, out, allocator);
-    try out.appendSlice(allocator, "]: item };\n  const props = ");
-    try node_codegen.emitPropsObject(component_node.bind_effects, out, allocator, "loopScope");
-    try out.appendSlice(allocator, ";\n  const handlers = ");
-    try node_codegen.emitChildHandlersObject(component_node.event_effects, out, allocator, "loopScope");
-    if (component_node.slot_provisions.len > 0) {
-        try out.appendSlice(allocator, ";\n  const slots = ");
-        try emitProjectedSlotsObject(component_node, out, allocator);
+    try out.appendSlice(allocator, "]: item };\n");
+    if (has_props) {
+        try out.appendSlice(allocator, "  const props = ");
+        try node_codegen.emitPropsObject(component_node.bind_effects, out, allocator, "loopScope");
+        try out.appendSlice(allocator, ";\n");
+    }
+    if (has_handlers) {
+        try out.appendSlice(allocator, "  const handlers = ");
+        try node_codegen.emitChildHandlersObject(component_node.event_effects, out, allocator, "loopScope");
+        try out.appendSlice(allocator, ";\n");
+    }
+    if (has_slots) {
+        try out.appendSlice(allocator, "  const slots = ");
+        try common.emitProjectedSlotObject(component_node, "instance", out, allocator);
+        try out.appendSlice(allocator, ";\n");
     }
     try out.writer(allocator).print(
-        ";\n  const handle = {s}.mountIntoBoundary(start, end, props, handlers{s});\n  return {{ key: item?.id ?? item, start, end, handle }};\n}}\n\n",
+        "  const handle = {s}.mountIntoBoundary(start, end, {s}, {s}, {s});\n  return {{ key: item?.id ?? item, start, end, handle }};\n}}\n\n",
         .{
             component_node.tag_name,
-            if (component_node.slot_provisions.len > 0) ", slots" else "",
+            if (has_props) "props" else "undefined",
+            if (has_handlers) "handlers" else "undefined",
+            if (has_slots) "slots" else "undefined",
         },
     );
 
@@ -258,16 +278,27 @@ fn emitKeyedComponentLoopHelper(
         .{for_loop.state_ref_id},
     );
     try common.emitString(for_loop.item_name, out, allocator);
-    try out.appendSlice(allocator, "]: item };\n    if (record) {\n      previousByKey.delete(key);\n      record.handle.setProps(");
-    try node_codegen.emitPropsObject(component_node.bind_effects, out, allocator, "loopScope");
-    try out.appendSlice(allocator, ");\n      record.handle.setEventHandlers(");
-    try node_codegen.emitChildHandlersObject(component_node.event_effects, out, allocator, "loopScope");
-    if (component_node.slot_provisions.len > 0) {
-        try out.appendSlice(allocator, ");\n      record.handle.setSlots(");
-        try emitProjectedSlotsObject(component_node, out, allocator);
+    try out.appendSlice(allocator, "]: item };\n    if (record) {\n      previousByKey.delete(key);\n");
+    if (has_props) {
+        try out.appendSlice(allocator, "      record.handle.setProps(");
+        try node_codegen.emitPropsObject(component_node.bind_effects, out, allocator, "loopScope");
+        try out.appendSlice(allocator, ");\n");
+    }
+    if (has_handlers) {
+        try out.appendSlice(allocator, "      record.handle.setEventHandlers(");
+        try node_codegen.emitChildHandlersObject(component_node.event_effects, out, allocator, "loopScope");
+        try out.appendSlice(allocator, ");\n");
+    }
+    if (has_slots) {
+        try out.appendSlice(allocator, "      record.handle.setSlots(");
+        try common.emitProjectedSlotObject(component_node, "instance", out, allocator);
+        try out.appendSlice(allocator, ");\n");
+    }
+    if (needs_update) {
+        try out.appendSlice(allocator, "      record.handle.update();\n");
     }
     try out.writer(allocator).print(
-        ");\n      record.handle.update();\n      moveBoundaryBefore(record.start, record.end, refs[{d}]);\n    }} else {{\n      record = createForComponentEntry_{d}(instance, scope, item, refs[{d}]);\n    }}\n    nextRecords.push(record);\n  }}\n  for (const record of previousByKey.values()) {{\n    replaceBetween(record.start, record.end, document.createDocumentFragment());\n    record.start.parentNode.removeChild(record.start);\n    record.end.parentNode.removeChild(record.end);\n  }}\n  refs[{d}] = nextRecords;\n}}\n\n",
+        "      moveBoundaryBefore(record.start, record.end, refs[{d}]);\n    }} else {{\n      record = createForComponentEntry_{d}(instance, scope, item, refs[{d}]);\n    }}\n    nextRecords.push(record);\n  }}\n  for (const record of previousByKey.values()) {{\n    if (record.handle && typeof record.handle.destroy === \"function\") {{\n      record.handle.destroy();\n    }}\n    replaceBetween(record.start, record.end, document.createDocumentFragment());\n    record.start.parentNode.removeChild(record.start);\n    record.end.parentNode.removeChild(record.end);\n  }}\n  refs[{d}] = nextRecords;\n}}\n\n",
         .{ for_loop.end_ref_id, for_loop.start_ref_id, for_loop.end_ref_id, for_loop.state_ref_id },
     );
 }
@@ -291,7 +322,11 @@ fn emitKeyedGenericLoopHelper(
     for (for_loop.body) |node| {
         try node_codegen.emitCreateNode(node, "fragment", scope_id, out, allocator, 1, "scope", "entryRefs");
     }
-    try out.appendSlice(allocator, "  replaceBetween(start, end, fragment);\n  update(scope, item);\n  return { key: item?.id ?? item, start, end, refs: entryRefs, update };\n}\n\n");
+    try out.appendSlice(allocator, "  function destroy() {\n    const refs = entryRefs;\n");
+    for (for_loop.body) |node| {
+        try node_codegen.emitDestroyNode(node, out, allocator, 2, "entryRefs");
+    }
+    try out.appendSlice(allocator, "  }\n  replaceBetween(start, end, fragment);\n  update(scope, item);\n  return { key: item?.id ?? item, start, end, refs: entryRefs, update, destroy };\n}\n\n");
 
     try out.writer(allocator).print(
         "function updateForLoop_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const iterable = evaluate(",
@@ -299,28 +334,7 @@ fn emitKeyedGenericLoopHelper(
     );
     try common.emitString(for_loop.iterable_expr, out, allocator);
     try out.writer(allocator).print(
-        ", scope) ?? [];\n  const previous = refs[{d}] ?? [];\n  const previousByKey = new Map(previous.map((record) => [record.key, record]));\n  const nextRecords = [];\n  for (const item of iterable) {{\n    const key = item?.id ?? item;\n    let record = previousByKey.get(key);\n    if (record) {{\n      previousByKey.delete(key);\n      record.update(scope, item);\n      moveBoundaryBefore(record.start, record.end, refs[{d}]);\n    }} else {{\n      record = createForEntry_{d}(instance, scope, item, refs[{d}]);\n    }}\n    nextRecords.push(record);\n  }}\n  for (const record of previousByKey.values()) {{\n    replaceBetween(record.start, record.end, document.createDocumentFragment());\n    record.start.parentNode.removeChild(record.start);\n    record.end.parentNode.removeChild(record.end);\n  }}\n  refs[{d}] = nextRecords;\n}}\n\n",
+        ", scope) ?? [];\n  const previous = refs[{d}] ?? [];\n  const previousByKey = new Map(previous.map((record) => [record.key, record]));\n  const nextRecords = [];\n  for (const item of iterable) {{\n    const key = item?.id ?? item;\n    let record = previousByKey.get(key);\n    if (record) {{\n      previousByKey.delete(key);\n      record.update(scope, item);\n      moveBoundaryBefore(record.start, record.end, refs[{d}]);\n    }} else {{\n      record = createForEntry_{d}(instance, scope, item, refs[{d}]);\n    }}\n    nextRecords.push(record);\n  }}\n  for (const record of previousByKey.values()) {{\n    if (typeof record.destroy === \"function\") {{\n      record.destroy();\n    }}\n    replaceBetween(record.start, record.end, document.createDocumentFragment());\n    record.start.parentNode.removeChild(record.start);\n    record.end.parentNode.removeChild(record.end);\n  }}\n  refs[{d}] = nextRecords;\n}}\n\n",
         .{ for_loop.state_ref_id, for_loop.end_ref_id, for_loop.start_ref_id, for_loop.end_ref_id, for_loop.state_ref_id },
     );
-}
-
-fn emitProjectedSlotsObject(
-    component_node: browser_plan.ComponentNode,
-    out: *std.ArrayList(u8),
-    allocator: std.mem.Allocator,
-) !void {
-    try out.appendSlice(allocator, "{ ");
-    for (component_node.slot_provisions, 0..) |slot_provision, idx| {
-        if (idx > 0) try out.appendSlice(allocator, ", ");
-        if (slot_provision.name) |name| {
-            try common.emitString(name, out, allocator);
-        } else {
-            try out.appendSlice(allocator, "default");
-        }
-        try out.writer(allocator).print(": {{ mountIntoBoundary: (start, end) => mountProjectedSlot_{d}_{d}(start, end, instance) }}", .{
-            component_node.handle_ref_id,
-            idx,
-        });
-    }
-    try out.appendSlice(allocator, " }");
 }

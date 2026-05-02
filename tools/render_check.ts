@@ -232,6 +232,20 @@ function removeChildNode(parent: FakeElement | FakeDocumentFragment, node: FakeN
   node.parentNode = null;
 }
 
+function replaceBetweenNodes(start: FakeNode, end: FakeNode, content: FakeNode) {
+  const parent = start.parentNode;
+  if (!parent || parent !== end.parentNode) {
+    throw new Error("boundary is detached");
+  }
+  let current = start.nextSibling;
+  while (current && current !== end) {
+    const next = current.nextSibling;
+    parent.removeChild(current);
+    current = next;
+  }
+  parent.insertBefore(content, end);
+}
+
 function getTextContent(node: FakeNode): string {
   if (node instanceof FakeTextNode) return node.textContent;
   if (node instanceof FakeCommentNode) return node.textContent;
@@ -382,8 +396,13 @@ async function main() {
     "BasicCounterDirect.mjs": emitDirectBrowserModule("examples/basic-counter.weiv"),
     "ConditionalToggleDirect.mjs": emitDirectBrowserModule("examples/conditional-toggle.weiv"),
     "Card.mjs": emitDirectBrowserModule("examples/slots/Card.weiv"),
+    "CardToggleUsage.mjs": emitDirectBrowserModule("examples/slots/CardToggleUsage.weiv"),
     "CardUsage.mjs": emitDirectBrowserModule("examples/slots/CardUsage.weiv"),
+    "PanelConditionalUsage.mjs": emitDirectBrowserModule("examples/slots/PanelConditionalUsage.weiv"),
     "Panel.mjs": emitDirectBrowserModule("examples/slots/Panel.weiv"),
+    "PanelLoopUsage.mjs": emitDirectBrowserModule("examples/slots/PanelLoopUsage.weiv"),
+    "PanelNestedCardUsage.mjs": emitDirectBrowserModule("examples/slots/PanelNestedCardUsage.weiv"),
+    "PanelToggleUsage.mjs": emitDirectBrowserModule("examples/slots/PanelToggleUsage.weiv"),
     "PanelUsage.mjs": emitDirectBrowserModule("examples/slots/PanelUsage.weiv"),
     "TodoListDirect.mjs": emitDirectBrowserModule("examples/todo-list.weiv"),
     "TodoItem.mjs": emitRenderModule("examples/classic-todo/TodoItem.weiv"),
@@ -394,8 +413,13 @@ async function main() {
   const basicCounterDirectModule = modules["BasicCounterDirect.mjs"];
   const conditionalToggleDirectModule = modules["ConditionalToggleDirect.mjs"];
   const cardDirectModule = modules["Card.mjs"];
+  const cardToggleUsageDirectModule = modules["CardToggleUsage.mjs"];
   const cardUsageDirectModule = modules["CardUsage.mjs"];
+  const panelConditionalUsageDirectModule = modules["PanelConditionalUsage.mjs"];
   const panelDirectModule = modules["Panel.mjs"];
+  const panelLoopUsageDirectModule = modules["PanelLoopUsage.mjs"];
+  const panelNestedCardUsageDirectModule = modules["PanelNestedCardUsage.mjs"];
+  const panelToggleUsageDirectModule = modules["PanelToggleUsage.mjs"];
   const panelUsageDirectModule = modules["PanelUsage.mjs"];
   const todoListDirectModule = modules["TodoListDirect.mjs"];
   const todoItemModule = modules["TodoItem.mjs"];
@@ -517,6 +541,198 @@ async function main() {
     throw new Error("PanelUsage direct mount incorrectly left fallback slot content mounted");
   }
 
+  const panelConditionalUsageDocument = new FakeDocument();
+  const panelConditionalUsageTarget = panelConditionalUsageDocument.createElement("div");
+  panelConditionalUsageDocument.body.append(panelConditionalUsageTarget);
+  (globalThis as any).document = panelConditionalUsageDocument;
+
+  panelConditionalUsageDirectModule.mount(panelConditionalUsageTarget, {});
+  if (!panelConditionalUsageTarget.textContent.includes("Projected panel is closed")) {
+    throw new Error("PanelConditionalUsage direct mount did not render the initial projected conditional branch");
+  }
+  if (panelConditionalUsageTarget.textContent.includes("Projected panel is open")) {
+    throw new Error("PanelConditionalUsage direct mount incorrectly rendered the alternate projected conditional branch");
+  }
+  if (panelConditionalUsageTarget.textContent.includes("Fallback")) {
+    throw new Error("PanelConditionalUsage direct mount incorrectly left fallback slot content mounted");
+  }
+
+  const panelConditionalButton = findElement(panelConditionalUsageDocument.body, byTag("button"));
+  if (!panelConditionalButton) throw new Error("PanelConditionalUsage direct mount missing button");
+  click(panelConditionalButton);
+
+  if (panelConditionalUsageTarget.replaceChildrenCalls !== 1) {
+    throw new Error("PanelConditionalUsage direct update rerendered the root instead of patching the projected conditional branch");
+  }
+  if (!panelConditionalUsageTarget.textContent.includes("Projected panel is open")) {
+    throw new Error("PanelConditionalUsage direct update did not swap to the projected open branch");
+  }
+  if (panelConditionalUsageTarget.textContent.includes("Projected panel is closed")) {
+    throw new Error("PanelConditionalUsage direct update left the previous projected conditional branch mounted");
+  }
+
+  const panelLoopUsageDocument = new FakeDocument();
+  const panelLoopUsageTarget = panelLoopUsageDocument.createElement("div");
+  panelLoopUsageDocument.body.append(panelLoopUsageTarget);
+  (globalThis as any).document = panelLoopUsageDocument;
+
+  panelLoopUsageDirectModule.mount(panelLoopUsageTarget, {});
+  if (!panelLoopUsageTarget.textContent.includes("Implement template binder") ||
+      !panelLoopUsageTarget.textContent.includes("Test CSS scoping")) {
+    throw new Error("PanelLoopUsage direct mount did not render the initial projected loop content");
+  }
+  if (panelLoopUsageTarget.textContent.includes("Write parser fixtures")) {
+    throw new Error("PanelLoopUsage direct mount incorrectly rendered the completed projected loop item");
+  }
+  if (panelLoopUsageTarget.textContent.includes("Fallback")) {
+    throw new Error("PanelLoopUsage direct mount incorrectly left fallback slot content mounted");
+  }
+
+  const panelLoopButton = findElement(panelLoopUsageDocument.body, byTag("button"));
+  if (!panelLoopButton) throw new Error("PanelLoopUsage direct mount missing button");
+  click(panelLoopButton);
+
+  if (panelLoopUsageTarget.replaceChildrenCalls !== 1) {
+    throw new Error("PanelLoopUsage direct update rerendered the root instead of patching projected loop content");
+  }
+  if (!panelLoopUsageTarget.textContent.includes("Write parser fixtures")) {
+    throw new Error("PanelLoopUsage direct update did not swap in the completed projected loop item");
+  }
+  if (panelLoopUsageTarget.textContent.includes("Implement template binder") ||
+      panelLoopUsageTarget.textContent.includes("Test CSS scoping")) {
+    throw new Error("PanelLoopUsage direct update left the previous projected loop items mounted");
+  }
+
+  const panelNestedCardUsageDocument = new FakeDocument();
+  const panelNestedCardUsageTarget = panelNestedCardUsageDocument.createElement("div");
+  panelNestedCardUsageDocument.body.append(panelNestedCardUsageTarget);
+  (globalThis as any).document = panelNestedCardUsageDocument;
+
+  panelNestedCardUsageDirectModule.mount(panelNestedCardUsageTarget, {});
+  if (!panelNestedCardUsageTarget.textContent.includes("Nested dashboard") ||
+      !panelNestedCardUsageTarget.textContent.includes("Nested daily overview") ||
+      !panelNestedCardUsageTarget.textContent.includes("Nested projected body")) {
+    throw new Error("PanelNestedCardUsage direct mount did not render the initial nested slot content");
+  }
+  if (panelNestedCardUsageTarget.textContent.includes("Untitled") ||
+      panelNestedCardUsageTarget.textContent.includes("No body content.") ||
+      panelNestedCardUsageTarget.textContent.includes("Fallback")) {
+    throw new Error("PanelNestedCardUsage direct mount incorrectly left fallback content mounted in the nested slot tree");
+  }
+
+  const panelNestedCardButton = findElement(panelNestedCardUsageDocument.body, byTag("button"));
+  if (!panelNestedCardButton) throw new Error("PanelNestedCardUsage direct mount missing button");
+  click(panelNestedCardButton);
+
+  if (panelNestedCardUsageTarget.replaceChildrenCalls !== 1) {
+    throw new Error("PanelNestedCardUsage direct update rerendered the root instead of patching the nested slot tree");
+  }
+  if (!panelNestedCardUsageTarget.textContent.includes("Nested reports") ||
+      !panelNestedCardUsageTarget.textContent.includes("Nested weekly summary") ||
+      !panelNestedCardUsageTarget.textContent.includes("Nested projected report body")) {
+    throw new Error("PanelNestedCardUsage direct update did not refresh the nested slot content");
+  }
+  if (panelNestedCardUsageTarget.textContent.includes("Nested dashboard") ||
+      panelNestedCardUsageTarget.textContent.includes("Nested daily overview") ||
+      panelNestedCardUsageTarget.textContent.includes("Nested projected body")) {
+    throw new Error("PanelNestedCardUsage direct update left the previous nested slot content mounted");
+  }
+
+  const panelImperativeDocument = new FakeDocument();
+  const panelImperativeTarget = panelImperativeDocument.createElement("div");
+  panelImperativeDocument.body.append(panelImperativeTarget);
+  (globalThis as any).document = panelImperativeDocument;
+
+  let imperativeMessage = "Imperative projected";
+  let imperativeDestroyCalls = 0;
+  const imperativeSlot = {
+    mountIntoBoundary(start: FakeNode, end: FakeNode) {
+      const fragment = panelImperativeDocument.createDocumentFragment();
+      const text = panelImperativeDocument.createTextNode(imperativeMessage);
+      fragment.append(text);
+      replaceBetweenNodes(start, end, fragment);
+      return {
+        update() {
+          text.data = imperativeMessage;
+        },
+        destroy() {
+          imperativeDestroyCalls += 1;
+        },
+        start,
+        end,
+      };
+    },
+  };
+
+  const panelImperativeMount = panelDirectModule.mount(panelImperativeTarget, {}, {}, {
+    default: imperativeSlot,
+  });
+  if (!panelImperativeTarget.textContent.includes("Imperative projected")) {
+    throw new Error("Panel direct imperative mount did not render provided slot content");
+  }
+  if (panelImperativeTarget.textContent.includes("Fallback")) {
+    throw new Error("Panel direct imperative mount incorrectly rendered fallback slot content");
+  }
+
+  panelImperativeMount.setSlots({});
+  panelImperativeMount.update();
+  if (!panelImperativeTarget.textContent.includes("Fallback")) {
+    throw new Error("Panel direct slot switch did not restore fallback content after removing provided slots");
+  }
+  if (panelImperativeTarget.textContent.includes("Imperative projected")) {
+    throw new Error("Panel direct slot switch left projected content mounted after removing provided slots");
+  }
+  if (imperativeDestroyCalls !== 1) {
+    throw new Error(`Panel direct slot switch expected 1 projected slot destroy call after removing provided slots, found ${imperativeDestroyCalls}`);
+  }
+
+  imperativeMessage = "Imperative projected again";
+  panelImperativeMount.setSlots({ default: imperativeSlot });
+  panelImperativeMount.update();
+  if (!panelImperativeTarget.textContent.includes("Imperative projected again")) {
+    throw new Error("Panel direct slot switch did not remount provided slot content after restoring slots");
+  }
+  if (panelImperativeTarget.textContent.includes("Fallback")) {
+    throw new Error("Panel direct slot switch left fallback content mounted after restoring provided slots");
+  }
+  if (panelImperativeTarget.replaceChildrenCalls !== 1) {
+    throw new Error("Panel direct slot switching rerendered the root instead of patching the slot boundary");
+  }
+  panelImperativeMount.destroy();
+  if (imperativeDestroyCalls !== 2) {
+    throw new Error(`Panel direct destroy expected 2 projected slot destroy calls total, found ${imperativeDestroyCalls}`);
+  }
+  if (panelImperativeTarget.textContent !== "") {
+    throw new Error("Panel direct destroy did not clear the mounted boundary content");
+  }
+
+  const panelToggleUsageDocument = new FakeDocument();
+  const panelToggleUsageTarget = panelToggleUsageDocument.createElement("div");
+  panelToggleUsageDocument.body.append(panelToggleUsageTarget);
+  (globalThis as any).document = panelToggleUsageDocument;
+
+  panelToggleUsageDirectModule.mount(panelToggleUsageTarget, {});
+  if (!panelToggleUsageTarget.textContent.includes("Projected first")) {
+    throw new Error("PanelToggleUsage direct mount did not render the initial projected slot content");
+  }
+  if (panelToggleUsageTarget.textContent.includes("Fallback")) {
+    throw new Error("PanelToggleUsage direct mount incorrectly left fallback slot content mounted");
+  }
+
+  const panelToggleButton = findElement(panelToggleUsageDocument.body, byTag("button"));
+  if (!panelToggleButton) throw new Error("PanelToggleUsage direct mount missing button");
+  click(panelToggleButton);
+
+  if (panelToggleUsageTarget.replaceChildrenCalls !== 1) {
+    throw new Error("PanelToggleUsage direct update rerendered the root instead of patching projected slot content");
+  }
+  if (!panelToggleUsageTarget.textContent.includes("Projected second")) {
+    throw new Error("PanelToggleUsage direct update did not refresh the projected slot content");
+  }
+  if (panelToggleUsageTarget.textContent.includes("Projected first")) {
+    throw new Error("PanelToggleUsage direct update left the previous projected slot content mounted");
+  }
+
   const cardFallbackDocument = new FakeDocument();
   const cardFallbackTarget = cardFallbackDocument.createElement("div");
   cardFallbackDocument.body.append(cardFallbackTarget);
@@ -544,6 +760,39 @@ async function main() {
   }
   if (cardUsageTarget.textContent.includes("Untitled") || cardUsageTarget.textContent.includes("No body content.")) {
     throw new Error("CardUsage direct mount incorrectly left fallback slot content mounted");
+  }
+
+  const cardToggleUsageDocument = new FakeDocument();
+  const cardToggleUsageTarget = cardToggleUsageDocument.createElement("div");
+  cardToggleUsageDocument.body.append(cardToggleUsageTarget);
+  (globalThis as any).document = cardToggleUsageDocument;
+
+  cardToggleUsageDirectModule.mount(cardToggleUsageTarget, {});
+  if (!cardToggleUsageTarget.textContent.includes("Dashboard") ||
+      !cardToggleUsageTarget.textContent.includes("Daily overview") ||
+      !cardToggleUsageTarget.textContent.includes("Projected card body")) {
+    throw new Error("CardToggleUsage direct mount did not render the initial named/default projected slot content");
+  }
+  if (cardToggleUsageTarget.textContent.includes("Untitled") || cardToggleUsageTarget.textContent.includes("No body content.")) {
+    throw new Error("CardToggleUsage direct mount incorrectly left fallback slot content mounted");
+  }
+
+  const cardToggleButton = findElement(cardToggleUsageDocument.body, byTag("button"));
+  if (!cardToggleButton) throw new Error("CardToggleUsage direct mount missing button");
+  click(cardToggleButton);
+
+  if (cardToggleUsageTarget.replaceChildrenCalls !== 1) {
+    throw new Error("CardToggleUsage direct update rerendered the root instead of patching named/default projected slot content");
+  }
+  if (!cardToggleUsageTarget.textContent.includes("Reports") ||
+      !cardToggleUsageTarget.textContent.includes("Weekly summary") ||
+      !cardToggleUsageTarget.textContent.includes("Projected report body")) {
+    throw new Error("CardToggleUsage direct update did not refresh the named/default projected slot content");
+  }
+  if (cardToggleUsageTarget.textContent.includes("Dashboard") ||
+      cardToggleUsageTarget.textContent.includes("Daily overview") ||
+      cardToggleUsageTarget.textContent.includes("Projected card body")) {
+    throw new Error("CardToggleUsage direct update left the previous named/default projected slot content mounted");
   }
 
   const todoListDirectDocument = new FakeDocument();

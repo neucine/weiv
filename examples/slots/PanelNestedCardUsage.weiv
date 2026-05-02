@@ -1,0 +1,60 @@
+<template>
+  <section class="panel-nested-card-usage">
+    <button on:click="toggleCardContent">Toggle nested card content</button>
+
+    <Panel>
+      <Card>
+        <template slot:header>
+          <h2 class="panel-nested-card-usage__title">{{ title }}</h2>
+          <p class="panel-nested-card-usage__eyebrow">{{ eyebrow }}</p>
+        </template>
+
+        <p class="panel-nested-card-usage__body">{{ body }}</p>
+      </Card>
+    </Panel>
+  </section>
+</template>
+
+<script lang="ts">
+  import Card from "./Card.weiv";
+  import Panel from "./Panel.weiv";
+
+  export interface Props {}
+
+  export let props: Props;
+
+  let title = "Nested dashboard";
+  let eyebrow = "Nested daily overview";
+  let body = "Nested projected body";
+
+  function toggleCardContent() {
+    if (title === "Nested dashboard") {
+      title = "Nested reports";
+      eyebrow = "Nested weekly summary";
+      body = "Nested projected report body";
+    } else {
+      title = "Nested dashboard";
+      eyebrow = "Nested daily overview";
+      body = "Nested projected body";
+    }
+  }
+</script>
+
+<style>
+  .panel-nested-card-usage {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .panel-nested-card-usage__title {
+    font-weight: 700;
+  }
+
+  .panel-nested-card-usage__eyebrow {
+    color: #666;
+  }
+
+  .panel-nested-card-usage__body {
+    line-height: 1.5;
+  }
+</style>

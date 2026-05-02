@@ -3,6 +3,7 @@ pub const directives = @import("template/directives.zig");
 pub const normalized = @import("template/normalized.zig");
 pub const normalize_mod = @import("template/normalize.zig");
 pub const parser = @import("template/parser.zig");
+pub const debug = @import("template/debug.zig");
 
 pub const NodeTag = ast.NodeTag;
 pub const Attribute = ast.Attribute;

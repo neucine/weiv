@@ -1,0 +1,39 @@
+<template>
+  <section class="panel-conditional-usage">
+    <button on:click="toggleOpen">Toggle details</button>
+
+    <Panel>
+      <p if="open" class="panel-conditional-usage__open">Projected panel is open</p>
+      <p else class="panel-conditional-usage__closed">Projected panel is closed</p>
+    </Panel>
+  </section>
+</template>
+
+<script lang="ts">
+  import Panel from "./Panel.weiv";
+
+  export interface Props {}
+
+  export let props: Props;
+
+  let open = false;
+
+  function toggleOpen() {
+    open = !open;
+  }
+</script>
+
+<style>
+  .panel-conditional-usage {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .panel-conditional-usage__open {
+    font-weight: 600;
+  }
+
+  .panel-conditional-usage__closed {
+    color: #666;
+  }
+</style>
