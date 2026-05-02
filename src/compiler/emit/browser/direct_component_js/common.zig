@@ -1,4 +1,5 @@
 const std = @import("std");
+const browser_plan = @import("../../../lower/browser_plan.zig");
 const script_analysis = @import("../../../analyze/ts/analysis.zig");
 
 pub fn emitString(value: []const u8, out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void {
@@ -55,4 +56,27 @@ pub fn rewriteModuleExtension(source: []const u8, allocator: std.mem.Allocator) 
         return try std.fmt.allocPrint(allocator, "{s}.mjs", .{source[0 .. source.len - ".mts".len]});
     }
     return try allocator.dupe(u8, source);
+}
+
+pub fn emitProjectedSlotObject(
+    component_node: browser_plan.ComponentNode,
+    owner_instance_expr: []const u8,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+) !void {
+    try out.appendSlice(allocator, "{ ");
+    for (component_node.slot_provisions, 0..) |slot_provision, idx| {
+        if (idx > 0) try out.appendSlice(allocator, ", ");
+        if (slot_provision.name) |name| {
+            try emitString(name, out, allocator);
+        } else {
+            try out.appendSlice(allocator, "default");
+        }
+        try out.writer(allocator).print(": {{ mountIntoBoundary: (start, end) => mountProjectedSlot_{d}_{d}(start, end, {s}) }}", .{
+            component_node.handle_ref_id,
+            idx,
+            owner_instance_expr,
+        });
+    }
+    try out.appendSlice(allocator, " }");
 }

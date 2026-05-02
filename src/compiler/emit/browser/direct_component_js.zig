@@ -34,6 +34,8 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
     try node_codegen.emitCreateFunction(plan, scope_id, &out, allocator);
     try out.appendSlice(allocator, "\n");
     try node_codegen.emitUpdateFunction(plan, &out, allocator);
+    try out.appendSlice(allocator, "\n");
+    try node_codegen.emitDestroyFunction(plan, &out, allocator);
     try out.appendSlice(allocator,
         \\
         \\export function createInstance(props = {}, eventHandlers = {}, slots = {}) {
@@ -47,6 +49,7 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\    setSlots: (nextSlots = {}) => { instance.slots = nextSlots; },
         \\    refs: [],
         \\    update: () => {},
+        \\    destroy: () => {},
         \\  };
         \\  return instance;
         \\}
@@ -57,10 +60,12 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\  const fragment = createDom(instance);
         \\  replaceBetween(start, end, fragment);
         \\  instance.update = () => updateDom(instance);
+        \\  instance.destroy = () => { destroyDom(instance); replaceBetween(start, end, document.createDocumentFragment()); };
         \\  instance.update();
         \\  return {
         \\    instance,
         \\    update: instance.update,
+        \\    destroy: instance.destroy,
         \\    setProps: instance.setProps,
         \\    setEventHandlers: instance.setEventHandlers,
         \\    setSlots: instance.setSlots,

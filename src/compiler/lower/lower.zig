@@ -3,6 +3,11 @@ const binding = @import("../analyze/binder.zig");
 const ir = @import("ir.zig");
 const template = @import("../parse/template.zig");
 
+pub const LowerError = error{
+    InvalidSlotPlacement,
+    InvalidSlotTemplatePlacement,
+};
+
 pub fn lower(
     normalized_template: *const template.NormalizedDocument,
     binding_result: *const binding.BindingResult,
@@ -54,6 +59,12 @@ fn lowerNode(node: template.NormalizedNode, allocator: std.mem.Allocator) anyerr
             },
         },
         .element => |element| blk: {
+            if (std.mem.eql(u8, element.tag_name, "template")) {
+                return error.InvalidSlotTemplatePlacement;
+            }
+            if (extractSlotAssign(.{ .element = element }) != null) {
+                return error.InvalidSlotPlacement;
+            }
             const effects = try lowerEffects(element.directives, allocator);
             errdefer allocator.free(effects);
             if (isComponentTag(element.tag_name)) {
@@ -172,6 +183,9 @@ fn lowerProjectedChildren(child: template.NormalizedNode, allocator: std.mem.All
     return switch (child) {
         .element => |element| blk: {
             if (std.mem.eql(u8, element.tag_name, "template")) {
+                if (extractSlotAssign(child) == null) {
+                    return error.InvalidSlotTemplatePlacement;
+                }
                 break :blk try lowerNodes(element.children, allocator);
             }
 

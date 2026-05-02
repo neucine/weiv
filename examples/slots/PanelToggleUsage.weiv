@@ -1,0 +1,34 @@
+<template>
+  <section class="panel-toggle-usage">
+    <button on:click="toggleMessage">Toggle message</button>
+
+    <Panel>
+      <p class="panel-toggle-usage__message">{{ message }}</p>
+    </Panel>
+  </section>
+</template>
+
+<script lang="ts">
+  import Panel from "./Panel.weiv";
+
+  export interface Props {}
+
+  export let props: Props;
+
+  let message = "Projected first";
+
+  function toggleMessage() {
+    message = message === "Projected first" ? "Projected second" : "Projected first";
+  }
+</script>
+
+<style>
+  .panel-toggle-usage {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .panel-toggle-usage__message {
+    font-weight: 600;
+  }
+</style>

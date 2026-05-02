@@ -1,0 +1,50 @@
+<template>
+  <section class="panel-loop-usage">
+    <button on:click="toggleCompleted">Toggle completed</button>
+
+    <Panel>
+      <ul class="panel-loop-usage__list">
+        <li for="item in visibleItems()">{{ item.label }}</li>
+      </ul>
+    </Panel>
+  </section>
+</template>
+
+<script lang="ts">
+  import Panel from "./Panel.weiv";
+
+  export interface TodoItem {
+    label: string;
+    completed: boolean;
+  }
+
+  export interface Props {}
+
+  export let props: Props;
+
+  let showCompleted = false;
+  let items: TodoItem[] = [
+    { label: "Write parser fixtures", completed: true },
+    { label: "Implement template binder", completed: false },
+    { label: "Test CSS scoping", completed: false }
+  ];
+
+  function visibleItems() {
+    return items.filter((item) => item.completed === showCompleted);
+  }
+
+  function toggleCompleted() {
+    showCompleted = !showCompleted;
+  }
+</script>
+
+<style>
+  .panel-loop-usage {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .panel-loop-usage__list {
+    padding-left: 1rem;
+  }
+</style>

@@ -1,0 +1,57 @@
+<template>
+  <section class="card-toggle-usage">
+    <button on:click="toggleContent">Toggle card content</button>
+
+    <Card>
+      <template slot:header>
+        <h2 class="card-toggle-usage__title">{{ title }}</h2>
+        <p class="card-toggle-usage__eyebrow">{{ eyebrow }}</p>
+      </template>
+
+      <p class="card-toggle-usage__body">{{ body }}</p>
+    </Card>
+  </section>
+</template>
+
+<script lang="ts">
+  import Card from "./Card.weiv";
+
+  export interface Props {}
+
+  export let props: Props;
+
+  let title = "Dashboard";
+  let eyebrow = "Daily overview";
+  let body = "Projected card body";
+
+  function toggleContent() {
+    if (title === "Dashboard") {
+      title = "Reports";
+      eyebrow = "Weekly summary";
+      body = "Projected report body";
+    } else {
+      title = "Dashboard";
+      eyebrow = "Daily overview";
+      body = "Projected card body";
+    }
+  }
+</script>
+
+<style>
+  .card-toggle-usage {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .card-toggle-usage__title {
+    font-weight: 700;
+  }
+
+  .card-toggle-usage__eyebrow {
+    color: #666;
+  }
+
+  .card-toggle-usage__body {
+    line-height: 1.5;
+  }
+</style>
