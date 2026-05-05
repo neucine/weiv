@@ -1,5 +1,6 @@
 const std = @import("std");
 const ast = @import("ast.zig");
+const sfc = @import("../sfc.zig");
 
 pub const DirectiveTag = enum {
     if_expr,
@@ -33,6 +34,7 @@ pub const BindDirective = struct {
 
 pub const SlotAssignDirective = struct {
     slot_name: []const u8,
+    span: sfc.Span,
 };
 
 pub const Directive = union(DirectiveTag) {
@@ -114,6 +116,7 @@ pub fn split(raw_attributes: []const ast.Attribute, allocator: std.mem.Allocator
             try directives.append(allocator, .{
                 .slot_assign = .{
                     .slot_name = slot_name,
+                    .span = attribute.span,
                 },
             });
             continue;

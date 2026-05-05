@@ -112,7 +112,7 @@ tools/     render harness and test fixtures
 ## Near-Term Focus
 
 - replace generic browser subtree rerendering with compiled DOM update paths
-- add a real composition model, likely slots or an equivalent content projection mechanism
+- composition model: slots shipped — see `docs/composition-implementation.md`
 - define the public state/reactivity model after composition is clearer
 - harden `weiv dev` into a stronger watch/rebuild workflow
 - keep TodoMVC as the forcing-function verification app

@@ -207,6 +207,68 @@ The first composition milestone is complete when:
 - slot diagnostics are clear
 - the direct browser path supports projected content without regressing the compiler-driven direction
 
+## Status
+
+Completed on 2026-05-01 by the composition milestone hardening plan
+(`docs/superpowers/plans/2026-05-01-composition-milestone-hardening.md`).
+
+- default and named slots: verified in Cypress + IR snapshot tests
+- fallback content: verified in Cypress (SlotShowcase) and IR snapshots
+- grouped `<template slot:name>`: verified in CardUsage IR snapshot + Cypress reactive test
+- slot misuse is reported via two complementary channels:
+  - **Hard parse-time errors** for structural placement mistakes — emitted
+    by `src/compiler/lower/lower.zig`, e.g. `error.InvalidSlotPlacement`,
+    `error.InvalidSlotTemplatePlacement`, `error.SlotOutletDirective`,
+    `error.TemplateGroupingWithoutSlotAssignment`. There is no recoverable
+    codegen for these, so the build fails fast.
+  - **Soft binder diagnostics** for contract drift that still produces
+    coherent (if incomplete) codegen, allowing iterative editing:
+    - `slot.duplicate_outlet` — same component declares the same slot
+      name twice
+    - `slot.duplicate_provision` — same parent provides the same slot
+      twice without `<template slot:name>` grouping
+    - `slot.unknown_name` — parent uses `slot:foo` but the child has
+      no matching outlet
+    - `slot.default_not_supported` — parent provides default content
+      to a child without a default slot
+- direct browser path supports projected content end to end, including
+  parent-state-driven updates without remount (DOM identity verified by
+  Cypress)
+
+## Known Follow-ups
+
+Items surfaced during the milestone but intentionally not fixed in it.
+Track these in a future ticket; none block declaring composition done.
+
+- **OOM-path leak in `NeighbourLoader.manifestFor`**
+  (`src/compiler/analyze/binder.zig`, around the `cache.put` call): on
+  `error.OutOfMemory` from `cache.put`, the just-built manifest's
+  `entries` slice leaks. Fix: add `errdefer manifest_result.manifest.deinit(self.allocator);`
+  before the `cache.put` call. Triggered only under genuine memory
+  pressure.
+
+- **`zig build render-test` hardcoded path**
+  (`tools/render_check.ts`, the `cwd:` literal): the harness pins an
+  absolute path from the original developer's machine, so the
+  render-test gate cannot be run from this repository's checkout
+  location. Pre-existing — not introduced by this milestone. Fix:
+  replace with `process.cwd()`. The composition milestone's exit
+  criteria are otherwise verified via `zig build test` and
+  `bun run cypress:slots`.
+
+- **Slot manifest does not recurse into `slot_outlet.fallback_children`**
+  (`src/compiler/analyze/slot_manifest.zig`, `walk` function): a `<slot>`
+  nested inside another `<slot>`'s fallback is not counted by the
+  manifest. No canonical example exercises this; deferred until needed.
+
+- **`for`/`if` wrapping a named slot triggers spurious
+  `slot.default_not_supported`** (`src/compiler/analyze/binder.zig`,
+  default-content detection). The conservative `else` branch treats
+  `.conditional` and `.for_loop` as unnamed default content even when
+  their bodies only contain named-slot provisions. Acceptable
+  approximation for now; revisit when conditional slot grouping
+  becomes a user-facing pattern.
+
 ## Explicitly Deferred
 
 Do not add in this milestone:

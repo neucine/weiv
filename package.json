@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "cypress:direct": "bun tools/run_cypress_direct.ts"
+    "cypress:direct": "bun tools/run_cypress_direct.ts",
+    "cypress:slots": "bun tools/run_cypress_slots.ts"
   },
   "devDependencies": {
     "cypress": "^14.5.0"

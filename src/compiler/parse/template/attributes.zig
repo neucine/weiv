@@ -1,12 +1,13 @@
 const std = @import("std");
 const ast = @import("ast.zig");
+const sfc = @import("../sfc.zig");
 
 pub const ParseError = error{
     OutOfMemory,
     UnterminatedTag,
 };
 
-pub fn parseAttributes(source: []const u8, allocator: std.mem.Allocator) ParseError![]ast.Attribute {
+pub fn parseAttributes(source: []const u8, base_offset: usize, allocator: std.mem.Allocator) ParseError![]ast.Attribute {
     var list = std.ArrayList(ast.Attribute){};
     defer list.deinit(allocator);
 
@@ -42,6 +43,7 @@ pub fn parseAttributes(source: []const u8, allocator: std.mem.Allocator) ParseEr
         try list.append(allocator, .{
             .name = name,
             .value = value,
+            .span = .{ .start = base_offset + name_start, .end = base_offset + i },
         });
     }
 

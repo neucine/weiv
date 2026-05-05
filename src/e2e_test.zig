@@ -6,6 +6,9 @@ const emit_direct_js = @import("compiler/emit/browser/direct_component_js.zig");
 const emit_js = @import("compiler/emit/browser/document_js.zig");
 const emit_module_js = @import("compiler/emit/browser/component_module_js.zig");
 const style = @import("compiler/emit/browser/scoped_css.zig");
+const directives = @import("compiler/parse/template/directives.zig");
+const ast = @import("compiler/parse/template/ast.zig");
+const sfc = @import("compiler/parse/sfc.zig");
 
 test "classic todo app components build through current pipeline" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -1091,4 +1094,529 @@ fn expectComponentBuild(
 
 fn readFixture(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
+}
+
+test "Panel.weiv lowers to a single default slot outlet" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/slots/Panel.weiv");
+    defer allocator.free(source);
+    var model = try component.build(source, "examples/slots/Panel.weiv", allocator);
+    defer model.deinit(allocator);
+
+    // Top-level: <section><slot><p>...</p></slot></section>
+    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
+    switch (model.ir_document.nodes[0]) {
+        .element => |section| {
+            try std.testing.expect(std.mem.eql(u8, section.tag_name, "section"));
+            try std.testing.expectEqual(@as(usize, 1), section.children.len);
+            switch (section.children[0]) {
+                .slot_outlet => |so| {
+                    try std.testing.expect(so.name == null);
+                    // Panel.weiv fallback: <p class="panel__fallback">...</p>
+                    try std.testing.expectEqual(@as(usize, 1), so.fallback_children.len);
+                },
+                else => return error.UnexpectedIrShape,
+            }
+        },
+        else => return error.UnexpectedIrShape,
+    }
+}
+
+test "Card.weiv lowers to header named slot and default slot with fallbacks" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/slots/Card.weiv");
+    defer allocator.free(source);
+    var model = try component.build(source, "examples/slots/Card.weiv", allocator);
+    defer model.deinit(allocator);
+
+    // Top-level: <section><header><slot name="header">...</slot></header><div><slot>...</slot></div></section>
+    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
+    switch (model.ir_document.nodes[0]) {
+        .element => |root| {
+            try std.testing.expect(std.mem.eql(u8, root.tag_name, "section"));
+            try std.testing.expectEqual(@as(usize, 2), root.children.len);
+
+            switch (root.children[0]) {
+                .element => |header| {
+                    try std.testing.expect(std.mem.eql(u8, header.tag_name, "header"));
+                    try std.testing.expectEqual(@as(usize, 1), header.children.len);
+                    switch (header.children[0]) {
+                        .slot_outlet => |named_outlet| {
+                            try std.testing.expect(std.mem.eql(u8, named_outlet.name.?, "header"));
+                            // Fallback: <h2 class="card__fallback-title">Untitled</h2>
+                            try std.testing.expectEqual(@as(usize, 1), named_outlet.fallback_children.len);
+                        },
+                        else => return error.UnexpectedIrShape,
+                    }
+                },
+                else => return error.UnexpectedIrShape,
+            }
+
+            switch (root.children[1]) {
+                .element => |body| {
+                    try std.testing.expect(std.mem.eql(u8, body.tag_name, "div"));
+                    try std.testing.expectEqual(@as(usize, 1), body.children.len);
+                    switch (body.children[0]) {
+                        .slot_outlet => |default_outlet| {
+                            try std.testing.expect(default_outlet.name == null);
+                            // Fallback: <p class="card__fallback-body">No body content.</p>
+                            try std.testing.expectEqual(@as(usize, 1), default_outlet.fallback_children.len);
+                        },
+                        else => return error.UnexpectedIrShape,
+                    }
+                },
+                else => return error.UnexpectedIrShape,
+            }
+        },
+        else => return error.UnexpectedIrShape,
+    }
+}
+
+test "slot:name directive carries a non-empty source span" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    // Construct a hand-built attribute slice that represents `slot:header` at offset 42.
+    const input_attrs = [_]ast.Attribute{
+        .{
+            .name = "slot:header",
+            .value = null,
+            .span = .{ .start = 42, .end = 53 },
+        },
+    };
+
+    const result = try directives.split(&input_attrs, allocator);
+    defer allocator.free(result.attributes);
+    defer allocator.free(result.directives);
+
+    try std.testing.expectEqual(@as(usize, 0), result.attributes.len);
+    try std.testing.expectEqual(@as(usize, 1), result.directives.len);
+
+    const slot_dir = result.directives[0].slot_assign;
+    try std.testing.expectEqualStrings("header", slot_dir.slot_name);
+    try std.testing.expectEqual(@as(usize, 42), slot_dir.span.start);
+    try std.testing.expectEqual(@as(usize, 53), slot_dir.span.end);
+    try std.testing.expect(slot_dir.span.end > slot_dir.span.start);
+}
+
+test "EmptyState.weiv lowers with named message slot and default slot, both with fallbacks" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/slots/EmptyState.weiv");
+    defer allocator.free(source);
+    var model = try component.build(source, "examples/slots/EmptyState.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
+    switch (model.ir_document.nodes[0]) {
+        .element => |root| {
+            try std.testing.expect(std.mem.eql(u8, root.tag_name, "section"));
+            try std.testing.expectEqual(@as(usize, 2), root.children.len);
+
+            switch (root.children[0]) {
+                .element => |header| {
+                    try std.testing.expect(std.mem.eql(u8, header.tag_name, "header"));
+                    try std.testing.expectEqual(@as(usize, 1), header.children.len);
+                    switch (header.children[0]) {
+                        .slot_outlet => |out| {
+                            try std.testing.expect(out.name != null);
+                            try std.testing.expect(std.mem.eql(u8, out.name.?, "message"));
+                            try std.testing.expectEqual(@as(usize, 1), out.fallback_children.len);
+                        },
+                        else => return error.UnexpectedIrShape,
+                    }
+                },
+                else => return error.UnexpectedIrShape,
+            }
+
+            switch (root.children[1]) {
+                .element => |body| {
+                    try std.testing.expect(std.mem.eql(u8, body.tag_name, "div"));
+                    try std.testing.expectEqual(@as(usize, 1), body.children.len);
+                    switch (body.children[0]) {
+                        .slot_outlet => |out| {
+                            try std.testing.expect(out.name == null);
+                            try std.testing.expectEqual(@as(usize, 1), out.fallback_children.len);
+                        },
+                        else => return error.UnexpectedIrShape,
+                    }
+                },
+                else => return error.UnexpectedIrShape,
+            }
+        },
+        else => return error.UnexpectedIrShape,
+    }
+}
+
+test "duplicate <slot name> in a component emits slot.duplicate_outlet" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <section>
+        \\    <slot name="header"/>
+        \\    <slot name="header"/>
+        \\  </section>
+        \\</template>
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        \\<style></style>
+    ;
+    var model = try component.build(source, "test:duplicate_outlet.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var found = false;
+    for (model.binding_result.diagnostics) |d| {
+        if (std.mem.eql(u8, d.kind, "slot.duplicate_outlet")) found = true;
+    }
+    try std.testing.expect(found);
+}
+
+test "duplicate bare slot:name without template grouping emits slot.duplicate_provision" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <Card>
+        \\    <h2 slot:header>A</h2>
+        \\    <h2 slot:header>B</h2>
+        \\  </Card>
+        \\</template>
+        \\<script lang="ts">
+        \\  import Card from "./Card.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        \\<style></style>
+    ;
+    var model = try component.build(source, "test:duplicate_provision.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var found = false;
+    for (model.binding_result.diagnostics) |d| {
+        if (std.mem.eql(u8, d.kind, "slot.duplicate_provision")) found = true;
+    }
+    try std.testing.expect(found);
+}
+
+test "slot:foo with no matching child outlet emits slot.unknown_name" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    // Card has slots "header" and default. Use "title" which is unknown.
+    const source =
+        \\<template>
+        \\  <Card>
+        \\    <h2 slot:title>oops</h2>
+        \\  </Card>
+        \\</template>
+        \\<script lang="ts">
+        \\  import Card from "./Card.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        \\<style></style>
+    ;
+    var model = try component.build(source, "examples/slots/CardUsageInvalid.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var found = false;
+    for (model.binding_result.diagnostics) |d| {
+        if (std.mem.eql(u8, d.kind, "slot.unknown_name")) found = true;
+    }
+    try std.testing.expect(found);
+}
+
+test "providing default content to a child without default slot emits slot.default_not_supported" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const child_source =
+        \\<template>
+        \\  <header><slot name="title"/></header>
+        \\</template>
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        \\<style></style>
+    ;
+    try tmp.dir.writeFile(.{ .sub_path = "OnlyNamed.weiv", .data = child_source });
+
+    const parent_source =
+        \\<template>
+        \\  <OnlyNamed>plain text</OnlyNamed>
+        \\</template>
+        \\<script lang="ts">
+        \\  import OnlyNamed from "./OnlyNamed.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        \\<style></style>
+    ;
+    try tmp.dir.writeFile(.{ .sub_path = "Parent.weiv", .data = parent_source });
+
+    // Build absolute path to the parent file so the binder can resolve "./OnlyNamed.weiv"
+    const tmp_dir_path = try tmp.dir.realpathAlloc(allocator, ".");
+    defer allocator.free(tmp_dir_path);
+    const parent_path = try std.fs.path.join(allocator, &.{ tmp_dir_path, "Parent.weiv" });
+    defer allocator.free(parent_path);
+
+    var model = try component.build(parent_source, parent_path, allocator);
+    defer model.deinit(allocator);
+
+    var found = false;
+    for (model.binding_result.diagnostics) |d| {
+        if (std.mem.eql(u8, d.kind, "slot.default_not_supported")) found = true;
+    }
+    try std.testing.expect(found);
+}
+
+test "browser plan formatter exposes inspectable direct DOM plan" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    const source = try readFixture(allocator, "examples/slots/CardUsage.weiv");
+    defer allocator.free(source);
+    var model = try component.build(source, "examples/slots/CardUsage.weiv", allocator);
+    defer model.deinit(allocator);
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+    const formatted = try browser_plan.debug.formatDocument(&plan, allocator);
+    defer allocator.free(formatted);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "browser-plan next_ref_id=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "component refs=[") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "slot-provision name=header") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "slot-provision name=default") != null);
+}
+test "conditional direct browser modules destroy outgoing branch before replacement" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    const source = try readFixture(allocator, "examples/conditional-toggle.weiv");
+    defer allocator.free(source);
+    var model = try component.build(source, "examples/conditional-toggle.weiv", allocator);
+    defer model.deinit(allocator);
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function destroyConditionalBranch_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const previous = refs[") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "destroyConditionalBranch_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "replaceBetween(refs[") != null);
+}
+test "dangling else without sibling if is rejected" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    const source =
+        \\<template>
+        \\  <div else>Wrong place</div>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+    ;
+    try std.testing.expectError(
+        error.UnexpectedElse,
+        component.build(source, "inline-unexpected-else.weiv", allocator),
+    );
+}
+test "direct browser modules emit specialized bound attribute patch code" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    const counter_source = try readFixture(allocator, "examples/basic-counter.weiv");
+    defer allocator.free(counter_source);
+    var counter_model = try component.build(counter_source, "examples/basic-counter.weiv", allocator);
+    defer counter_model.deinit(allocator);
+    const counter_js = try emit_direct_js.emitModule(&counter_model, allocator);
+    defer allocator.free(counter_js);
+    try std.testing.expect(std.mem.indexOf(u8, counter_js, "applyBoundAttribute(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, counter_js, "const __next_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, counter_js, "_disabled = Boolean(__value_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, counter_js, ".disabled !== __next_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, counter_js, ".hasAttribute(\"disabled\")") != null);
+    try std.testing.expect(std.mem.indexOf(u8, counter_js, ".disabled = __next_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, counter_js, ".setAttribute(\"disabled\", \"\")") != null);
+    const todo_item_source = try readFixture(allocator, "examples/todomvc/TodoItem.weiv");
+    defer allocator.free(todo_item_source);
+    var todo_item_model = try component.build(todo_item_source, "examples/todomvc/TodoItem.weiv", allocator);
+    defer todo_item_model.deinit(allocator);
+    const todo_item_js = try emit_direct_js.emitModule(&todo_item_model, allocator);
+    defer allocator.free(todo_item_js);
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "applyBoundAttribute(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "getAttribute(\"class\") !== __next_attr_0_class") == null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "hasAttribute(\"checked\")") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, ".checked = __next_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, ".setAttribute(\"checked\", \"\")") != null);
+    const text_input_source = try readFixture(allocator, "examples/todomvc/TodoTextInput.weiv");
+    defer allocator.free(text_input_source);
+    var text_input_model = try component.build(text_input_source, "examples/todomvc/TodoTextInput.weiv", allocator);
+    defer text_input_model.deinit(allocator);
+    const text_input_js = try emit_direct_js.emitModule(&text_input_model, allocator);
+    defer allocator.free(text_input_js);
+    try std.testing.expect(std.mem.indexOf(u8, text_input_js, "const __next_0_value = __value_0_value ?? \"\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text_input_js, "const __next_string_0_value = String(__next_0_value);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text_input_js, ".value !== __next_string_0_value") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text_input_js, "getAttribute(\"value\") !== __next_string_0_value") == null);
+    try std.testing.expect(std.mem.indexOf(u8, text_input_js, ".setAttribute(\"value\", __next_string_0_value);") != null);
+}
+test "direct browser modules specialize child component update paths" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    const static_source =
+        \\<template>
+        \\  <Shell></Shell>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import Shell from "./Shell.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+    ;
+    var static_model = try component.build(static_source, "inline-static-child.weiv", allocator);
+    defer static_model.deinit(allocator);
+    const static_js = try emit_direct_js.emitModule(&static_model, allocator);
+    defer allocator.free(static_js);
+    try std.testing.expect(std.mem.indexOf(u8, static_js, "Shell.mountIntoBoundary(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, static_js, "undefined, undefined, undefined") != null);
+    try std.testing.expect(std.mem.indexOf(u8, static_js, "refs[2].setProps(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, static_js, "refs[2].setEventHandlers(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, static_js, "refs[2].setSlots(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, static_js, "refs[2].update();") == null);
+    const panel_usage_source = try readFixture(allocator, "examples/slots/PanelUsage.weiv");
+    defer allocator.free(panel_usage_source);
+    var panel_usage_model = try component.build(panel_usage_source, "examples/slots/PanelUsage.weiv", allocator);
+    defer panel_usage_model.deinit(allocator);
+    const panel_usage_js = try emit_direct_js.emitModule(&panel_usage_model, allocator);
+    defer allocator.free(panel_usage_js);
+    try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, ".setProps(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, ".setEventHandlers(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, "refs[4].setSlots(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, "refs[4].update();") != null);
+    const loop_source =
+        \\<template>
+        \\  <Shell for="item in items"></Shell>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import Shell from "./Shell.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\  let items = [1, 2, 3];
+        \\</script>
+    ;
+    var loop_model = try component.build(loop_source, "inline-static-loop-child.weiv", allocator);
+    defer loop_model.deinit(allocator);
+    const loop_js = try emit_direct_js.emitModule(&loop_model, allocator);
+    defer allocator.free(loop_js);
+    try std.testing.expect(std.mem.indexOf(u8, loop_js, "Shell.mountIntoBoundary(start, end, undefined, undefined, undefined);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, loop_js, "record.handle.setProps(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, loop_js, "record.handle.setEventHandlers(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, loop_js, "record.handle.setSlots(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, loop_js, "record.handle.update();") == null);
+}
+test "slot assignment outside component usage is rejected" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    const source =
+        \\<template>
+        \\  <div slot:header>Wrong place</div>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+    ;
+    try std.testing.expectError(
+        error.InvalidSlotPlacement,
+        component.build(source, "inline-invalid-slot-placement.weiv", allocator),
+    );
+}
+test "slot outlet directives are rejected" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    const source =
+        \\<template>
+        \\  <slot slot:header></slot>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+    ;
+    try std.testing.expectError(
+        error.InvalidSlotOutlet,
+        component.build(source, "inline-invalid-slot-outlet.weiv", allocator),
+    );
+}
+test "template grouping outside component usage is rejected" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    const source =
+        \\<template>
+        \\  <template slot:header>
+        \\    <p>Wrong place</p>
+        \\  </template>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+    ;
+    try std.testing.expectError(
+        error.InvalidSlotTemplatePlacement,
+        component.build(source, "inline-invalid-top-level-template.weiv", allocator),
+    );
+}
+test "template grouping without slot assignment is rejected" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    const source =
+        \\<template>
+        \\  <Card>
+        \\    <template>
+        \\      <p>Wrong place</p>
+        \\    </template>
+        \\  </Card>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import Card from "./Card.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+    ;
+    try std.testing.expectError(
+        error.InvalidSlotTemplatePlacement,
+        component.build(source, "inline-invalid-slot-template.weiv", allocator),
+    );
 }
