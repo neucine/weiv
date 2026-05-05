@@ -215,13 +215,22 @@ Completed on 2026-05-01 by the composition milestone hardening plan
 - default and named slots: verified in Cypress + IR snapshot tests
 - fallback content: verified in Cypress (SlotShowcase) and IR snapshots
 - grouped `<template slot:name>`: verified in CardUsage IR snapshot + Cypress reactive test
-- diagnostics: 6 codes implemented and unit-tested
-  - `slot.unknown_name`
-  - `slot.duplicate_outlet`
-  - `slot.assign_outside_component`
-  - `slot.template_outside_component`
-  - `slot.duplicate_provision`
-  - `slot.default_not_supported`
+- slot misuse is reported via two complementary channels:
+  - **Hard parse-time errors** for structural placement mistakes — emitted
+    by `src/compiler/lower/lower.zig`, e.g. `error.InvalidSlotPlacement`,
+    `error.InvalidSlotTemplatePlacement`, `error.SlotOutletDirective`,
+    `error.TemplateGroupingWithoutSlotAssignment`. There is no recoverable
+    codegen for these, so the build fails fast.
+  - **Soft binder diagnostics** for contract drift that still produces
+    coherent (if incomplete) codegen, allowing iterative editing:
+    - `slot.duplicate_outlet` — same component declares the same slot
+      name twice
+    - `slot.duplicate_provision` — same parent provides the same slot
+      twice without `<template slot:name>` grouping
+    - `slot.unknown_name` — parent uses `slot:foo` but the child has
+      no matching outlet
+    - `slot.default_not_supported` — parent provides default content
+      to a child without a default slot
 - direct browser path supports projected content end to end, including
   parent-state-driven updates without remount (DOM identity verified by
   Cypress)

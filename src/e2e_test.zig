@@ -975,60 +975,6 @@ test "EmptyState.weiv lowers with named message slot and default slot, both with
     }
 }
 
-test "slot:name on non-component-child emits slot.assign_outside_component" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const source =
-        \\<template>
-        \\  <div>
-        \\    <h2 slot:header>oops</h2>
-        \\  </div>
-        \\</template>
-        \\<script lang="ts">
-        \\  export interface Props {}
-        \\  export let props: Props;
-        \\</script>
-        \\<style></style>
-    ;
-    var model = try component.build(source, "test:assign_outside.weiv", allocator);
-    defer model.deinit(allocator);
-
-    var found = false;
-    for (model.binding_result.diagnostics) |d| {
-        if (std.mem.eql(u8, d.kind, "slot.assign_outside_component")) found = true;
-    }
-    try std.testing.expect(found);
-}
-
-test "<template slot:foo> outside component emits slot.template_outside_component" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const source =
-        \\<template>
-        \\  <div>
-        \\    <template slot:header><h2>x</h2></template>
-        \\  </div>
-        \\</template>
-        \\<script lang="ts">
-        \\  export interface Props {}
-        \\  export let props: Props;
-        \\</script>
-        \\<style></style>
-    ;
-    var model = try component.build(source, "test:template_outside.weiv", allocator);
-    defer model.deinit(allocator);
-
-    var found = false;
-    for (model.binding_result.diagnostics) |d| {
-        if (std.mem.eql(u8, d.kind, "slot.template_outside_component")) found = true;
-    }
-    try std.testing.expect(found);
-}
-
 test "duplicate <slot name> in a component emits slot.duplicate_outlet" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();

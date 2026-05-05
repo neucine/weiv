@@ -168,7 +168,7 @@ pub fn bind(
     var loader = NeighbourLoader.init(allocator, parent_path, script);
     defer loader.deinit();
 
-    try bindNodes(document.nodes, script, &component_refs, &diagnostics, &scopes, &loader, false, allocator);
+    try bindNodes(document.nodes, script, &component_refs, &diagnostics, &scopes, &loader, allocator);
 
     return .{
         .component_refs = try component_refs.toOwnedSlice(allocator),
@@ -184,7 +184,6 @@ fn bindNodes(
     diagnostics: *std.ArrayList(Diagnostic),
     scopes: *std.ArrayList(Scope),
     loader: *NeighbourLoader,
-    parent_is_component: bool,
     allocator: std.mem.Allocator,
 ) anyerror!void {
     for (nodes) |node| {
@@ -192,21 +191,21 @@ fn bindNodes(
             .text => {},
             .interpolation => |interp| try bindExpression(interp.expression, interp.span, script, diagnostics, scopes.items, allocator),
             .slot_outlet => |slot_outlet| {
-                try bindNodes(slot_outlet.fallback_children, script, component_refs, diagnostics, scopes, loader, false, allocator);
+                try bindNodes(slot_outlet.fallback_children, script, component_refs, diagnostics, scopes, loader, allocator);
             },
             .conditional => |conditional| {
                 try bindExpression(conditional.condition, conditional.span, script, diagnostics, scopes.items, allocator);
-                try bindNodes(conditional.consequent, script, component_refs, diagnostics, scopes, loader, false, allocator);
-                try bindNodes(conditional.alternate, script, component_refs, diagnostics, scopes, loader, false, allocator);
+                try bindNodes(conditional.consequent, script, component_refs, diagnostics, scopes, loader, allocator);
+                try bindNodes(conditional.alternate, script, component_refs, diagnostics, scopes, loader, allocator);
             },
             .for_loop => |for_loop| {
                 try bindExpression(for_loop.iterable_expr, for_loop.span, script, diagnostics, scopes.items, allocator);
                 var loop_scope_names = [1][]const u8{for_loop.item_name};
                 try scopes.append(allocator, .{ .names = loop_scope_names[0..1] });
                 defer _ = scopes.pop();
-                try bindNodes(for_loop.body, script, component_refs, diagnostics, scopes, loader, false, allocator);
+                try bindNodes(for_loop.body, script, component_refs, diagnostics, scopes, loader, allocator);
             },
-            .element => |element| try bindElement(&element, script, component_refs, diagnostics, scopes, loader, parent_is_component, allocator),
+            .element => |element| try bindElement(&element, script, component_refs, diagnostics, scopes, loader, allocator),
         }
     }
 }
@@ -218,7 +217,6 @@ fn bindElement(
     diagnostics: *std.ArrayList(Diagnostic),
     scopes: *std.ArrayList(Scope),
     loader: *NeighbourLoader,
-    parent_is_component: bool,
     allocator: std.mem.Allocator,
 ) anyerror!void {
     if (isComponentTag(element.tag_name)) {
@@ -241,19 +239,10 @@ fn bindElement(
             .event => |event_dir| {
                 try bindExpression(event_dir.expression, element.span, script, diagnostics, scopes.items, allocator);
             },
-            .slot_assign => |sa| {
-                if (!parent_is_component) {
-                    const code = if (std.mem.eql(u8, element.tag_name, "template"))
-                        "slot.template_outside_component"
-                    else
-                        "slot.assign_outside_component";
-                    const msg = if (std.mem.eql(u8, element.tag_name, "template"))
-                        "<template slot:<name>> may only appear as a direct child of a component usage"
-                    else
-                        "slot:<name> may only appear on a direct child of a component";
-                    try appendDiagnostic(diagnostics, code, sa.slot_name, msg, sa.span, allocator);
-                }
-            },
+            // slot:name placement (and <template slot:foo> placement) is enforced
+            // as a hard error at parse/lower time in src/compiler/lower/lower.zig.
+            // The binder no longer needs to re-check it.
+            .slot_assign => {},
             .if_expr, .else_branch, .for_expr => unreachable,
         }
     }
@@ -312,7 +301,7 @@ fn bindElement(
         }
     }
 
-    try bindNodes(element.children, script, component_refs, diagnostics, scopes, loader, isComponentTag(element.tag_name), allocator);
+    try bindNodes(element.children, script, component_refs, diagnostics, scopes, loader, allocator);
 }
 
 fn isWhitespaceOnly(s: []const u8) bool {
