@@ -1,5 +1,5 @@
 const std = @import("std");
-const component = @import("../../../pipeline.zig");
+const component = @import("../../../pipeline/index.zig");
 const common = @import("common.zig");
 
 pub fn buildSetupCode(model: *const component.ComponentModel, allocator: std.mem.Allocator) ![]u8 {
@@ -10,6 +10,17 @@ pub fn buildSetupCode(model: *const component.ComponentModel, allocator: std.mem
         \\function setup(__weiv_props, __weiv_event_handlers = {}) {
         \\  let props = __weiv_props;
         \\  let __weiv_handlers = __weiv_event_handlers;
+        \\  let __weiv_runBoundary = (callback) => callback();
+        \\  const __weiv_wrapCallback = (callback) => {
+        \\    if (typeof callback !== "function") {
+        \\      return callback;
+        \\    }
+        \\    return (...args) => __weiv_runBoundary(() => callback(...args));
+        \\  };
+        \\  const setTimeout = (callback, ...args) => globalThis.setTimeout(__weiv_wrapCallback(callback), ...args);
+        \\  const setInterval = (callback, ...args) => globalThis.setInterval(__weiv_wrapCallback(callback), ...args);
+        \\  const queueMicrotask = (callback) => globalThis.queueMicrotask(__weiv_wrapCallback(callback));
+        \\  const requestAnimationFrame = (callback) => globalThis.requestAnimationFrame(__weiv_wrapCallback(callback));
         \\  const emit = (name, payload) => {
         \\    if (typeof __weiv_handlers[name] === "function") {
         \\      return __weiv_handlers[name](payload);
@@ -49,7 +60,8 @@ pub fn buildSetupCode(model: *const component.ComponentModel, allocator: std.mem
     try out.appendSlice(allocator, "  }\n");
     try out.appendSlice(allocator, "  function __weiv_setProps(nextProps) {\n    props = nextProps;\n  }\n");
     try out.appendSlice(allocator, "  function __weiv_setEventHandlers(nextHandlers) {\n    __weiv_handlers = nextHandlers;\n  }\n");
-    try out.appendSlice(allocator, "  return { scope: __weiv_scope, refresh: __weiv_refresh, setProps: __weiv_setProps, setEventHandlers: __weiv_setEventHandlers };\n}\n");
+    try out.appendSlice(allocator, "  function __weiv_setBoundaryRunner(nextRunner) {\n    __weiv_runBoundary = nextRunner;\n  }\n");
+    try out.appendSlice(allocator, "  return { scope: __weiv_scope, refresh: __weiv_refresh, setProps: __weiv_setProps, setEventHandlers: __weiv_setEventHandlers, setBoundaryRunner: __weiv_setBoundaryRunner };\n}\n");
 
     return try out.toOwnedSlice(allocator);
 }

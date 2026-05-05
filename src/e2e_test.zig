@@ -1,7 +1,8 @@
 const std = @import("std");
 const app_emit = @import("compiler/emit/browser/app_bundle.zig");
-const component = @import("compiler/pipeline.zig");
-const browser_plan = @import("compiler/lower/browser_plan.zig");
+const component = @import("compiler/pipeline/index.zig");
+const browser_plan = @import("compiler/lower/browser_plan/index.zig");
+const invalidation_graph = @import("compiler/lower/invalidation_graph/index.zig");
 const emit_direct_js = @import("compiler/emit/browser/direct_component_js.zig");
 const emit_js = @import("compiler/emit/browser/document_js.zig");
 const emit_module_js = @import("compiler/emit/browser/component_module_js.zig");
@@ -211,8 +212,14 @@ test "basic counter direct browser module emits create/update DOM contract" {
 
     try std.testing.expect(std.mem.indexOf(u8, js, "function createDom(instance)") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "function updateDom(instance)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateRegion_text_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateRegion_attribute_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "updateRegion_text_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "updateRegion_attribute_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function runOwnedBoundary(instance, callback)") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "document.createElement(\"section\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "addEventListener(\"click\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "return runOwnedBoundary(instance, () => resolved(event));") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "refs[") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const __next_text_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, ".data !== __next_text_") != null);
@@ -234,6 +241,8 @@ test "conditional toggle direct browser module emits conditional boundary helper
 
     try std.testing.expect(std.mem.indexOf(u8, js, "createConditionalFragment_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "updateConditional_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateRegion_conditional_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "updateRegion_conditional_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "document.createComment(\"if:start\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "replaceBetween(") != null);
 }
@@ -254,11 +263,13 @@ test "todo list direct browser module emits loop boundary helpers" {
 
     try std.testing.expect(std.mem.indexOf(u8, js, "createForEntry_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "updateForLoop_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateRegion_loop_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "updateRegion_loop_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "document.createComment(\"for:start\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const loopScope = { ...nextScope, [\"item\"]: currentItem };") != null);
 }
 
-test "browser plan formatter exposes inspectable direct DOM plan" {
+test "browser plan formatter exposes inspectable direct DOM plan duplicate coverage" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -279,6 +290,249 @@ test "browser plan formatter exposes inspectable direct DOM plan" {
     try std.testing.expect(std.mem.indexOf(u8, formatted, "component refs=[") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "slot-provision name=header") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "slot-provision name=default") != null);
+}
+
+test "invalidation graph formatter exposes regions dependencies and owned boundaries" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/basic-counter.weiv");
+    defer allocator.free(source);
+
+    var model = try component.build(source, "examples/basic-counter.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "invalidation-graph source=examples/basic-counter.weiv") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "text ref=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "attribute ref=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "deps=[count]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "mutations") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "count assignment offset=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "template-event name=click expr=increment owned=true") != null);
+}
+
+test "invalidation graph formatter diagnoses hidden-state template calls" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ getThemeLabel() }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import { getThemeLabel } from "./theme.js";
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/hidden-state-call.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "diagnostics") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "hidden-state expression=getThemeLabel()") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=no-visible-component-dependency") != null);
+}
+
+test "invalidation graph formatter lists object and container mutation sites" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <button on:click="mutate">{{ todos.length }}</button>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let todos = [{ done: false }];
+        \\
+        \\  function mutate() {
+        \\    todos.push({ done: false });
+        \\    todos[0].done = true;
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/invalidation-graph-mutations.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "todos method offset=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "todos member-assignment offset=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "template-event name=click expr=mutate owned=true") != null);
+}
+
+test "invalidation graph formatter diagnoses expression-position mutations" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <button on:click="mutate">{{ count }}</button>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let count = 0;
+        \\
+        \\  function mutate() {
+        \\    const next = count++;
+        \\    return next;
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/invalidation-graph-expression-mutation.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "diagnostics") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expression-mutation binding=count") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=mutation-not-in-statement-position") != null);
+}
+
+test "invalidation graph formatter classifies child event boundaries as owned" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/todomvc/TodoList.weiv");
+    defer allocator.free(source);
+
+    var model = try component.build(source, "examples/todomvc/TodoList.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "child-event name=toggle expr=emitToggle owned=true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "child-event name=save-edit expr=emitSave owned=true") != null);
+}
+
+test "invalidation graph formatter classifies async template event handlers as owned" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <button on:click="load">{{ status }}</button>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let status = "idle";
+        \\
+        \\  async function load() {
+        \\    status = "loading";
+        \\    await Promise.resolve();
+        \\    status = "done";
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/invalidation-graph-async-event.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "template-event name=click expr=load owned=true async=true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "status assignment offset=") != null);
+}
+
+test "invalidation graph formatter diagnoses observable mutation inside unowned callback" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ count }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let count = 0;
+        \\
+        \\  externalStore.subscribe(() => {
+        \\    count += 1;
+        \\  });
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/invalidation-graph-unowned-callback.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "diagnostics") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "unowned-callback-mutation binding=count") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=callback-boundary-not-owned") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "count assignment offset=") == null);
+}
+
+test "direct browser setup wraps timer callbacks in owned boundaries" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source = try readFixture(allocator, "examples/timer-callback.weiv");
+    defer allocator.free(source);
+
+    var model = try component.build(source, "examples/timer-callback.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "const setTimeout = (callback, ...args) => globalThis.setTimeout(__weiv_wrapCallback(callback), ...args);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "setBoundaryRunner: __weiv_setBoundaryRunner") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "instance.setBoundaryRunner((callback) => runOwnedBoundary(instance, callback));") != null);
 }
 
 test "slot outlet and default projection survive through normalized template and IR" {
@@ -432,6 +686,8 @@ test "direct browser modules expose default slot projection contract" {
     try std.testing.expect(std.mem.indexOf(u8, panel_js, "export function mountIntoBoundary(start, end, props = {}, eventHandlers = {}, slots = {})") != null);
     try std.testing.expect(std.mem.indexOf(u8, panel_js, "setSlots: instance.setSlots") != null);
     try std.testing.expect(std.mem.indexOf(u8, panel_js, "function createSlotFallbackFragment_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, panel_js, "function updateRegion_slot_2") != null);
+    try std.testing.expect(std.mem.indexOf(u8, panel_js, "updateRegion_slot_2(instance, scope, refs);") != null);
     try std.testing.expect(std.mem.indexOf(u8, panel_js, "refs[2] = false;") != null);
     try std.testing.expect(std.mem.indexOf(u8, panel_js, "const __next_slot_2 = instance.slots?.default;") != null);
     try std.testing.expect(std.mem.indexOf(u8, panel_js, "refs[2] = __next_slot_2.mountIntoBoundary(refs[0], refs[1]);") != null);
@@ -635,11 +891,14 @@ test "todomvc app direct browser module preserves child component imports" {
     try std.testing.expect(std.mem.indexOf(u8, js, "import * as TodoList from \"./TodoList.mjs\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "import * as TodoFooter from \"./TodoFooter.mjs\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, ".mountIntoBoundary(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateRegion_child_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "updateRegion_child_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, ".setProps(") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, ".setEventHandlers(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "return runOwnedBoundary(instance, () => resolved(payload));") != null);
 }
 
-test "conditional direct browser modules destroy outgoing branch before replacement" {
+test "conditional direct browser modules destroy outgoing branch before replacement duplicate coverage" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -1092,6 +1351,40 @@ fn expectComponentBuild(
     try std.testing.expectEqual(expected_binding_diagnostics, model.binding_result.diagnostics.len);
 }
 
+test "user-defined emit binding reports framework conflict diagnostic" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <button on:click="save">{{ props.title }}</button>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {
+        \\    title: string;
+        \\  }
+        \\
+        \\  export let props: Props;
+        \\
+        \\  function emit(name: string, payload: unknown) {
+        \\    console.log(name, payload);
+        \\  }
+        \\
+        \\  function save() {
+        \\    emit("save", props.title);
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/framework-emit-conflict.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
+    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqualStrings("framework.reserved_binding", diagnostic.kind);
+    try std.testing.expectEqualStrings("emit", diagnostic.name);
+    try std.testing.expect(std.mem.indexOf(u8, diagnostic.message, "`emit` is provided by Weiv") != null);
+}
+
 fn readFixture(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
 }
@@ -1421,7 +1714,7 @@ test "conditional direct browser modules destroy outgoing branch before replacem
     try std.testing.expect(std.mem.indexOf(u8, js, "destroyConditionalBranch_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "replaceBetween(refs[") != null);
 }
-test "dangling else without sibling if is rejected" {
+test "dangling else without sibling if is rejected duplicate coverage" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -1440,7 +1733,7 @@ test "dangling else without sibling if is rejected" {
         component.build(source, "inline-unexpected-else.weiv", allocator),
     );
 }
-test "direct browser modules emit specialized bound attribute patch code" {
+test "direct browser modules emit specialized bound attribute patch code duplicate coverage" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -1480,7 +1773,7 @@ test "direct browser modules emit specialized bound attribute patch code" {
     try std.testing.expect(std.mem.indexOf(u8, text_input_js, "getAttribute(\"value\") !== __next_string_0_value") == null);
     try std.testing.expect(std.mem.indexOf(u8, text_input_js, ".setAttribute(\"value\", __next_string_0_value);") != null);
 }
-test "direct browser modules specialize child component update paths" {
+test "direct browser modules specialize child component update paths duplicate coverage" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -1537,7 +1830,7 @@ test "direct browser modules specialize child component update paths" {
     try std.testing.expect(std.mem.indexOf(u8, loop_js, "record.handle.setSlots(") == null);
     try std.testing.expect(std.mem.indexOf(u8, loop_js, "record.handle.update();") == null);
 }
-test "slot assignment outside component usage is rejected" {
+test "slot assignment outside component usage is rejected duplicate coverage" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -1556,7 +1849,7 @@ test "slot assignment outside component usage is rejected" {
         component.build(source, "inline-invalid-slot-placement.weiv", allocator),
     );
 }
-test "slot outlet directives are rejected" {
+test "slot outlet directives are rejected duplicate coverage" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -1575,7 +1868,7 @@ test "slot outlet directives are rejected" {
         component.build(source, "inline-invalid-slot-outlet.weiv", allocator),
     );
 }
-test "template grouping outside component usage is rejected" {
+test "template grouping outside component usage is rejected duplicate coverage" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -1596,7 +1889,7 @@ test "template grouping outside component usage is rejected" {
         component.build(source, "inline-invalid-top-level-template.weiv", allocator),
     );
 }
-test "template grouping without slot assignment is rejected" {
+test "template grouping without slot assignment is rejected duplicate coverage" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();

@@ -1,5 +1,5 @@
 const std = @import("std");
-const template = @import("../parse/template.zig");
+const template = @import("../parse/template/index.zig");
 const sfc = @import("../parse/sfc.zig");
 
 pub const SlotEntry = struct {

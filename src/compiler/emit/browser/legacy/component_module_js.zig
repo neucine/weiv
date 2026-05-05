@@ -1,5 +1,5 @@
 const std = @import("std");
-const component = @import("../../../pipeline.zig");
+const component = @import("../../../pipeline/index.zig");
 const emit_js = @import("document_js.zig");
 const style = @import("../scoped_css.zig");
 

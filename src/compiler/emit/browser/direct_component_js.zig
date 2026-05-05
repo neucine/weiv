@@ -1,6 +1,6 @@
 const std = @import("std");
-const component = @import("../../pipeline.zig");
-const browser_plan = @import("../../lower/browser_plan.zig");
+const component = @import("../../pipeline/index.zig");
+const browser_plan = @import("../../lower/browser_plan/index.zig");
 const style = @import("scoped_css.zig");
 const setup = @import("direct_component_js/setup.zig");
 const helpers = @import("direct_component_js/helpers.zig");
@@ -33,6 +33,8 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
     try out.appendSlice(allocator, ";\n\n");
     try node_codegen.emitCreateFunction(plan, scope_id, &out, allocator);
     try out.appendSlice(allocator, "\n");
+    try node_codegen.emitRegionUpdateFunctions(plan, &out, allocator);
+    try out.appendSlice(allocator, "\n");
     try node_codegen.emitUpdateFunction(plan, &out, allocator);
     try out.appendSlice(allocator, "\n");
     try node_codegen.emitDestroyFunction(plan, &out, allocator);
@@ -45,12 +47,15 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\    refresh: base.refresh,
         \\    setProps: base.setProps,
         \\    setEventHandlers: base.setEventHandlers,
+        \\    setBoundaryRunner: base.setBoundaryRunner,
         \\    slots,
         \\    setSlots: (nextSlots = {}) => { instance.slots = nextSlots; },
         \\    refs: [],
+        \\    destroyed: false,
         \\    update: () => {},
         \\    destroy: () => {},
         \\  };
+        \\  instance.setBoundaryRunner((callback) => runOwnedBoundary(instance, callback));
         \\  return instance;
         \\}
         \\
@@ -60,7 +65,7 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\  const fragment = createDom(instance);
         \\  replaceBetween(start, end, fragment);
         \\  instance.update = () => updateDom(instance);
-        \\  instance.destroy = () => { destroyDom(instance); replaceBetween(start, end, document.createDocumentFragment()); };
+        \\  instance.destroy = () => { instance.destroyed = true; destroyDom(instance); replaceBetween(start, end, document.createDocumentFragment()); };
         \\  instance.update();
         \\  return {
         \\    instance,

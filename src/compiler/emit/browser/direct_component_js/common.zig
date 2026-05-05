@@ -1,5 +1,5 @@
 const std = @import("std");
-const browser_plan = @import("../../../lower/browser_plan.zig");
+const browser_plan = @import("../../../lower/browser_plan/index.zig");
 const script_analysis = @import("../../../analyze/ts/analysis.zig");
 
 pub fn emitString(value: []const u8, out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void {

@@ -1,5 +1,5 @@
 const std = @import("std");
-const component = @import("../../pipeline.zig");
+const component = @import("../../pipeline/index.zig");
 
 pub fn emitScopedCss(model: *const component.ComponentModel, allocator: std.mem.Allocator) ![]u8 {
     const style_section = model.sfc_document.style orelse return allocator.dupe(u8, "");

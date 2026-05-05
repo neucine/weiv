@@ -16,7 +16,8 @@ Items here should stay concrete, testable, and aligned with the current scope gu
 
 - [ ] continue replacing generic browser update patterns with more compiler-emitted patch paths
 - [x] harden component boundary updates and teardown behavior
-- [ ] define and document the stable public state/reactivity model
+- [x] define and document the stable compiler-native state/scheduling model
+- [ ] implement compiler-native state/scheduling execution plan
 
 ## Diagnostics And Inspectability
 

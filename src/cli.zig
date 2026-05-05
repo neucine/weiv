@@ -1,14 +1,15 @@
 const std = @import("std");
-const component = @import("compiler/pipeline.zig");
+const component = @import("compiler/pipeline/index.zig");
 const app_emit = @import("compiler/emit/browser/app_bundle.zig");
 const emit_direct_js = @import("compiler/emit/browser/direct_component_js.zig");
 const legacy_emit_js = @import("compiler/emit/browser/legacy/document_js.zig");
 const legacy_emit_module_js = @import("compiler/emit/browser/legacy/component_module_js.zig");
 const legacy_runtime_js = @import("compiler/emit/browser/legacy/shared_runtime_js.zig");
 const style = @import("compiler/emit/browser/scoped_css.zig");
-const browser_plan = @import("compiler/lower/browser_plan.zig");
+const browser_plan = @import("compiler/lower/browser_plan/index.zig");
+const invalidation_graph = @import("compiler/lower/invalidation_graph/index.zig");
 const sfc = @import("compiler/parse/sfc.zig");
-const template = @import("compiler/parse/template.zig");
+const template = @import("compiler/parse/template/index.zig");
 const parser_backend = @import("ffi/parser_backend.zig");
 
 const LoadedComponent = struct {
@@ -85,6 +86,23 @@ pub fn run(allocator: std.mem.Allocator) !void {
         defer plan.deinit(allocator);
 
         const formatted = try browser_plan.debug.formatDocument(&plan, allocator);
+        defer allocator.free(formatted);
+        try std.fs.File.stdout().writeAll(formatted);
+        return;
+    }
+
+    if (std.mem.eql(u8, command, "dump-invalidation-graph") or std.mem.eql(u8, command, "dump-state-plan")) {
+        const path = args.next() orelse {
+            try printUsage();
+            return;
+        };
+        var loaded = try loadComponent(path, allocator);
+        defer loaded.deinit(allocator);
+
+        var plan = try browser_plan.lower(&loaded.model.ir_document, allocator);
+        defer plan.deinit(allocator);
+
+        const formatted = try invalidation_graph.formatDocument(&loaded.model, &plan, allocator);
         defer allocator.free(formatted);
         try std.fs.File.stdout().writeAll(formatted);
         return;
@@ -230,6 +248,7 @@ fn printUsage() !void {
         \\  weiv analyze-component <path>
         \\  weiv dump-ir <path>
         \\  weiv dump-browser-plan <path>
+        \\  weiv dump-invalidation-graph <path>
         \\  weiv emit-js <path>
         \\  weiv emit-browser-direct-js <path>
         \\  weiv emit-css <path>
@@ -237,6 +256,7 @@ fn printUsage() !void {
         \\  weiv dev <root.weiv> [out-dir]
         \\
         \\Compatibility / internal:
+        \\  weiv dump-state-plan <path>
         \\  weiv emit-render-js <path>
         \\  weiv emit-runtime-js
         \\  weiv emit-app-legacy <root.weiv> <out-dir>
@@ -444,7 +464,7 @@ fn printComponentAnalysis(model: component.ComponentModel) !void {
     try writer.interface.flush();
 }
 
-fn printNormalizedNodes(nodes: []const @import("compiler/parse/template.zig").NormalizedNode, indent: usize, writer: anytype) !void {
+fn printNormalizedNodes(nodes: []const @import("compiler/parse/template/index.zig").NormalizedNode, indent: usize, writer: anytype) !void {
     for (nodes) |node| {
         try printIndent(indent, writer);
         switch (node) {

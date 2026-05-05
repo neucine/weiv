@@ -1,7 +1,7 @@
 const std = @import("std");
 const binding = @import("../analyze/binder.zig");
 const ir = @import("ir.zig");
-const template = @import("../parse/template.zig");
+const template = @import("../parse/template/index.zig");
 
 pub const LowerError = error{
     InvalidSlotPlacement,

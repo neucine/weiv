@@ -98,22 +98,18 @@ tools/     render harness and test fixtures
 
 ## Key Documents
 
+- [Docs Index](./docs/README.md)
+- [Current Architecture](./docs/architecture.md)
+- [Terminology](./docs/terminology.md)
+- [Current Status](./docs/status.md)
+- [Current Plan](./docs/plan.md)
 - [Framework Spec](./spec/framework-spec.md)
-- [Execution Plan](./docs/execution-plan.md)
-- [Compiler Architecture](./docs/compiler-architecture.md)
-- [Browser Codegen Direction](./docs/browser-codegen.md)
-- [Composition Model](./docs/composition-model.md)
-- [Composition Implementation](./docs/composition-implementation.md)
-- [Framework Scope](./docs/framework-scope.md)
-- [Syntax Decisions](./docs/syntax-decisions.md)
-- [FFI Design](./docs/ffi-design.md)
-- [Backend API: Script Analysis](./docs/backend-api-script-analysis.md)
 
 ## Near-Term Focus
 
-- replace generic browser subtree rerendering with compiled DOM update paths
-- composition model: slots shipped — see `docs/composition-implementation.md`
-- define the public state/reactivity model after composition is clearer
+- finish selective region scheduling on top of the direct DOM path
+- keep slot composition stable through nested/component-heavy fixtures
+- keep compiler-native state scheduling inspectable through `dump-invalidation-graph`
 - harden `weiv dev` into a stronger watch/rebuild workflow
 - keep TodoMVC as the forcing-function verification app
 - preserve a small runtime boundary and move complexity into compiler output

@@ -404,6 +404,7 @@ async function main() {
     "PanelNestedCardUsage.mjs": emitDirectBrowserModule("examples/slots/PanelNestedCardUsage.weiv"),
     "PanelToggleUsage.mjs": emitDirectBrowserModule("examples/slots/PanelToggleUsage.weiv"),
     "PanelUsage.mjs": emitDirectBrowserModule("examples/slots/PanelUsage.weiv"),
+    "TimerCallbackDirect.mjs": emitDirectBrowserModule("examples/timer-callback.weiv"),
     "TodoListDirect.mjs": emitDirectBrowserModule("examples/todo-list.weiv"),
     "TodoItem.mjs": emitRenderModule("examples/classic-todo/TodoItem.weiv"),
     "TodoList.mjs": emitRenderModule("examples/classic-todo/TodoList.weiv"),
@@ -421,6 +422,7 @@ async function main() {
   const panelNestedCardUsageDirectModule = modules["PanelNestedCardUsage.mjs"];
   const panelToggleUsageDirectModule = modules["PanelToggleUsage.mjs"];
   const panelUsageDirectModule = modules["PanelUsage.mjs"];
+  const timerCallbackDirectModule = modules["TimerCallbackDirect.mjs"];
   const todoListDirectModule = modules["TodoListDirect.mjs"];
   const todoItemModule = modules["TodoItem.mjs"];
   const todoListModule = modules["TodoList.mjs"];
@@ -489,6 +491,26 @@ async function main() {
   }
   if ((directMount.instance.refs as any[]).length === 0) {
     throw new Error("BasicCounter direct mount did not record instance refs");
+  }
+
+  const timerDocument = new FakeDocument();
+  const timerTarget = timerDocument.createElement("div");
+  timerDocument.body.append(timerTarget);
+  (globalThis as any).document = timerDocument;
+
+  timerCallbackDirectModule.mount(timerTarget, {});
+  if (!timerTarget.textContent.includes("0")) {
+    throw new Error("TimerCallback direct mount initial content mismatch");
+  }
+  const timerButton = findElement(timerDocument.body, byTag("button"));
+  if (!timerButton) throw new Error("TimerCallback direct mount missing button");
+  click(timerButton);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  if (timerTarget.replaceChildrenCalls !== 1) {
+    throw new Error("TimerCallback direct timer update rerendered the root");
+  }
+  if (!timerTarget.textContent.includes("1")) {
+    throw new Error("TimerCallback direct timer callback did not patch state");
   }
 
   const conditionalDocument = new FakeDocument();

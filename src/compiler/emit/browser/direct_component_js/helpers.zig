@@ -1,5 +1,5 @@
 const std = @import("std");
-const browser_plan = @import("../../../lower/browser_plan.zig");
+const browser_plan = @import("../../../lower/browser_plan/index.zig");
 const common = @import("common.zig");
 const node_codegen = @import("node_codegen.zig");
 
@@ -66,6 +66,36 @@ pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void 
         \\    }
         \\  }
         \\  return false;
+        \\}
+        \\
+        \\function flushOwnedBoundary(instance, beforeScope) {
+        \\  if (instance.destroyed) {
+        \\    return beforeScope;
+        \\  }
+        \\  const afterScope = instance.refresh();
+        \\  if (hasScopeChanged(beforeScope, afterScope)) {
+        \\    instance.update();
+        \\    return cloneScope(instance.refresh());
+        \\  }
+        \\  return cloneScope(afterScope);
+        \\}
+        \\
+        \\function runOwnedBoundary(instance, callback) {
+        \\  let beforeScope = cloneScope(instance.refresh());
+        \\  let result;
+        \\  try {
+        \\    result = callback();
+        \\  } catch (error) {
+        \\    flushOwnedBoundary(instance, beforeScope);
+        \\    throw error;
+        \\  }
+        \\  beforeScope = flushOwnedBoundary(instance, beforeScope);
+        \\  if (result && typeof result.then === "function") {
+        \\    return result.finally(() => {
+        \\      flushOwnedBoundary(instance, beforeScope);
+        \\    });
+        \\  }
+        \\  return result;
         \\}
         \\
     );

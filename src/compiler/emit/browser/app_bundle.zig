@@ -1,5 +1,5 @@
 const std = @import("std");
-const component = @import("../../pipeline.zig");
+const component = @import("../../pipeline/index.zig");
 const emit_direct_js = @import("direct_component_js.zig");
 const legacy_emit_module_js = @import("legacy/component_module_js.zig");
 const parser_backend = @import("../../../ffi/parser_backend.zig");

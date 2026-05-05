@@ -1,5 +1,5 @@
 const std = @import("std");
-const browser_plan = @import("../../../lower/browser_plan.zig");
+const browser_plan = @import("../../../lower/browser_plan/index.zig");
 const ir = @import("../../../lower/ir.zig");
 const common = @import("common.zig");
 
@@ -111,21 +111,13 @@ pub fn emitCreateNode(
                         try common.writeIndent(indent, out, allocator);
                         try out.writer(allocator).print("{s}.addEventListener(\"{s}\", (event) => {{\n", .{ var_name, event_dir.event_name });
                         try common.writeIndent(indent + 1, out, allocator);
-                        try out.appendSlice(allocator, "const beforeScope = cloneScope(instance.refresh());\n");
-                        try common.writeIndent(indent + 1, out, allocator);
                         try out.appendSlice(allocator, "const resolved = evaluate(");
                         try common.emitString(event_dir.expression, out, allocator);
                         try out.writer(allocator).print(", {s});\n", .{scope_expr});
                         try common.writeIndent(indent + 1, out, allocator);
                         try out.appendSlice(allocator, "if (typeof resolved === \"function\") {\n");
                         try common.writeIndent(indent + 2, out, allocator);
-                        try out.appendSlice(allocator, "resolved(event);\n");
-                        try common.writeIndent(indent + 1, out, allocator);
-                        try out.appendSlice(allocator, "}\n");
-                        try common.writeIndent(indent + 1, out, allocator);
-                        try out.appendSlice(allocator, "if (hasScopeChanged(beforeScope, instance.refresh())) {\n");
-                        try common.writeIndent(indent + 2, out, allocator);
-                        try out.appendSlice(allocator, "instance.update();\n");
+                        try out.appendSlice(allocator, "return runOwnedBoundary(instance, () => resolved(event));\n");
                         try common.writeIndent(indent + 1, out, allocator);
                         try out.appendSlice(allocator, "}\n");
                         try common.writeIndent(indent, out, allocator);
@@ -268,6 +260,136 @@ pub fn emitUpdateFunction(
     );
 }
 
+pub fn emitRegionUpdateFunctions(
+    plan: browser_plan.Document,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+) !void {
+    for (plan.nodes) |node| {
+        try emitRegionUpdateFunctionsForNode(node, out, allocator);
+    }
+}
+
+fn emitRegionUpdateFunctionsForNode(
+    node: browser_plan.Node,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+) !void {
+    switch (node) {
+        .text => {},
+        .interpolation => |interp| {
+            try emitTextRegionUpdateFunction(interp, out, allocator);
+        },
+        .element => |element| {
+            for (element.bind_effects) |effect| {
+                switch (effect) {
+                    .bind => |bind_dir| try emitAttributeRegionUpdateFunction(element.ref_id, bind_dir.target_name, bind_dir.expression, out, allocator),
+                    .event => unreachable,
+                }
+            }
+            for (element.children) |child| {
+                try emitRegionUpdateFunctionsForNode(child, out, allocator);
+            }
+        },
+        .conditional => |conditional| {
+            try emitConditionalRegionUpdateFunction(conditional, out, allocator);
+            for (conditional.consequent) |child| {
+                try emitRegionUpdateFunctionsForNode(child, out, allocator);
+            }
+            for (conditional.alternate) |child| {
+                try emitRegionUpdateFunctionsForNode(child, out, allocator);
+            }
+        },
+        .for_loop => |for_loop| {
+            try emitLoopRegionUpdateFunction(for_loop, out, allocator);
+            for (for_loop.body) |child| {
+                try emitRegionUpdateFunctionsForNode(child, out, allocator);
+            }
+        },
+        .component => |component_node| {
+            try emitChildRegionUpdateFunction(component_node, out, allocator);
+            for (component_node.slot_provisions) |slot| {
+                for (slot.children) |child| {
+                    try emitRegionUpdateFunctionsForNode(child, out, allocator);
+                }
+            }
+        },
+        .slot_outlet => |slot_outlet| {
+            try emitSlotRegionUpdateFunction(slot_outlet, out, allocator);
+            for (slot_outlet.fallback_children) |child| {
+                try emitRegionUpdateFunctionsForNode(child, out, allocator);
+            }
+        },
+    }
+}
+
+fn emitTextRegionUpdateFunction(
+    interp: browser_plan.InterpolationNode,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+) !void {
+    try out.writer(allocator).print("function updateRegion_text_{d}(instance, scope, refs) {{\n", .{interp.ref_id});
+    try emitInterpolationUpdate(interp, out, allocator, 1, "scope", "refs");
+    try out.appendSlice(allocator, "}\n");
+}
+
+fn emitAttributeRegionUpdateFunction(
+    ref_id: usize,
+    target_name: []const u8,
+    expression: []const u8,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+) !void {
+    const suffix = try sanitizedIdentifierFragment(target_name, allocator);
+    defer allocator.free(suffix);
+
+    try out.writer(allocator).print("function updateRegion_attribute_{d}_{s}(instance, scope, refs) {{\n", .{ ref_id, suffix });
+    try emitBoundAttributeUpdate(target_name, expression, "refs", ref_id, "scope", 1, out, allocator);
+    try out.appendSlice(allocator, "}\n");
+}
+
+fn emitConditionalRegionUpdateFunction(
+    conditional: browser_plan.ConditionalNode,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+) !void {
+    try out.writer(allocator).print("function updateRegion_conditional_{d}(instance, scope, refs) {{\n", .{conditional.start_ref_id});
+    try common.writeIndent(1, out, allocator);
+    try out.writer(allocator).print("updateConditional_{d}(instance, scope);\n", .{conditional.start_ref_id});
+    try out.appendSlice(allocator, "}\n");
+}
+
+fn emitLoopRegionUpdateFunction(
+    for_loop: browser_plan.ForLoopNode,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+) !void {
+    try out.writer(allocator).print("function updateRegion_loop_{d}(instance, scope, refs) {{\n", .{for_loop.start_ref_id});
+    try common.writeIndent(1, out, allocator);
+    try out.writer(allocator).print("updateForLoop_{d}(instance, scope);\n", .{for_loop.start_ref_id});
+    try out.appendSlice(allocator, "}\n");
+}
+
+fn emitChildRegionUpdateFunction(
+    component_node: browser_plan.ComponentNode,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+) !void {
+    try out.writer(allocator).print("function updateRegion_child_{d}(instance, scope, refs) {{\n", .{component_node.handle_ref_id});
+    try emitChildComponentUpdateBody(component_node, out, allocator, 1, "scope", "refs");
+    try out.appendSlice(allocator, "}\n");
+}
+
+fn emitSlotRegionUpdateFunction(
+    slot_outlet: browser_plan.SlotOutletNode,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+) !void {
+    try out.writer(allocator).print("function updateRegion_slot_{d}(instance, scope, refs) {{\n", .{slot_outlet.handle_ref_id});
+    try emitSlotOutletUpdateBody(slot_outlet, out, allocator, 1, "scope", "refs");
+    try out.appendSlice(allocator, "}\n");
+}
+
 pub fn emitDestroyFunction(
     plan: browser_plan.Document,
     out: *std.ArrayList(u8),
@@ -299,89 +421,25 @@ pub fn emitUpdateNode(
         .text => {},
         .interpolation => |interp| {
             try common.writeIndent(indent, out, allocator);
-            try out.writer(allocator).print("const __next_text_{d} = String(evaluate(", .{interp.ref_id});
-            try common.emitString(interp.expression, out, allocator);
-            try out.writer(allocator).print(", {s}) ?? \"\");\n", .{scope_expr});
-            try common.writeIndent(indent, out, allocator);
-            try out.writer(allocator).print("if ({s}[{d}].data !== __next_text_{d}) {{\n", .{
-                refs_expr,
-                interp.ref_id,
-                interp.ref_id,
-            });
-            try common.writeIndent(indent + 1, out, allocator);
-            try out.writer(allocator).print("{s}[{d}].data = __next_text_{d};\n", .{
-                refs_expr,
-                interp.ref_id,
-                interp.ref_id,
-            });
-            try common.writeIndent(indent, out, allocator);
-            try out.appendSlice(allocator, "}\n");
+            try out.writer(allocator).print("updateRegion_text_{d}(instance, {s}, {s});\n", .{ interp.ref_id, scope_expr, refs_expr });
         },
         .slot_outlet => |slot_outlet| {
-            const next_slot_var_name = try std.fmt.allocPrint(allocator, "__next_slot_{d}", .{slot_outlet.handle_ref_id});
-            defer allocator.free(next_slot_var_name);
-            const current_slot_var_name = try std.fmt.allocPrint(allocator, "__current_slot_{d}", .{slot_outlet.handle_ref_id});
-            defer allocator.free(current_slot_var_name);
-            try emitSlotLookupLine(slot_outlet, next_slot_var_name, indent, out, allocator);
             try common.writeIndent(indent, out, allocator);
-            try out.writer(allocator).print("const {s} = {s}[{d}];\n", .{
-                current_slot_var_name,
-                refs_expr,
-                slot_outlet.handle_ref_id,
-            });
-            try common.writeIndent(indent, out, allocator);
-            try out.writer(allocator).print("if ({s}) {{\n", .{next_slot_var_name});
-            try common.writeIndent(indent + 1, out, allocator);
-            try out.writer(allocator).print("if ({s} && {s} !== false) {{\n", .{
-                current_slot_var_name,
-                current_slot_var_name,
-            });
-            try common.writeIndent(indent + 2, out, allocator);
-            try out.writer(allocator).print("{s}.update();\n", .{current_slot_var_name});
-            try common.writeIndent(indent + 1, out, allocator);
-            try out.appendSlice(allocator, "} else {\n");
-            try common.writeIndent(indent + 2, out, allocator);
-            try out.writer(allocator).print("{s}[{d}] = {s}.mountIntoBoundary({s}[{d}], {s}[{d}]);\n", .{
-                refs_expr,
-                slot_outlet.handle_ref_id,
-                next_slot_var_name,
-                refs_expr,
-                slot_outlet.start_ref_id,
-                refs_expr,
-                slot_outlet.end_ref_id,
-            });
-            try common.writeIndent(indent + 1, out, allocator);
-            try out.appendSlice(allocator, "}\n");
-            try common.writeIndent(indent, out, allocator);
-            try out.appendSlice(allocator, "} else {\n");
-            try common.writeIndent(indent + 1, out, allocator);
-            try out.writer(allocator).print("if ({s} !== false) {{\n", .{current_slot_var_name});
-            try common.writeIndent(indent + 2, out, allocator);
-            try out.writer(allocator).print("if ({s} && typeof {s}.destroy === \"function\") {{ {s}.destroy(); }}\n", .{
-                current_slot_var_name,
-                current_slot_var_name,
-                current_slot_var_name,
-            });
-            try common.writeIndent(indent + 2, out, allocator);
-            try out.writer(allocator).print("{s}[{d}] = false;\n", .{ refs_expr, slot_outlet.handle_ref_id });
-            const start_ref_expr = try std.fmt.allocPrint(allocator, "{s}[{d}]", .{ refs_expr, slot_outlet.start_ref_id });
-            defer allocator.free(start_ref_expr);
-            const end_ref_expr = try std.fmt.allocPrint(allocator, "{s}[{d}]", .{ refs_expr, slot_outlet.end_ref_id });
-            defer allocator.free(end_ref_expr);
-            try emitSlotFallbackReplaceLine(slot_outlet, start_ref_expr, end_ref_expr, scope_expr, indent + 2, out, allocator);
-            try common.writeIndent(indent + 1, out, allocator);
-            try out.appendSlice(allocator, "}\n");
-            for (slot_outlet.fallback_children) |child| {
-                try emitUpdateNode(child, out, allocator, indent + 1, scope_expr, refs_expr);
-            }
-            try common.writeIndent(indent, out, allocator);
-            try out.appendSlice(allocator, "}\n");
+            try out.writer(allocator).print("updateRegion_slot_{d}(instance, {s}, {s});\n", .{ slot_outlet.handle_ref_id, scope_expr, refs_expr });
         },
         .element => |element| {
             for (element.bind_effects) |effect| {
                 switch (effect) {
                     .bind => |bind_dir| {
-                        try emitBoundAttributeUpdate(bind_dir.target_name, bind_dir.expression, refs_expr, element.ref_id, scope_expr, indent, out, allocator);
+                        const suffix = try sanitizedIdentifierFragment(bind_dir.target_name, allocator);
+                        defer allocator.free(suffix);
+                        try common.writeIndent(indent, out, allocator);
+                        try out.writer(allocator).print("updateRegion_attribute_{d}_{s}(instance, {s}, {s});\n", .{
+                            element.ref_id,
+                            suffix,
+                            scope_expr,
+                            refs_expr,
+                        });
                     },
                     .event => unreachable,
                 }
@@ -392,40 +450,148 @@ pub fn emitUpdateNode(
         },
         .conditional => |conditional| {
             try common.writeIndent(indent, out, allocator);
-            try out.writer(allocator).print("updateConditional_{d}(instance, {s});\n", .{ conditional.start_ref_id, scope_expr });
+            try out.writer(allocator).print("updateRegion_conditional_{d}(instance, {s}, {s});\n", .{ conditional.start_ref_id, scope_expr, refs_expr });
         },
         .component => |component_node| {
-            if (componentHasProps(component_node)) {
-                try common.writeIndent(indent, out, allocator);
-                try out.writer(allocator).print("{s}[{d}].setProps(", .{ refs_expr, component_node.handle_ref_id });
-                try emitPropsObject(component_node.bind_effects, out, allocator, scope_expr);
-                try out.appendSlice(allocator, ");\n");
-            }
-            if (componentHasEventHandlers(component_node)) {
-                try common.writeIndent(indent, out, allocator);
-                try out.writer(allocator).print("{s}[{d}].setEventHandlers(", .{ refs_expr, component_node.handle_ref_id });
-                try emitChildHandlersObject(component_node.event_effects, out, allocator, scope_expr);
-                try out.appendSlice(allocator, ");\n");
-            }
-            if (componentHasSlots(component_node)) {
-                try common.writeIndent(indent, out, allocator);
-                try out.writer(allocator).print("{s}[{d}].setSlots(", .{
-                    refs_expr,
-                    component_node.handle_ref_id,
-                });
-                try common.emitProjectedSlotObject(component_node, "instance", out, allocator);
-                try out.appendSlice(allocator, ");\n");
-            }
-            if (componentNeedsParentUpdate(component_node)) {
-                try common.writeIndent(indent, out, allocator);
-                try out.writer(allocator).print("{s}[{d}].update();\n", .{ refs_expr, component_node.handle_ref_id });
-            }
+            try common.writeIndent(indent, out, allocator);
+            try out.writer(allocator).print("updateRegion_child_{d}(instance, {s}, {s});\n", .{ component_node.handle_ref_id, scope_expr, refs_expr });
         },
         .for_loop => |for_loop| {
             try common.writeIndent(indent, out, allocator);
-            try out.writer(allocator).print("updateForLoop_{d}(instance, {s});\n", .{ for_loop.start_ref_id, scope_expr });
+            try out.writer(allocator).print("updateRegion_loop_{d}(instance, {s}, {s});\n", .{ for_loop.start_ref_id, scope_expr, refs_expr });
         },
     }
+}
+
+fn emitChildComponentUpdateBody(
+    component_node: browser_plan.ComponentNode,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+    indent: usize,
+    scope_expr: []const u8,
+    refs_expr: []const u8,
+) !void {
+    if (componentHasProps(component_node)) {
+        try common.writeIndent(indent, out, allocator);
+        try out.writer(allocator).print("{s}[{d}].setProps(", .{ refs_expr, component_node.handle_ref_id });
+        try emitPropsObject(component_node.bind_effects, out, allocator, scope_expr);
+        try out.appendSlice(allocator, ");\n");
+    }
+    if (componentHasEventHandlers(component_node)) {
+        try common.writeIndent(indent, out, allocator);
+        try out.writer(allocator).print("{s}[{d}].setEventHandlers(", .{ refs_expr, component_node.handle_ref_id });
+        try emitChildHandlersObject(component_node.event_effects, out, allocator, scope_expr);
+        try out.appendSlice(allocator, ");\n");
+    }
+    if (componentHasSlots(component_node)) {
+        try common.writeIndent(indent, out, allocator);
+        try out.writer(allocator).print("{s}[{d}].setSlots(", .{
+            refs_expr,
+            component_node.handle_ref_id,
+        });
+        try common.emitProjectedSlotObject(component_node, "instance", out, allocator);
+        try out.appendSlice(allocator, ");\n");
+    }
+    if (componentNeedsParentUpdate(component_node)) {
+        try common.writeIndent(indent, out, allocator);
+        try out.writer(allocator).print("{s}[{d}].update();\n", .{ refs_expr, component_node.handle_ref_id });
+    }
+}
+
+fn emitSlotOutletUpdateBody(
+    slot_outlet: browser_plan.SlotOutletNode,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+    indent: usize,
+    scope_expr: []const u8,
+    refs_expr: []const u8,
+) !void {
+    const next_slot_var_name = try std.fmt.allocPrint(allocator, "__next_slot_{d}", .{slot_outlet.handle_ref_id});
+    defer allocator.free(next_slot_var_name);
+    const current_slot_var_name = try std.fmt.allocPrint(allocator, "__current_slot_{d}", .{slot_outlet.handle_ref_id});
+    defer allocator.free(current_slot_var_name);
+    try emitSlotLookupLine(slot_outlet, next_slot_var_name, indent, out, allocator);
+    try common.writeIndent(indent, out, allocator);
+    try out.writer(allocator).print("const {s} = {s}[{d}];\n", .{
+        current_slot_var_name,
+        refs_expr,
+        slot_outlet.handle_ref_id,
+    });
+    try common.writeIndent(indent, out, allocator);
+    try out.writer(allocator).print("if ({s}) {{\n", .{next_slot_var_name});
+    try common.writeIndent(indent + 1, out, allocator);
+    try out.writer(allocator).print("if ({s} && {s} !== false) {{\n", .{
+        current_slot_var_name,
+        current_slot_var_name,
+    });
+    try common.writeIndent(indent + 2, out, allocator);
+    try out.writer(allocator).print("{s}.update();\n", .{current_slot_var_name});
+    try common.writeIndent(indent + 1, out, allocator);
+    try out.appendSlice(allocator, "} else {\n");
+    try common.writeIndent(indent + 2, out, allocator);
+    try out.writer(allocator).print("{s}[{d}] = {s}.mountIntoBoundary({s}[{d}], {s}[{d}]);\n", .{
+        refs_expr,
+        slot_outlet.handle_ref_id,
+        next_slot_var_name,
+        refs_expr,
+        slot_outlet.start_ref_id,
+        refs_expr,
+        slot_outlet.end_ref_id,
+    });
+    try common.writeIndent(indent + 1, out, allocator);
+    try out.appendSlice(allocator, "}\n");
+    try common.writeIndent(indent, out, allocator);
+    try out.appendSlice(allocator, "} else {\n");
+    try common.writeIndent(indent + 1, out, allocator);
+    try out.writer(allocator).print("if ({s} !== false) {{\n", .{current_slot_var_name});
+    try common.writeIndent(indent + 2, out, allocator);
+    try out.writer(allocator).print("if ({s} && typeof {s}.destroy === \"function\") {{ {s}.destroy(); }}\n", .{
+        current_slot_var_name,
+        current_slot_var_name,
+        current_slot_var_name,
+    });
+    try common.writeIndent(indent + 2, out, allocator);
+    try out.writer(allocator).print("{s}[{d}] = false;\n", .{ refs_expr, slot_outlet.handle_ref_id });
+    const start_ref_expr = try std.fmt.allocPrint(allocator, "{s}[{d}]", .{ refs_expr, slot_outlet.start_ref_id });
+    defer allocator.free(start_ref_expr);
+    const end_ref_expr = try std.fmt.allocPrint(allocator, "{s}[{d}]", .{ refs_expr, slot_outlet.end_ref_id });
+    defer allocator.free(end_ref_expr);
+    try emitSlotFallbackReplaceLine(slot_outlet, start_ref_expr, end_ref_expr, scope_expr, indent + 2, out, allocator);
+    try common.writeIndent(indent + 1, out, allocator);
+    try out.appendSlice(allocator, "}\n");
+    for (slot_outlet.fallback_children) |child| {
+        try emitUpdateNode(child, out, allocator, indent + 1, scope_expr, refs_expr);
+    }
+    try common.writeIndent(indent, out, allocator);
+    try out.appendSlice(allocator, "}\n");
+}
+
+fn emitInterpolationUpdate(
+    interp: browser_plan.InterpolationNode,
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+    indent: usize,
+    scope_expr: []const u8,
+    refs_expr: []const u8,
+) !void {
+    try common.writeIndent(indent, out, allocator);
+    try out.writer(allocator).print("const __next_text_{d} = String(evaluate(", .{interp.ref_id});
+    try common.emitString(interp.expression, out, allocator);
+    try out.writer(allocator).print(", {s}) ?? \"\");\n", .{scope_expr});
+    try common.writeIndent(indent, out, allocator);
+    try out.writer(allocator).print("if ({s}[{d}].data !== __next_text_{d}) {{\n", .{
+        refs_expr,
+        interp.ref_id,
+        interp.ref_id,
+    });
+    try common.writeIndent(indent + 1, out, allocator);
+    try out.writer(allocator).print("{s}[{d}].data = __next_text_{d};\n", .{
+        refs_expr,
+        interp.ref_id,
+        interp.ref_id,
+    });
+    try common.writeIndent(indent, out, allocator);
+    try out.appendSlice(allocator, "}\n");
 }
 
 pub fn emitDestroyNode(
@@ -795,7 +961,7 @@ pub fn emitChildHandlersObject(
                 if (idx > 0) try out.appendSlice(allocator, ", ");
                 try out.writer(allocator).print("\"{s}\": (payload) => {{ const resolved = evaluate(", .{event_dir.event_name});
                 try common.emitString(event_dir.expression, out, allocator);
-                try out.writer(allocator).print(", {s}); const beforeScope = cloneScope(instance.refresh()); let result = undefined; if (typeof resolved === \"function\") {{ result = resolved(payload); }} if (hasScopeChanged(beforeScope, instance.refresh())) {{ instance.update(); }} return result; }}", .{scope_expr});
+                try out.writer(allocator).print(", {s}); if (typeof resolved === \"function\") {{ return runOwnedBoundary(instance, () => resolved(payload)); }} return undefined; }}", .{scope_expr});
             },
             .bind => unreachable,
         }

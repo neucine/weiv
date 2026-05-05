@@ -1,0 +1,26 @@
+<template>
+  <section class="timer-callback">
+    <p>{{ count }}</p>
+    <button on:click="schedule">Schedule</button>
+  </section>
+</template>
+
+<script lang="ts">
+  export interface Props {}
+  export let props: Props;
+
+  let count = 0;
+
+  function schedule() {
+    setTimeout(() => {
+      count += 1;
+    }, 0);
+  }
+</script>
+
+<style>
+  .timer-callback {
+    display: grid;
+    gap: 0.5rem;
+  }
+</style>

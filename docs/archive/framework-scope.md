@@ -37,7 +37,7 @@ These are required if `weiv` is to become a serious framework in its own lane.
 - a clear public state/update model
 - explicit rules for local mutable state
 - a minimal story for cross-component state or shared state
-- a model that fits compiler-driven updates rather than generic runtime magic
+- a model that fits compiler-driven scheduling and updates rather than generic runtime magic
 
 Without this, the runtime can work, but the framework still lacks a real authoring model.
 

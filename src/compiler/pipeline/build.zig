@@ -3,7 +3,7 @@ const binding = @import("../analyze/binder.zig");
 const lower_ir = @import("../lower/lower.zig");
 const model = @import("model.zig");
 const sfc = @import("../parse/sfc.zig");
-const template = @import("../parse/template.zig");
+const template = @import("../parse/template/index.zig");
 const parser_backend = @import("../../ffi/parser_backend.zig");
 
 pub fn build(

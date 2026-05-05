@@ -1,9 +1,9 @@
-pub const ast = @import("template/ast.zig");
-pub const directives = @import("template/directives.zig");
-pub const normalized = @import("template/normalized.zig");
-pub const normalize_mod = @import("template/normalize.zig");
-pub const parser = @import("template/parser.zig");
-pub const debug = @import("template/debug.zig");
+pub const ast = @import("ast.zig");
+pub const directives = @import("directives.zig");
+pub const normalized = @import("normalized.zig");
+pub const normalize_mod = @import("normalize.zig");
+pub const parser = @import("parser.zig");
+pub const debug = @import("debug.zig");
 
 pub const NodeTag = ast.NodeTag;
 pub const Attribute = ast.Attribute;

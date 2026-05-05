@@ -1,5 +1,5 @@
 const std = @import("std");
-const template = @import("../parse/template.zig");
+const template = @import("../parse/template/index.zig");
 const script_analysis = @import("ts/analysis.zig");
 const sfc = @import("../parse/sfc.zig");
 const slot_manifest = @import("slot_manifest.zig");
@@ -165,6 +165,8 @@ pub fn bind(
         try appendDiagnostic(&diagnostics, "slot.duplicate_outlet", name_for_diag, "Slot outlet declared more than once with the same name", dup.span, allocator);
     }
 
+    try validateFrameworkBindings(script, &diagnostics, allocator);
+
     var loader = NeighbourLoader.init(allocator, parent_path, script);
     defer loader.deinit();
 
@@ -175,6 +177,25 @@ pub fn bind(
         .diagnostics = try diagnostics.toOwnedSlice(allocator),
         .own_slot_manifest = manifest_result.manifest,
     };
+}
+
+fn validateFrameworkBindings(
+    script: *const script_analysis.ScriptAnalysis,
+    diagnostics: *std.ArrayList(Diagnostic),
+    allocator: std.mem.Allocator,
+) !void {
+    for (script.bindings) |binding| {
+        if (std.mem.eql(u8, binding.name, "emit")) {
+            try appendDiagnostic(
+                diagnostics,
+                "framework.reserved_binding",
+                "emit",
+                "`emit` is provided by Weiv for component events; declare `export interface Emits` for typing instead of defining `emit` yourself",
+                .{ .start = binding.span_start, .end = binding.span_end },
+                allocator,
+            );
+        }
+    }
 }
 
 fn bindNodes(

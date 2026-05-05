@@ -2,7 +2,7 @@ const std = @import("std");
 const binding = @import("../analyze/binder.zig");
 const ir = @import("../lower/ir.zig");
 const sfc = @import("../parse/sfc.zig");
-const template = @import("../parse/template.zig");
+const template = @import("../parse/template/index.zig");
 const script_analysis = @import("../analyze/ts/analysis.zig");
 
 pub const ComponentModel = struct {
