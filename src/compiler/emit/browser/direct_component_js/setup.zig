@@ -47,10 +47,31 @@ pub fn buildSetupCode(model: *const component.ComponentModel, allocator: std.mem
         try out.appendSlice(allocator, "\n");
     }
 
+    for (model.script.imports) |import_record| {
+        if (import_record.local_name.len == 0) continue;
+        if (std.mem.endsWith(u8, import_record.source, ".weiv")) continue;
+        try out.writer(allocator).print("  const __weiv_import_{s} = {s};\n", .{ import_record.local_name, import_record.local_name });
+        try out.writer(allocator).print("  const {s} = __weiv_getTrackedRoot(\"{s}\", __weiv_import_{s});\n", .{
+            import_record.local_name,
+            import_record.local_name,
+            import_record.local_name,
+        });
+    }
+    if (model.script.props) |props_record| {
+        if (props_record.props_binding_name) |binding_name| {
+            try out.writer(allocator).print("  props = __weiv_getTrackedRoot(\"{s}\", props);\n", .{binding_name});
+        }
+    }
+
     try out.appendSlice(allocator, "  const __weiv_scope = {};\n");
     try out.appendSlice(allocator, "  function __weiv_refresh() {\n");
     try out.appendSlice(allocator, "    __weiv_scope.props = props;\n");
     try out.appendSlice(allocator, "    __weiv_scope.emit = emit;\n");
+    for (model.script.imports) |import_record| {
+        if (import_record.local_name.len == 0) continue;
+        if (std.mem.endsWith(u8, import_record.source, ".weiv")) continue;
+        try out.writer(allocator).print("    __weiv_scope.{s} = {s};\n", .{ import_record.local_name, import_record.local_name });
+    }
     for (model.script.bindings) |binding| {
         if (binding.template_visible and !std.mem.eql(u8, binding.kind, "import")) {
             try out.writer(allocator).print("    __weiv_scope.{s} = {s};\n", .{ binding.name, binding.name });
@@ -58,7 +79,17 @@ pub fn buildSetupCode(model: *const component.ComponentModel, allocator: std.mem
     }
     try out.appendSlice(allocator, "    return __weiv_scope;\n");
     try out.appendSlice(allocator, "  }\n");
-    try out.appendSlice(allocator, "  function __weiv_setProps(nextProps) {\n    props = nextProps;\n  }\n");
+    try out.appendSlice(allocator, "  function __weiv_setProps(nextProps) {\n");
+    if (model.script.props) |props_record| {
+        if (props_record.props_binding_name) |binding_name| {
+            try out.writer(allocator).print("    props = __weiv_getTrackedRoot(\"{s}\", nextProps);\n", .{binding_name});
+        } else {
+            try out.appendSlice(allocator, "    props = nextProps;\n");
+        }
+    } else {
+        try out.appendSlice(allocator, "    props = nextProps;\n");
+    }
+    try out.appendSlice(allocator, "  }\n");
     try out.appendSlice(allocator, "  function __weiv_setEventHandlers(nextHandlers) {\n    __weiv_handlers = nextHandlers;\n  }\n");
     try out.appendSlice(allocator, "  function __weiv_setBoundaryRunner(nextRunner) {\n    __weiv_runBoundary = nextRunner;\n  }\n");
     try out.appendSlice(allocator, "  return { scope: __weiv_scope, refresh: __weiv_refresh, setProps: __weiv_setProps, setEventHandlers: __weiv_setEventHandlers, setBoundaryRunner: __weiv_setBoundaryRunner };\n}\n");

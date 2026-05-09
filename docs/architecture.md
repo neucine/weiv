@@ -11,6 +11,8 @@ The next implementation-focused upgrade for script-side precision is documented
 in [AST Script Analysis Plan](./ast-script-analysis-plan.md).
 The next likely extension point for stronger script-side state semantics is
 documented in [Authoring Helpers](./authoring-helpers.md).
+The current state-tracking direction for escaping / externalized state is
+documented in [Proxy State Graph Design](./proxy-state-graph-design.md).
 
 The current direction is:
 
@@ -26,10 +28,11 @@ The current direction is:
 virtual DOM, or public effect graphs.
 
 Where plain TypeScript becomes too ambiguous for trustworthy compile-time state
-analysis, `weiv` should prefer small explicit compiler-facing authoring helpers
-over fragile heuristic inference. But before adding explicit author syntax,
-`weiv` should first strengthen script-side precision through AST-backed backend
-analysis.
+analysis, `weiv` should first strengthen script-side precision through
+AST-backed backend analysis and explicit diagnostics. For state that escapes
+simple owned component boundaries, the current likely direction is a narrow
+proxy-backed tracked state graph rather than trying to infer arbitrary mutation
+timing statically.
 
 Optional ecosystem/runtime companions are still valid. The current open
 question is whether Weiv should settle on:
@@ -42,6 +45,13 @@ The current comparison work is captured in
 [Shared-State Companion Research](./store-companion-research.md). The earlier
 `@weiv/store` draft remains useful as one candidate, but it is no longer the
 settled direction.
+
+The current proxy-based graph direction does not replace the existing local
+baseline. The intended split is:
+
+- local owned state stays simple and compiler-first
+- escaping or externalized state may move through a Weiv-owned canonical tracked
+  proxy surface
 
 ## Component Syntax
 

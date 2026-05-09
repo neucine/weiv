@@ -223,11 +223,20 @@ test "basic counter direct browser module emits create/update DOM contract" {
     try std.testing.expect(std.mem.indexOf(u8, js, "return runOwnedBoundary(instance, () => resolved(event));") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "function collectDirtyBindings(beforeScope, afterScope)") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const dirtyBindings = collectDirtyBindings(beforeScope, afterScope);") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "function updateDirtyRegions(instance, dirtyBindings, scope = instance.refresh())") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "const dirtySet = new Set(dirtyBindings);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function normalizeDirtyState(dirtyState)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function __weiv_getTrackedRoot(bindingName, value)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function collectTrackedDirtyPaths()") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateDirtyRegions(instance, dirtyState, scope = instance.refresh())") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const normalizedDirtyState = normalizeDirtyState(dirtyState);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const dirtySet = new Set(normalizedDirtyState.bindings);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const dirtyPathSet = new Set(normalizedDirtyState.paths);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const dirtyRegionSet = new Set();") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "instance.updateDirty({ bindings: dirtyBindings, paths: dirtyPaths }, afterScope);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "__weiv_registerTrackedSubscriber(instance);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "__weiv_unregisterTrackedSubscriber(instance);") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "instance.updateDirty = (dirtyBindings, scope) => updateDirtyRegions(instance, dirtyBindings, scope);") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"count\") || dirtySet.has(\"limit\")) {") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"doubled\") || dirtySet.has(\"count\")) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"count\") || dirtySet.has(\"limit\") || dirtyRegionSet.has(4)) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"doubled\") || dirtySet.has(\"count\") || dirtyRegionSet.has(3)) {") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const resolved = instance.refresh().increment;") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const __next_text_0 = String((scope.props.title) ?? \"\");") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const __next_text_2 = String((scope.count) ?? \"\");") != null);
@@ -323,6 +332,76 @@ test "direct browser modules compile bracket-access expressions directly" {
     try std.testing.expect(std.mem.indexOf(u8, js, "evaluate(\"items[selectedIndex].title\", scope)") == null);
 }
 
+test "direct browser module emits tracked state graph metadata for imported nested paths" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ workspace.sidebar.collapsed }}</p>
+        \\  <p>{{ workspace.currentProject.name }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import { workspace } from "./workspace-state.ts";
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/direct-browser-tracked-imported-paths.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "const __weiv_import_workspace = workspace;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const workspace = __weiv_getTrackedRoot(\"workspace\", __weiv_import_workspace);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "__weiv_scope.workspace = workspace;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "export const trackedStateGraph = { roots: [{ rootId: 1, bindingName: \"workspace\", kind: \"imported-tracked\" }], paths: [{ pathId: 1, rootId: 1, path: \"workspace\", parentPathId: null }, { pathId: 2, rootId: 1, path: \"workspace.sidebar\", parentPathId: 1 }, { pathId: 3, rootId: 1, path: \"workspace.sidebar.collapsed\", parentPathId: 2 }, { pathId: 4, rootId: 1, path: \"workspace.currentProject\", parentPathId: 1 }, { pathId: 5, rootId: 1, path: \"workspace.currentProject.name\", parentPathId: 4 }], regions: [{ regionId: 1, trackedPathIds: [3] }, { regionId: 2, trackedPathIds: [5] }] };") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const dirtyPaths = collectTrackedDirtyPaths();") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "__weiv_markTrackedPathsForWrite(rootId, nextPath);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "__weiv_scheduleTrackedFlush();") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtyPathSet.size > 0 && trackedStateGraph && Array.isArray(trackedStateGraph.regions)) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "dirtyRegionSet.add(region.regionId);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"workspace\") || dirtyRegionSet.has(1)) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"workspace\") || dirtyRegionSet.has(2)) {") != null);
+}
+
+test "direct browser module emits tracked state graph metadata for prop nested paths" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ props.workspace.sidebar.collapsed }}</p>
+        \\  <p>{{ props.workspace.currentProject.name }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {
+        \\    workspace: {
+        \\      sidebar: { collapsed: boolean };
+        \\      currentProject: { name: string };
+        \\    };
+        \\  }
+        \\  export let props: Props;
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/direct-browser-tracked-prop-paths.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "props = __weiv_getTrackedRoot(\"props\", props);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "props = __weiv_getTrackedRoot(\"props\", nextProps);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "export const trackedStateGraph = { roots: [{ rootId: 1, bindingName: \"props\", kind: \"prop-tracked\" }], paths: [{ pathId: 1, rootId: 1, path: \"props\", parentPathId: null }, { pathId: 2, rootId: 1, path: \"props.workspace\", parentPathId: 1 }, { pathId: 3, rootId: 1, path: \"props.workspace.sidebar\", parentPathId: 2 }, { pathId: 4, rootId: 1, path: \"props.workspace.sidebar.collapsed\", parentPathId: 3 }, { pathId: 5, rootId: 1, path: \"props.workspace.currentProject\", parentPathId: 2 }, { pathId: 6, rootId: 1, path: \"props.workspace.currentProject.name\", parentPathId: 5 }], regions: [{ regionId: 1, trackedPathIds: [4] }, { regionId: 2, trackedPathIds: [6] }] };") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"props\") || dirtyRegionSet.has(1)) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"props\") || dirtyRegionSet.has(2)) {") != null);
+}
+
 test "conditional toggle direct browser module emits conditional boundary helpers" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -343,8 +422,8 @@ test "conditional toggle direct browser module emits conditional boundary helper
     try std.testing.expect(std.mem.indexOf(u8, js, "updateRegion_conditional_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "document.createComment(\"if:start\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "replaceBetween(") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "function updateDirtyRegions(instance, dirtyBindings, scope = instance.refresh())") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"open\")) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateDirtyRegions(instance, dirtyState, scope = instance.refresh())") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"open\") || dirtyRegionSet.has(1)) {") != null);
 }
 
 test "todo list direct browser module emits loop boundary helpers" {
@@ -367,8 +446,8 @@ test "todo list direct browser module emits loop boundary helpers" {
     try std.testing.expect(std.mem.indexOf(u8, js, "updateRegion_loop_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "document.createComment(\"for:start\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const loopScope = { ...nextScope, [\"item\"]: currentItem };") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "function updateDirtyRegions(instance, dirtyBindings, scope = instance.refresh())") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"visibleItems\") || dirtySet.has(\"items\") || dirtySet.has(\"showCompleted\")) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateDirtyRegions(instance, dirtyState, scope = instance.refresh())") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"visibleItems\") || dirtySet.has(\"items\") || dirtySet.has(\"showCompleted\") || dirtyRegionSet.has(3)) {") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "dirtySet.has(\"item\")") == null);
 }
 
@@ -488,6 +567,74 @@ test "invalidation graph formatter diagnoses hidden-state template calls" {
     try std.testing.expect(std.mem.indexOf(u8, formatted, "diagnostics") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "warning hidden-state expression=getThemeLabel()") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=no-visible-component-dependency") != null);
+}
+
+test "invalidation graph formatter inventories tracked imported nested paths" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ workspace.sidebar.collapsed }}</p>
+        \\  <p>{{ workspace.currentProject.name }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import { workspace } from "./workspace-state.ts";
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/invalidation-graph-tracked-imported-paths.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "tracked-roots\n  root id=1 binding=workspace kind=imported-tracked\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "tracked-paths\n  path id=1 root=1 path=workspace\n  path id=2 root=1 path=workspace.sidebar parent=1\n  path id=3 root=1 path=workspace.sidebar.collapsed parent=2\n  path id=4 root=1 path=workspace.currentProject parent=1\n  path id=5 root=1 path=workspace.currentProject.name parent=4\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=workspace.sidebar.collapsed eval=direct deps=[workspace] tracked_paths=[3]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=workspace.currentProject.name eval=direct deps=[workspace] tracked_paths=[5]") != null);
+}
+
+test "invalidation graph formatter inventories tracked prop nested paths" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ props.workspace.sidebar.collapsed }}</p>
+        \\  <p>{{ props.workspace.currentProject.name }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {
+        \\    workspace: {
+        \\      sidebar: { collapsed: boolean };
+        \\      currentProject: { name: string };
+        \\    };
+        \\  }
+        \\  export let props: Props;
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/inspect-tracked-prop-paths.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "tracked-roots\n  root id=1 binding=props kind=prop-tracked\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "tracked-paths\n  path id=1 root=1 path=props\n  path id=2 root=1 path=props.workspace parent=1\n  path id=3 root=1 path=props.workspace.sidebar parent=2\n  path id=4 root=1 path=props.workspace.sidebar.collapsed parent=3\n  path id=5 root=1 path=props.workspace.currentProject parent=2\n  path id=6 root=1 path=props.workspace.currentProject.name parent=5\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=props.workspace.sidebar.collapsed eval=direct deps=[props] tracked_paths=[4]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=props.workspace.currentProject.name eval=direct deps=[props] tracked_paths=[6]") != null);
 }
 
 test "invalidation graph formatter diagnoses local helper external reads" {

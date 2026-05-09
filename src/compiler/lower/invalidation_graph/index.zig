@@ -46,21 +46,55 @@ const Diagnostic = struct {
     reason: ?[]const u8 = null,
 };
 
+const TrackedRoot = struct {
+    id: usize,
+    binding_name: []const u8,
+    kind: []const u8,
+
+    fn deinit(self: *TrackedRoot, allocator: std.mem.Allocator) void {
+        allocator.free(self.binding_name);
+        allocator.free(self.kind);
+    }
+};
+
+const TrackedPath = struct {
+    id: usize,
+    root_id: usize,
+    path: []const u8,
+    parent_path_id: ?usize,
+
+    fn deinit(self: *TrackedPath, allocator: std.mem.Allocator) void {
+        allocator.free(self.path);
+    }
+};
+
 const Formatter = struct {
     component: *const model.ComponentModel,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
     next_region_id: usize = 1,
     diagnostics: std.ArrayList(Diagnostic) = .{},
+    tracked_roots: std.ArrayList(TrackedRoot) = .{},
+    tracked_paths: std.ArrayList(TrackedPath) = .{},
 
     fn deinit(self: *Formatter) void {
         self.diagnostics.deinit(self.allocator);
+        for (self.tracked_roots.items) |*root| root.deinit(self.allocator);
+        self.tracked_roots.deinit(self.allocator);
+        for (self.tracked_paths.items) |*path| path.deinit(self.allocator);
+        self.tracked_paths.deinit(self.allocator);
     }
 
     fn format(self: *Formatter, plan: *const browser_plan.Document) !void {
         try self.out.writer(self.allocator).print("invalidation-graph source={s}\n", .{self.component.source_path});
         try self.out.appendSlice(self.allocator, "regions\n");
         try self.formatNodes(plan.nodes, 1, &.{});
+        if (self.tracked_roots.items.len > 0) {
+            try self.out.appendSlice(self.allocator, "tracked-roots\n");
+            try self.formatTrackedRoots();
+            try self.out.appendSlice(self.allocator, "tracked-paths\n");
+            try self.formatTrackedPaths();
+        }
         try self.out.appendSlice(self.allocator, "mutations\n");
         try self.formatMutations();
         try self.out.appendSlice(self.allocator, "callback-registrations\n");
@@ -136,16 +170,16 @@ const Formatter = struct {
                             .event => {},
                         }
                     }
-                    try self.writeRegionLine(indent, "child", component_node.handle_ref_id, component_node.tag_name, null, deps.items.items);
+                    try self.writeRegionLine(indent, "child", component_node.handle_ref_id, component_node.tag_name, null, deps.items.items, &.{});
                     for (component_node.slot_provisions) |slot| {
                         const slot_name = slot.name orelse "default";
-                        try self.writeRegionLine(indent + 1, "slot", component_node.handle_ref_id, slot_name, null, &.{});
+                        try self.writeRegionLine(indent + 1, "slot", component_node.handle_ref_id, slot_name, null, &.{}, &.{});
                         try self.formatNodes(slot.children, indent + 2, loop_locals);
                     }
                 },
                 .slot_outlet => |slot_outlet| {
                     const slot_name = slot_outlet.name orelse "default";
-                    try self.writeRegionLine(indent, "slot", slot_outlet.handle_ref_id, slot_name, null, &.{});
+                    try self.writeRegionLine(indent, "slot", slot_outlet.handle_ref_id, slot_name, null, &.{}, &.{});
                     try self.formatNodes(slot_outlet.fallback_children, indent + 1, loop_locals);
                 },
             }
@@ -251,11 +285,40 @@ const Formatter = struct {
         }
     }
 
+    fn formatTrackedRoots(self: *Formatter) !void {
+        for (self.tracked_roots.items) |root| {
+            try self.writeIndent(1);
+            try self.out.writer(self.allocator).print("root id={d} binding={s} kind={s}\n", .{
+                root.id,
+                root.binding_name,
+                root.kind,
+            });
+        }
+    }
+
+    fn formatTrackedPaths(self: *Formatter) !void {
+        for (self.tracked_paths.items) |path| {
+            try self.writeIndent(1);
+            try self.out.writer(self.allocator).print("path id={d} root={d} path={s}", .{
+                path.id,
+                path.root_id,
+                path.path,
+            });
+            if (path.parent_path_id) |parent_id| {
+                try self.out.writer(self.allocator).print(" parent={d}", .{parent_id});
+            }
+            try self.out.appendSlice(self.allocator, "\n");
+        }
+    }
+
     fn writeRegion(self: *Formatter, indent: usize, kind: []const u8, ref_id: usize, expr: []const u8, loop_locals: []const []const u8) !void {
         var deps = DepList{};
         defer deps.deinit(self.allocator);
         try self.collectExpressionDeps(expr, loop_locals, &deps);
-        try self.writeRegionLine(indent, kind, ref_id, null, expr, deps.items.items);
+        var tracked_path_ids = std.ArrayList(usize){};
+        defer tracked_path_ids.deinit(self.allocator);
+        try self.collectTrackedPathIds(expr, &tracked_path_ids);
+        try self.writeRegionLine(indent, kind, ref_id, null, expr, deps.items.items, tracked_path_ids.items);
     }
 
     fn writeRegionWithName(
@@ -270,7 +333,10 @@ const Formatter = struct {
         var deps = DepList{};
         defer deps.deinit(self.allocator);
         try self.collectExpressionDeps(expr, loop_locals, &deps);
-        try self.writeRegionLine(indent, kind, ref_id, name, expr, deps.items.items);
+        var tracked_path_ids = std.ArrayList(usize){};
+        defer tracked_path_ids.deinit(self.allocator);
+        try self.collectTrackedPathIds(expr, &tracked_path_ids);
+        try self.writeRegionLine(indent, kind, ref_id, name, expr, deps.items.items, tracked_path_ids.items);
     }
 
     fn writeRegionLine(
@@ -281,6 +347,7 @@ const Formatter = struct {
         name: ?[]const u8,
         expr: ?[]const u8,
         deps: []const []const u8,
+        tracked_path_ids: []const usize,
     ) !void {
         const id = self.next_region_id;
         self.next_region_id += 1;
@@ -308,7 +375,16 @@ const Formatter = struct {
             if (idx > 0) try self.out.appendSlice(self.allocator, ",");
             try self.out.appendSlice(self.allocator, dep);
         }
-        try self.out.appendSlice(self.allocator, "]\n");
+        try self.out.appendSlice(self.allocator, "]");
+        if (tracked_path_ids.len > 0) {
+            try self.out.appendSlice(self.allocator, " tracked_paths=[");
+            for (tracked_path_ids, 0..) |path_id, idx| {
+                if (idx > 0) try self.out.appendSlice(self.allocator, ",");
+                try self.out.writer(self.allocator).print("{d}", .{path_id});
+            }
+            try self.out.appendSlice(self.allocator, "]");
+        }
+        try self.out.appendSlice(self.allocator, "\n");
     }
 
     fn writeBoundary(self: *Formatter, indent: usize, kind: BoundaryKind, name: []const u8, expr: []const u8) !void {
@@ -401,6 +477,110 @@ const Formatter = struct {
         }
     }
 
+    fn collectTrackedPathIds(self: *Formatter, expr: []const u8, path_ids: *std.ArrayList(usize)) !void {
+        var i: usize = 0;
+        while (i < expr.len) {
+            const ch = expr[i];
+            if (!isIdentStart(ch)) {
+                i += 1;
+                continue;
+            }
+
+            const root_start = i;
+            i += 1;
+            while (i < expr.len and isIdentContinue(expr[i])) i += 1;
+            const root_name = expr[root_start..i];
+
+            if (isKeyword(root_name)) continue;
+            if (isPropertyAccess(expr, root_start)) continue;
+            if (self.trackedRootKindByName(root_name) == null) continue;
+
+            var cursor = i;
+            var segment_count: usize = 0;
+            var leaf_end = i;
+
+            while (true) {
+                const dot_index = nextNonSpaceIndex(expr, cursor) orelse break;
+                if (expr[dot_index] != '.') break;
+
+                var segment_start = dot_index + 1;
+                while (segment_start < expr.len and isWhitespace(expr[segment_start])) segment_start += 1;
+                if (segment_start >= expr.len or !isIdentStart(expr[segment_start])) break;
+
+                var segment_end = segment_start + 1;
+                while (segment_end < expr.len and isIdentContinue(expr[segment_end])) segment_end += 1;
+
+                const call_index = nextNonSpaceIndex(expr, segment_end);
+                if (call_index != null and expr[call_index.?] == '(') break;
+
+                segment_count += 1;
+                leaf_end = segment_end;
+                cursor = segment_end;
+            }
+
+            if (segment_count == 0) continue;
+
+            const full_path = std.mem.trimRight(u8, expr[root_start..leaf_end], " \t\r\n");
+            const leaf_path_id = try self.ensureTrackedPathChain(full_path);
+            try appendUniqueUsize(self.allocator, path_ids, leaf_path_id);
+        }
+    }
+
+    fn ensureTrackedRoot(self: *Formatter, binding_name: []const u8, kind: []const u8) !usize {
+        for (self.tracked_roots.items) |root| {
+            if (std.mem.eql(u8, root.binding_name, binding_name)) return root.id;
+        }
+
+        const id = self.tracked_roots.items.len + 1;
+        try self.tracked_roots.append(self.allocator, .{
+            .id = id,
+            .binding_name = try self.allocator.dupe(u8, binding_name),
+            .kind = try self.allocator.dupe(u8, kind),
+        });
+        return id;
+    }
+
+    fn findTrackedPathId(self: *const Formatter, path: []const u8) ?usize {
+        for (self.tracked_paths.items) |tracked_path| {
+            if (std.mem.eql(u8, tracked_path.path, path)) return tracked_path.id;
+        }
+        return null;
+    }
+
+    fn ensureTrackedPathChain(self: *Formatter, full_path: []const u8) !usize {
+        if (self.findTrackedPathId(full_path)) |existing| return existing;
+
+        const first_dot = std.mem.indexOfScalar(u8, full_path, '.') orelse return error.InvalidTrackedPath;
+        const root_name = full_path[0..first_dot];
+        const kind = self.trackedRootKindByName(root_name) orelse return error.InvalidTrackedPath;
+        const root_id = try self.ensureTrackedRoot(root_name, kind);
+
+        var parent_path_id: ?usize = null;
+        var search_from: usize = 0;
+        while (true) {
+            const maybe_dot = std.mem.indexOfScalarPos(u8, full_path, search_from, '.');
+            const end_index = maybe_dot orelse full_path.len;
+            const prefix = full_path[0..end_index];
+
+            const path_id = if (self.findTrackedPathId(prefix)) |existing|
+                existing
+            else blk: {
+                const new_id = self.tracked_paths.items.len + 1;
+                try self.tracked_paths.append(self.allocator, .{
+                    .id = new_id,
+                    .root_id = root_id,
+                    .path = try self.allocator.dupe(u8, prefix),
+                    .parent_path_id = parent_path_id,
+                });
+                break :blk new_id;
+            };
+
+            parent_path_id = path_id;
+            if (maybe_dot == null) return path_id;
+            search_from = end_index + 1;
+        }
+    }
+
     fn isVisibleBinding(self: *const Formatter, name: []const u8) bool {
         return self.findVisibleBinding(name) != null;
     }
@@ -417,6 +597,16 @@ const Formatter = struct {
             if (std.mem.eql(u8, import.local_name, name)) return true;
         }
         return false;
+    }
+
+    fn trackedRootKindByName(self: *const Formatter, name: []const u8) ?[]const u8 {
+        if (self.isImportedBinding(name)) return "imported-tracked";
+        if (self.component.script.props) |props_record| {
+            if (props_record.props_binding_name) |binding_name| {
+                if (std.mem.eql(u8, binding_name, name)) return "prop-tracked";
+            }
+        }
+        return null;
     }
 
     fn collectCallableBindingDeps(
@@ -517,6 +707,22 @@ fn nextNonSpaceIs(expr: []const u8, idx: usize, expected: u8) bool {
         return expr[cursor] == expected;
     }
     return false;
+}
+
+fn nextNonSpaceIndex(expr: []const u8, idx: usize) ?usize {
+    var cursor = idx;
+    while (cursor < expr.len) : (cursor += 1) {
+        if (isWhitespace(expr[cursor])) continue;
+        return cursor;
+    }
+    return null;
+}
+
+fn appendUniqueUsize(allocator: std.mem.Allocator, list: *std.ArrayList(usize), value: usize) !void {
+    for (list.items) |item| {
+        if (item == value) return;
+    }
+    try list.append(allocator, value);
 }
 
 fn isKeyword(value: []const u8) bool {

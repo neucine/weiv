@@ -29,6 +29,8 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
     try body.appendSlice(allocator, "export const css = ");
     try @import("direct_component_js/common.zig").emitString(css, &body, allocator);
     try body.appendSlice(allocator, ";\n\n");
+    try node_codegen.emitTrackedStateGraphMetadata(model, plan, &body, allocator);
+    try body.appendSlice(allocator, "\n");
     try node_codegen.emitCreateFunction(plan, scope_id, &body, allocator);
     try body.appendSlice(allocator, "\n");
     try node_codegen.emitRegionUpdateFunctions(plan, &body, allocator);
@@ -57,6 +59,7 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\    destroy: () => {},
         \\  };
         \\  instance.setBoundaryRunner((callback) => runOwnedBoundary(instance, callback));
+        \\  __weiv_registerTrackedSubscriber(instance);
         \\  return instance;
         \\}
         \\
@@ -67,7 +70,7 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\  replaceBetween(start, end, fragment);
         \\  instance.update = () => updateDom(instance);
         \\  instance.updateDirty = (dirtyBindings, scope) => updateDirtyRegions(instance, dirtyBindings, scope);
-        \\  instance.destroy = () => { instance.destroyed = true; destroyDom(instance); replaceBetween(start, end, document.createDocumentFragment()); };
+        \\  instance.destroy = () => { __weiv_unregisterTrackedSubscriber(instance); instance.destroyed = true; destroyDom(instance); replaceBetween(start, end, document.createDocumentFragment()); };
         \\  instance.update();
         \\  return {
         \\    instance,

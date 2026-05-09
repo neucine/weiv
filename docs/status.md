@@ -13,6 +13,8 @@ in [AST Script Analysis Plan](./ast-script-analysis-plan.md).
 The current design direction for future explicit compiler-facing script helpers
 is documented in [Authoring Helpers](./authoring-helpers.md), but that is
 currently deferred behind AST-backed analysis work.
+The current state-tracking direction for escaped / externalized state is
+documented in [Proxy State Graph Design](./proxy-state-graph-design.md).
 
 The repo currently has:
 
@@ -34,6 +36,8 @@ The repo also now has documented shared-state/runtime design exploration:
 - a candidate `@weiv/store` implementation sketch
 - a broader research memo comparing that candidate with stronger runtime-backed
   options such as MobX-style observability
+- an active proxy-based state-graph design direction for escaping or
+  externalized state
 - `@weiv/router` intentionally deferred behind shared-state/runtime decisions
 
 ## Direct DOM Path
@@ -129,6 +133,10 @@ TodoMVC.
 The shared-state/runtime direction is also still at the design/planning stage.
 There is no settled official companion/runtime package yet. The earlier
 `@weiv/store` draft is retained as a candidate, not as a finalized commitment.
+The proxy-backed state-graph direction is also still design-stage only and has
+not yet changed the runtime foundation on `main`.
+The compiler/runtime contract is now sketched, but it is still a design target,
+not emitted code yet.
 
 ## Known Caveats
 
@@ -143,6 +151,9 @@ There is no settled official companion/runtime package yet. The earlier
   analysis is still intentionally shallow.
 - Alias analysis is intentionally limited beyond simple diagnosed cases.
 - Arbitrary imported callback registration is not owned by the scheduler.
+- escaped state outside owned boundaries is still the main unresolved runtime
+  precision problem; the current likely direction is a narrow proxy-backed
+  tracked state surface plus build-time escape diagnostics
 - Binding-phase diagnostics now carry a formal `error` / `warning` / `info`
   severity model, and invalidation-graph diagnostics now surface `warning` /
   `info` levels in the inspect output while remaining inspect-only.

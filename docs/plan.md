@@ -12,6 +12,9 @@ Use [AST Script Analysis Plan](./ast-script-analysis-plan.md) as the current
 direction for the next script-side precision upgrade.
 Use [Authoring Helpers](./authoring-helpers.md) as a deferred design direction,
 not as the current implementation plan.
+Use [Proxy State Graph Design](./proxy-state-graph-design.md) for the current
+consolidated design around proxy-backed tracked state for escaping /
+externalized mutation.
 Use [Testing Implementation Plan](./testing-implementation-plan.md) for the
 concrete rollout of the larger flagship verification app.
 Use [Companion Libraries](./companion-libs.md) for the optional ecosystem
@@ -126,6 +129,8 @@ Current state:
 - there is now a candidate `@weiv/store` draft and implementation sketch
 - there is also an active research path toward broader Weiv-owned runtime or
   MobX-like observability semantics
+- the current likely tracking direction for escaping / externalized state is a
+  narrow proxy-backed state graph
 - router work is still intentionally deferred
 
 Next work:
@@ -137,6 +142,24 @@ Next work:
 - keep correctness independent of decorators/markers, treating explicit
   reactivity as a precision/optimization surface
 - preserve plain local component authoring as the default path
+- design the proxy-backed state graph around:
+  - canonical tracked state roots
+  - dirty-path marking
+  - compiler-owned region mapping
+  - build-time escape diagnostics
+- converge the design onto a small compiler/runtime contract:
+  - emitted root metadata
+  - emitted path ids and ancestry
+  - region/path dependency tables
+  - canonical proxy initialization
+  - dirty-path consumption by the existing scheduler
+- land the first proxy-state work through the existing invalidation pipeline:
+  - inspect-visible tracked roots
+  - inspect-visible tracked paths
+  - region-to-tracked-path mapping
+  - incremental `updateDirtyRegions(...)` evolution
+- keep proxy-backed tracking focused on out-of-boundary / externalized state,
+  not all local component state by default
 - validate any chosen shared-state/runtime path in one bounded area of the
   larger verification app
 - defer `@weiv/router` until the shared-state/runtime boundary is settled

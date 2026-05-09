@@ -92,15 +92,157 @@ pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator, needs_
         \\  return dirty;
         \\}
         \\
+        \\function normalizeDirtyState(dirtyState) {
+        \\  if (Array.isArray(dirtyState)) {
+        \\    return { bindings: dirtyState, paths: [] };
+        \\  }
+        \\  if (!dirtyState || typeof dirtyState !== "object") {
+        \\    return { bindings: [], paths: [] };
+        \\  }
+        \\  return {
+        \\    bindings: Array.isArray(dirtyState.bindings) ? dirtyState.bindings : [],
+        \\    paths: Array.isArray(dirtyState.paths) ? dirtyState.paths : [],
+        \\  };
+        \\}
+        \\
+        \\const __weiv_trackedRootCache = new Map();
+        \\const __weiv_trackedSubscribers = new Set();
+        \\const __weiv_pendingTrackedPathIds = new Set();
+        \\let __weiv_trackedFlushScheduled = false;
+        \\
+        \\function __weiv_findTrackedRootPlan(bindingName) {
+        \\  if (!trackedStateGraph || !Array.isArray(trackedStateGraph.roots)) {
+        \\    return null;
+        \\  }
+        \\  for (const root of trackedStateGraph.roots) {
+        \\    if (root && root.bindingName === bindingName) {
+        \\      return root;
+        \\    }
+        \\  }
+        \\  return null;
+        \\}
+        \\
+        \\function __weiv_markTrackedPathsForWrite(rootId, fullPath) {
+        \\  if (!trackedStateGraph || !Array.isArray(trackedStateGraph.paths)) {
+        \\    return;
+        \\  }
+        \\  for (const pathRecord of trackedStateGraph.paths) {
+        \\    if (!pathRecord || pathRecord.rootId !== rootId || typeof pathRecord.path !== "string") continue;
+        \\    if (pathRecord.path === fullPath || pathRecord.path.startsWith(`${fullPath}.`)) {
+        \\      __weiv_pendingTrackedPathIds.add(pathRecord.pathId);
+        \\    }
+        \\  }
+        \\}
+        \\
+        \\function __weiv_scheduleTrackedFlush() {
+        \\  if (__weiv_trackedFlushScheduled) {
+        \\    return;
+        \\  }
+        \\  __weiv_trackedFlushScheduled = true;
+        \\  globalThis.queueMicrotask(() => {
+        \\    __weiv_trackedFlushScheduled = false;
+        \\    const dirtyPaths = Array.from(__weiv_pendingTrackedPathIds);
+        \\    __weiv_pendingTrackedPathIds.clear();
+        \\    if (dirtyPaths.length === 0) {
+        \\      return;
+        \\    }
+        \\    for (const instance of Array.from(__weiv_trackedSubscribers)) {
+        \\      if (!instance || instance.destroyed) {
+        \\        __weiv_trackedSubscribers.delete(instance);
+        \\        continue;
+        \\      }
+        \\      if (typeof instance.updateDirty === "function") {
+        \\        const scope = instance.refresh();
+        \\        instance.updateDirty({ bindings: [], paths: dirtyPaths }, scope);
+        \\      } else if (typeof instance.update === "function") {
+        \\        instance.update();
+        \\      }
+        \\    }
+        \\  });
+        \\}
+        \\
+        \\function __weiv_wrapTrackedValue(rootId, currentPath, value) {
+        \\  if (!value || (typeof value !== "object" && typeof value !== "function")) {
+        \\    return value;
+        \\  }
+        \\  const proxy = new Proxy(value, {
+        \\    get(target, prop, receiver) {
+        \\      const result = Reflect.get(target, prop, receiver);
+        \\      if (typeof prop !== "string") {
+        \\        return result;
+        \\      }
+        \\      const nextPath = currentPath ? `${currentPath}.${prop}` : prop;
+        \\      return __weiv_wrapTrackedValue(rootId, nextPath, result);
+        \\    },
+        \\    set(target, prop, nextValue, receiver) {
+        \\      const updated = Reflect.set(target, prop, nextValue, receiver);
+        \\      if (updated && typeof prop === "string") {
+        \\        const nextPath = currentPath ? `${currentPath}.${prop}` : prop;
+        \\        __weiv_markTrackedPathsForWrite(rootId, nextPath);
+        \\        __weiv_scheduleTrackedFlush();
+        \\      }
+        \\      return updated;
+        \\    },
+        \\    deleteProperty(target, prop) {
+        \\      const updated = Reflect.deleteProperty(target, prop);
+        \\      if (updated && typeof prop === "string") {
+        \\        const nextPath = currentPath ? `${currentPath}.${prop}` : prop;
+        \\        __weiv_markTrackedPathsForWrite(rootId, nextPath);
+        \\        __weiv_scheduleTrackedFlush();
+        \\      }
+        \\      return updated;
+        \\    },
+        \\  });
+        \\  return proxy;
+        \\}
+        \\
+        \\function __weiv_getTrackedRoot(bindingName, value) {
+        \\  const rootPlan = __weiv_findTrackedRootPlan(bindingName);
+        \\  if (!rootPlan) {
+        \\    return value;
+        \\  }
+        \\  const cachedEntry = __weiv_trackedRootCache.get(rootPlan.rootId);
+        \\  if (cachedEntry && Object.is(cachedEntry.value, value)) {
+        \\    return cachedEntry.proxy;
+        \\  }
+        \\  const trackedValue = __weiv_wrapTrackedValue(rootPlan.rootId, bindingName, value);
+        \\  __weiv_trackedRootCache.set(rootPlan.rootId, { value, proxy: trackedValue });
+        \\  return trackedValue;
+        \\}
+        \\
+        \\function collectTrackedDirtyPaths() {
+        \\  if (__weiv_pendingTrackedPathIds.size === 0) {
+        \\    return [];
+        \\  }
+        \\  const dirtyPaths = Array.from(__weiv_pendingTrackedPathIds);
+        \\  __weiv_pendingTrackedPathIds.clear();
+        \\  return dirtyPaths;
+        \\}
+        \\
+        \\function __weiv_hasTrackedRoots() {
+        \\  return trackedStateGraph && Array.isArray(trackedStateGraph.roots) && trackedStateGraph.roots.length > 0;
+        \\}
+        \\
+        \\function __weiv_registerTrackedSubscriber(instance) {
+        \\  if (__weiv_hasTrackedRoots()) {
+        \\    __weiv_trackedSubscribers.add(instance);
+        \\  }
+        \\}
+        \\
+        \\function __weiv_unregisterTrackedSubscriber(instance) {
+        \\  __weiv_trackedSubscribers.delete(instance);
+        \\}
+        \\
         \\function flushOwnedBoundary(instance, beforeScope) {
         \\  if (instance.destroyed) {
         \\    return beforeScope;
         \\  }
         \\  const afterScope = instance.refresh();
-        \\  if (hasScopeChanged(beforeScope, afterScope)) {
-        \\    const dirtyBindings = collectDirtyBindings(beforeScope, afterScope);
+        \\  const dirtyBindings = collectDirtyBindings(beforeScope, afterScope);
+        \\  const dirtyPaths = collectTrackedDirtyPaths();
+        \\  if (dirtyBindings.length > 0 || dirtyPaths.length > 0) {
         \\    if (typeof instance.updateDirty === "function") {
-        \\      instance.updateDirty(dirtyBindings, afterScope);
+        \\      instance.updateDirty({ bindings: dirtyBindings, paths: dirtyPaths }, afterScope);
         \\    } else {
         \\      instance.update();
         \\    }
