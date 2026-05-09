@@ -2270,6 +2270,37 @@ test "component analysis report includes structured script diagnostics" {
     try std.testing.expect(std.mem.indexOf(u8, report, "Script analysis\n  ok: true\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, report, "  diagnostics: 1\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, report, "    - error: Missing `export let props: Props` declaration [0:0] [0..0]\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "Proxy state graph\n  tracked roots: 0\n  root kinds: imported=0 props=0 local=0\n  escape warnings: 0\n") != null);
+}
+
+test "component analysis report includes tracked root and escape warning summary" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <p>{{ workspace.profile.name }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import { workspace } from "./workspace-state.ts";
+        \\  const alias = workspace;
+        \\  alias.profile.name = "Grace";
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/analysis-tracked-root-escape.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const report = try cli.formatComponentAnalysisReport(model, allocator);
+    defer allocator.free(report);
+
+    try std.testing.expect(std.mem.indexOf(u8, report, "Proxy state graph\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "  tracked roots: 1\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "  root kinds: imported=1 props=0 local=0\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "    - root id=1 binding=workspace kind=imported-tracked\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "  escape warnings: 1\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "    - warning escape-warning binding=workspace related=alias") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "reason=tracked-root-alias-escape") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "      rewrite: mutate through the tracked root directly instead of mutating through a local alias\n") != null);
 }
 
 fn readFixture(allocator: std.mem.Allocator, path: []const u8) ![]u8 {

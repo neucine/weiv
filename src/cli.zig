@@ -877,8 +877,101 @@ pub fn formatComponentAnalysisReport(model: component.ComponentModel, allocator:
             diagnostic.span.end,
         });
     }
+    try appendProxyStateSummary(&model, &writer, allocator);
 
     return out.toOwnedSlice(allocator);
+}
+
+fn appendProxyStateSummary(
+    model: *const component.ComponentModel,
+    writer: anytype,
+    allocator: std.mem.Allocator,
+) !void {
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    var tracked_root_lines = std.ArrayList([]const u8){};
+    defer tracked_root_lines.deinit(allocator);
+    var escape_warning_lines = std.ArrayList([]const u8){};
+    defer escape_warning_lines.deinit(allocator);
+    var imported_root_count: usize = 0;
+    var prop_root_count: usize = 0;
+    var local_root_count: usize = 0;
+
+    const Section = enum {
+        none,
+        tracked_roots,
+        diagnostics,
+    };
+
+    var section: Section = .none;
+    var lines = std.mem.tokenizeScalar(u8, formatted, '\n');
+    while (lines.next()) |line| {
+        if (std.mem.eql(u8, line, "tracked-roots")) {
+            section = .tracked_roots;
+            continue;
+        }
+        if (std.mem.eql(u8, line, "diagnostics")) {
+            section = .diagnostics;
+            continue;
+        }
+        if (isInvalidationGraphTopLevelSection(line)) {
+            section = .none;
+            continue;
+        }
+
+        switch (section) {
+            .tracked_roots => {
+                if (std.mem.startsWith(u8, line, "  root ")) {
+                    try tracked_root_lines.append(allocator, line["  ".len..]);
+                    if (std.mem.indexOf(u8, line, "kind=imported-tracked") != null) imported_root_count += 1;
+                    if (std.mem.indexOf(u8, line, "kind=prop-tracked") != null) prop_root_count += 1;
+                    if (std.mem.indexOf(u8, line, "kind=local-tracked") != null) local_root_count += 1;
+                }
+            },
+            .diagnostics => {
+                if (std.mem.startsWith(u8, line, "  warning escape-warning ")) {
+                    try escape_warning_lines.append(allocator, line["  ".len..]);
+                }
+            },
+            .none => {},
+        }
+    }
+
+    try writer.print("Proxy state graph\n", .{});
+    try writer.print("  tracked roots: {d}\n", .{tracked_root_lines.items.len});
+    try writer.print("  root kinds: imported={d} props={d} local={d}\n", .{
+        imported_root_count,
+        prop_root_count,
+        local_root_count,
+    });
+    for (tracked_root_lines.items) |line| {
+        try writer.print("    - {s}\n", .{line});
+    }
+    try writer.print("  escape warnings: {d}\n", .{escape_warning_lines.items.len});
+    for (escape_warning_lines.items) |line| {
+        try writer.print("    - {s}\n", .{line});
+        try writer.print("      rewrite: {s}\n", .{escapeWarningGuidance(line)});
+    }
+}
+
+fn isInvalidationGraphTopLevelSection(line: []const u8) bool {
+    if (line.len == 0) return false;
+    return line[0] != ' ' and
+        !std.mem.startsWith(u8, line, "invalidation-graph source=");
+}
+
+fn escapeWarningGuidance(line: []const u8) []const u8 {
+    if (std.mem.indexOf(u8, line, "reason=tracked-root-alias-escape") != null) {
+        return "mutate through the tracked root directly instead of mutating through a local alias";
+    }
+    if (std.mem.indexOf(u8, line, "reason=tracked-root-unowned-callback") != null) {
+        return "move the mutation into an owned boundary or route it through a Weiv-visible tracked update path";
+    }
+    return "keep tracked state on its canonical surface and avoid raw or escaping mutation paths";
 }
 
 fn printComponentAnalysis(model: component.ComponentModel) !void {
