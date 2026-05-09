@@ -2435,6 +2435,86 @@ test "component analysis report includes call escape guidance" {
     try std.testing.expect(std.mem.indexOf(u8, report, "rewrite: pass a snapshot or primitive value instead of passing a nested tracked reference into an unknown external call") != null);
 }
 
+test "component analysis report summarizes mixed tracked roots and escape warnings" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <p>{{ workspace.profile.name }}</p>
+        \\  <p>{{ props.session.currentUser.name }}</p>
+        \\  <p>{{ localState.flags.ready }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import { workspace } from "./workspace-state.ts";
+        \\  export interface Props {
+        \\    session: {
+        \\      currentUser: { name: string };
+        \\    };
+        \\  }
+        \\  export let props: Props;
+        \\  const localState = { flags: { ready: true } };
+        \\  const alias = workspace;
+        \\  alias.profile.name = "Grace";
+        \\  function currentProfile() {
+        \\    return workspace.profile;
+        \\  }
+        \\  installPlugin(props.session.currentUser);
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/analysis-mixed-tracked-roots.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const report = try cli.formatComponentAnalysisReport(model, allocator);
+    defer allocator.free(report);
+
+    try std.testing.expect(std.mem.indexOf(u8, report, "  tracked roots: 3\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "  root kinds: imported=1 props=1 local=1\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "    - root id=1 binding=workspace kind=imported-tracked\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "binding=props kind=prop-tracked") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "binding=localState kind=local-tracked") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "  escape warnings: 3\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "reason=tracked-root-alias-escape") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "reason=tracked-root-nested-return") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "reason=tracked-root-call-escape") != null);
+}
+
+test "direct browser module emits mixed tracked root graph" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <p>{{ workspace.profile.name }}</p>
+        \\  <p>{{ props.session.currentUser.name }}</p>
+        \\  <p>{{ localState.flags.ready }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import { workspace } from "./workspace-state.ts";
+        \\  export interface Props {
+        \\    session: {
+        \\      currentUser: { name: string };
+        \\    };
+        \\  }
+        \\  export let props: Props;
+        \\  const localState = { flags: { ready: true } };
+        \\  localState.flags.ready = false;
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/direct-browser-mixed-tracked-roots.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "const workspace = __weiv_getTrackedRoot(\"workspace\", __weiv_import_workspace);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "props = __weiv_getTrackedRoot(\"props\", props);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "localState = __weiv_getTrackedRoot(\"localState\", localState);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "bindingName: \"workspace\", kind: \"imported-tracked\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "bindingName: \"props\", kind: \"prop-tracked\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "bindingName: \"localState\", kind: \"local-tracked\"") != null);
+}
+
 fn readFixture(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
 }
