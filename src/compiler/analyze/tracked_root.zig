@@ -41,7 +41,8 @@ pub fn isPropsBinding(model: *const component.ComponentModel, name: []const u8) 
 
 pub fn isLocalTrackedBinding(model: *const component.ComponentModel, name: []const u8) bool {
     const binding = findVisibleBinding(model, name) orelse return false;
-    if (!std.mem.eql(u8, binding.kind, "mutable")) return false;
+    if (!std.mem.eql(u8, binding.kind, "mutable") and !std.mem.eql(u8, binding.kind, "immutable")) return false;
+    if (binding.callable) return false;
     if (isImportedBinding(model, name)) return false;
     if (isPropsBinding(model, name)) return false;
 

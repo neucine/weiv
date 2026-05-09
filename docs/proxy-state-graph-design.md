@@ -180,6 +180,9 @@ Meaning:
 Promote when any of these are true:
 
 - nested template dependency on imported/shared object state
+- nested template dependency on `props` object state
+- nested template dependency on stable local object state that can keep one
+  canonical tracked root
 - object state crosses component boundaries
 - imported mutable object state participates in template/runtime-visible logic
 - exported or module-visible mutable object state is intended for reuse
@@ -190,6 +193,9 @@ Bias:
 
 - object-like values promote more easily
 - primitive local bindings resist promotion unless clearly shared/externalized
+- stable local object roots can promote even when the binding itself is
+  `const`/immutable, as long as the root is not reassigned and does not become
+  an alias target
 
 ### Non-Promotion Rule
 
@@ -467,6 +473,9 @@ Typical rewrite guidance:
 - return the tracked root rather than a nested reference
 - keep tracked state inside Weiv-owned APIs
 - avoid storing tracked nested references on external objects
+- mutate through the tracked root directly instead of mutating through a local alias
+- move tracked mutation into an owned boundary instead of leaving it in an
+  unowned callback
 
 Recommended severity split:
 
@@ -575,7 +584,7 @@ Tracked paths:
 ### Tracked state passed to unknown helper
 
 ```ts
-installPlugin(workspace);
+installPlugin(workspace.profile);
 ```
 
 Classification:
@@ -596,24 +605,31 @@ Classification:
 - `workspace` -> `tracked-root`
 - return site -> `escape-warning`
 
-## First Implementation Slice
+## Current Implemented Slice
 
-The first practical slice should stay narrow:
+The current shipped slice on `main` now includes:
 
-1. support one `tracked-root` shape
-   - imported mutable object used by nested template paths
-2. extend `inspect invalidation-graph`
-   - print tracked roots
-   - print tracked paths
-   - print region-to-tracked-path mapping
-3. extend direct browser codegen
-   - emit metadata tables only at first
-4. evolve `updateDirtyRegions(...)`
-   - allow a `dirtyPathIds` channel
-   - keep existing dirty-binding behavior intact
-5. only then wire runtime proxy dirty marking
+1. tracked-root support for:
+   - imported object roots
+   - `props` object roots
+   - a narrow stable local-object slice
+2. `inspect invalidation-graph`
+   - prints tracked roots
+   - prints tracked paths
+   - prints region-to-tracked-path mapping
+   - prints current `escape-warning` diagnostics
+3. direct browser codegen/runtime
+   - emits tracked-state metadata tables
+   - canonicalizes current tracked roots
+   - accepts dirty path ids in the existing selective updater
+   - produces dirty path ids through proxy-backed runtime tracking
+4. `compile analyze component`
+   - summarizes tracked roots by kind
+   - summarizes current escape warnings
+   - includes rewrite guidance for current warning reasons
 
-This keeps the first implementation empirical and inspectable.
+This means the proxy-state graph is now an active implementation path, not only
+an inspect-only or design-only concept.
 
 ## Non Goals
 

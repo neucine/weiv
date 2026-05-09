@@ -159,10 +159,13 @@ Next work:
   - region-to-tracked-path mapping
   - `updateDirtyRegions(...)` dirty-path support
   - runtime proxy-backed dirty-path production for current tracked-root slices
+  - CLI analysis summaries with tracked-root kinds and rewrite guidance
 - keep proxy-backed tracking focused on out-of-boundary / externalized state,
   not all local component state by default
 - keep local tracked-root promotion intentionally narrow until broader rules are proven
 - widen escape diagnostics only where the compiler can stay honest and actionable
+  - current warning coverage includes alias escape, unowned callback mutation,
+    nested tracked returns, and obvious nested tracked call escapes
 - validate any chosen shared-state/runtime path in one bounded area of the
   larger verification app
 - defer `@weiv/router` until the shared-state/runtime boundary is settled
