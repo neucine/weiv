@@ -1009,7 +1009,24 @@ fn trackedRootKindByName(component_model: *const pipeline.ComponentModel, name: 
             if (std.mem.eql(u8, binding_name, name)) return "prop-tracked";
         }
     }
+    if (isLocalTrackedBinding(component_model, name)) return "local-tracked";
     return null;
+}
+
+fn isLocalTrackedBinding(component_model: *const pipeline.ComponentModel, name: []const u8) bool {
+    const binding = findVisibleBinding(component_model, name) orelse return false;
+    if (!std.mem.eql(u8, binding.kind, "mutable")) return false;
+
+    for (component_model.script.state_analysis.aliases) |alias| {
+        if (std.mem.eql(u8, alias.target, name)) return false;
+    }
+
+    for (component_model.script.state_analysis.mutations) |mutation| {
+        if (!std.mem.eql(u8, mutation.binding, name)) continue;
+        if (mutation.member_path == null) return false;
+    }
+
+    return true;
 }
 
 

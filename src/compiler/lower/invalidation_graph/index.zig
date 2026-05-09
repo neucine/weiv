@@ -29,6 +29,7 @@ const DiagnosticKind = enum {
     expression_mutation,
     alias_mutation,
     unowned_callback_mutation,
+    escape_warning,
     runtime_evaluate_fallback,
 };
 
@@ -121,6 +122,16 @@ const Formatter = struct {
                     .unowned_callback_mutation => try self.out.writer(self.allocator).print(
                         "{s} unowned-callback-mutation binding={s} offset={d} reason=callback-boundary-not-owned\n",
                         .{ severityLabel(diagnostic.severity), diagnostic.subject, diagnostic.offset orelse 0 },
+                    ),
+                    .escape_warning => try self.out.writer(self.allocator).print(
+                        "{s} escape-warning binding={s} related={s} offset={d} reason={s}\n",
+                        .{
+                            severityLabel(diagnostic.severity),
+                            diagnostic.subject,
+                            diagnostic.related orelse "",
+                            diagnostic.offset orelse 0,
+                            diagnostic.reason orelse "tracked-root-escape",
+                        },
                     ),
                     .runtime_evaluate_fallback => try self.out.writer(self.allocator).print(
                         "{s} runtime-evaluate-fallback expression={s} reason={s}\n",
@@ -226,7 +237,17 @@ const Formatter = struct {
             const absolute_offset = self.component.sfc_document.script.content_span.start + mutation.span_start;
 
             if (self.findAliasTarget(mutation.binding)) |target| {
-                if (self.isVisibleBinding(target)) {
+                if (self.isVisibleBinding(target) or self.findTrackedRoot(target) != null) {
+                    if (self.findTrackedRoot(target) != null) {
+                        try self.diagnostics.append(self.allocator, .{
+                            .severity = .warning,
+                            .kind = .escape_warning,
+                            .subject = target,
+                            .related = mutation.binding,
+                            .offset = absolute_offset,
+                            .reason = "tracked-root-alias-escape",
+                        });
+                    }
                     try self.diagnostics.append(self.allocator, .{
                         .severity = .warning,
                         .kind = .alias_mutation,
@@ -238,7 +259,7 @@ const Formatter = struct {
                 continue;
             }
 
-            if (!self.isVisibleBinding(mutation.binding)) continue;
+            if (!self.isVisibleBinding(mutation.binding) and self.findTrackedRoot(mutation.binding) == null) continue;
 
             if (!mutation.statement_position) {
                 try self.diagnostics.append(self.allocator, .{
@@ -251,6 +272,15 @@ const Formatter = struct {
             }
 
             if (mutation.inside_callback and !mutation.callback_owned_candidate) {
+                if (self.findTrackedRoot(mutation.binding) != null) {
+                    try self.diagnostics.append(self.allocator, .{
+                        .severity = .warning,
+                        .kind = .escape_warning,
+                        .subject = mutation.binding,
+                        .offset = absolute_offset,
+                        .reason = "tracked-root-unowned-callback",
+                    });
+                }
                 try self.diagnostics.append(self.allocator, .{
                     .severity = .warning,
                     .kind = .unowned_callback_mutation,
@@ -547,6 +577,13 @@ const Formatter = struct {
         return null;
     }
 
+    fn findTrackedRoot(self: *const Formatter, binding_name: []const u8) ?TrackedRoot {
+        for (self.tracked_roots.items) |root| {
+            if (std.mem.eql(u8, root.binding_name, binding_name)) return root;
+        }
+        return null;
+    }
+
     fn ensureTrackedPathChain(self: *Formatter, full_path: []const u8) !usize {
         if (self.findTrackedPathId(full_path)) |existing| return existing;
 
@@ -606,7 +643,24 @@ const Formatter = struct {
                 if (std.mem.eql(u8, binding_name, name)) return "prop-tracked";
             }
         }
+        if (self.isLocalTrackedBinding(name)) return "local-tracked";
         return null;
+    }
+
+    fn isLocalTrackedBinding(self: *const Formatter, name: []const u8) bool {
+        const binding = self.findVisibleBinding(name) orelse return false;
+        if (!std.mem.eql(u8, binding.kind, "mutable")) return false;
+
+        for (self.component.script.state_analysis.aliases) |alias| {
+            if (std.mem.eql(u8, alias.target, name)) return false;
+        }
+
+        for (self.component.script.state_analysis.mutations) |mutation| {
+            if (!std.mem.eql(u8, mutation.binding, name)) continue;
+            if (mutation.member_path == null) return false;
+        }
+
+        return true;
     }
 
     fn collectCallableBindingDeps(

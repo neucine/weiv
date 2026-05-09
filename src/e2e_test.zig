@@ -402,6 +402,34 @@ test "direct browser module emits tracked state graph metadata for prop nested p
     try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"props\") || dirtyRegionSet.has(2)) {") != null);
 }
 
+test "direct browser module emits tracked state graph metadata for local let nested paths" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ state.profile.name }}</p>
+        \\  <p>{{ state.flags.ready }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  let state = { profile: { name: "Ada" }, flags: { ready: true } };
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/direct-browser-tracked-local-paths.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "state = __weiv_getTrackedRoot(\"state\", state);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "export const trackedStateGraph = { roots: [{ rootId: 1, bindingName: \"state\", kind: \"local-tracked\" }], paths: [{ pathId: 1, rootId: 1, path: \"state\", parentPathId: null }, { pathId: 2, rootId: 1, path: \"state.profile\", parentPathId: 1 }, { pathId: 3, rootId: 1, path: \"state.profile.name\", parentPathId: 2 }, { pathId: 4, rootId: 1, path: \"state.flags\", parentPathId: 1 }, { pathId: 5, rootId: 1, path: \"state.flags.ready\", parentPathId: 4 }], regions: [{ regionId: 1, trackedPathIds: [3] }, { regionId: 2, trackedPathIds: [5] }] };") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"state\") || dirtyRegionSet.has(1)) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"state\") || dirtyRegionSet.has(2)) {") != null);
+}
+
 test "conditional toggle direct browser module emits conditional boundary helpers" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -635,6 +663,128 @@ test "invalidation graph formatter inventories tracked prop nested paths" {
     try std.testing.expect(std.mem.indexOf(u8, formatted, "tracked-paths\n  path id=1 root=1 path=props\n  path id=2 root=1 path=props.workspace parent=1\n  path id=3 root=1 path=props.workspace.sidebar parent=2\n  path id=4 root=1 path=props.workspace.sidebar.collapsed parent=3\n  path id=5 root=1 path=props.workspace.currentProject parent=2\n  path id=6 root=1 path=props.workspace.currentProject.name parent=5\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=props.workspace.sidebar.collapsed eval=direct deps=[props] tracked_paths=[4]") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=props.workspace.currentProject.name eval=direct deps=[props] tracked_paths=[6]") != null);
+}
+
+test "invalidation graph formatter inventories tracked local let nested paths" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ state.profile.name }}</p>
+        \\  <p>{{ state.flags.ready }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  let state = { profile: { name: "Ada" }, flags: { ready: true } };
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/inspect-tracked-local-paths.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "tracked-roots\n  root id=1 binding=state kind=local-tracked\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "tracked-paths\n  path id=1 root=1 path=state\n  path id=2 root=1 path=state.profile parent=1\n  path id=3 root=1 path=state.profile.name parent=2\n  path id=4 root=1 path=state.flags parent=1\n  path id=5 root=1 path=state.flags.ready parent=4\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=state.profile.name eval=direct deps=[state] tracked_paths=[3]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=state.flags.ready eval=direct deps=[state] tracked_paths=[5]") != null);
+}
+
+test "local tracked roots are not selected when root assignment exists" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ state.profile.name }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  let state = { profile: { name: "Ada" } };
+        \\  function replaceState() {
+        \\    state = { profile: { name: "Grace" } };
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/no-tracked-local-root-assignment.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "state = __weiv_getTrackedRoot(\"state\", state);") == null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "kind: \"local-tracked\"") == null);
+}
+
+test "invalidation graph formatter warns on tracked-root alias escape" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ workspace.profile.name }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import { workspace } from "./workspace-state.ts";
+        \\  const alias = workspace;
+        \\  alias.profile.name = "Grace";
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/tracked-root-alias-escape.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning escape-warning binding=workspace related=alias") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=tracked-root-alias-escape") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning alias-mutation binding=workspace alias=alias") != null);
+}
+
+test "invalidation graph formatter warns on tracked-root unowned callback mutation" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ workspace.sidebar.collapsed }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import { workspace } from "./workspace-state.ts";
+        \\  externalStore.subscribe(() => {
+        \\    workspace.sidebar.collapsed = !workspace.sidebar.collapsed;
+        \\  });
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/tracked-root-unowned-callback.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning escape-warning binding=workspace related= offset=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=tracked-root-unowned-callback") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning unowned-callback-mutation binding=workspace") != null);
 }
 
 test "invalidation graph formatter diagnoses local helper external reads" {
