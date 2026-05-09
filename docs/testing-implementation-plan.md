@@ -85,7 +85,7 @@ Recommended sections:
 - one async event handler path
 - one intentionally unowned external-style callback registration that remains
   conservative and inspectable
-- one small shared-state/store-driven region
+- one small proxy-tracked shared-state region
 
 ## Required Feature Coverage
 
@@ -98,7 +98,7 @@ The app should intentionally exercise:
 - async event-driven state transitions
 - owned callback wrappers such as timers or microtasks
 - at least one unowned callback boundary that should diagnose conservatively
-- one small recommended companion-store integration path
+- one small proxy-tracked shared-state integration path
 - conditionals
 - loops
 - slot/default/named projection
@@ -146,9 +146,9 @@ infrastructure.
 
 One exception is intentionally allowed:
 
-- a very small recommended companion-store integration area
+- a very small proxy-tracked shared-state area
 
-That store should be:
+That area should be:
 
 - isolated to one feature area
 - small enough to understand locally
@@ -164,13 +164,14 @@ Recommended state:
 - one or two local editing states
 - one pending/settled async state
 - one queued callback-driven state
-- one shared store-backed state slice
+- one shared tracked-object state slice
 - derived counts/summaries
 
-## Companion Store Guidance
+## Shared-State Guidance
 
-If `weiv` ships or blesses a companion state-store library, the larger
-verification app should use it in one bounded area.
+If the larger verification app uses shared state beyond plain local owned
+bindings, it should do so in one bounded area using the current proxy-state
+direction.
 
 Good uses:
 
@@ -180,19 +181,20 @@ Good uses:
 
 Bad uses:
 
-- moving the whole app into store-first architecture
+- moving the whole app into shared-state-first architecture
 - replacing normal local state everywhere
 - hiding callback ownership issues instead of exposing them
 
 Recommended usage style:
 
-- define the shared store in a normal `.ts` module
+- define the shared tracked object in a normal `.ts` module
 - import it into the relevant `.weiv` components
-- keep most component state local even when one bounded shared store exists
+- keep most component state local even when one bounded shared tracked area
+  exists
 
-Use [Store Companion Implementation Plan](./store-companion-implementation-plan.md)
-for the staged runtime work that should happen before this app depends on the
-store companion.
+If shared-state runtime work broadens again later, it should be aligned with
+the current proxy-state direction rather than reviving the older archived
+store-companion draft by default.
 
 ## Verification Plan
 
@@ -237,7 +239,7 @@ Focus on a few high-signal interactions:
 - switching a local dashboard segment
 - completing an async local action and observing the settled UI
 - triggering a local owned callback update and observing region-local patching
-- updating one companion-store-backed region and observing the resulting
+- updating one proxy-tracked shared-state region and observing the resulting
   boundary/diagnostic behavior
 
 ### Phase 4. Inspect Verification
@@ -249,8 +251,9 @@ Add assertions for:
 - a few known conservative sites if any remain
 - owned async/callback boundaries being visible where expected
 - unowned callback diagnostics being visible where expected
-- the companion-store integration being inspectable as either owned or
-  intentionally conservative, depending on its integration model
+- the bounded shared-state integration being inspectable with tracked roots,
+  tracked paths, or intentionally conservative behavior, depending on its
+  integration model
 
 This is important because the larger app should also become the place where we
 see whether inspect output stays useful at scale.

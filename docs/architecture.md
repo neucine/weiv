@@ -9,8 +9,6 @@ The normalized vocabulary for this model lives in
 
 The next implementation-focused upgrade for script-side precision is documented
 in [AST Script Analysis Plan](./ast-script-analysis-plan.md).
-The next likely extension point for stronger script-side state semantics is
-documented in [Authoring Helpers](./authoring-helpers.md).
 The current state-tracking direction for escaping / externalized state is
 documented in [Proxy State Graph Design](./proxy-state-graph-design.md).
 
@@ -34,17 +32,11 @@ simple owned component boundaries, the current likely direction is a narrow
 proxy-backed tracked state graph rather than trying to infer arbitrary mutation
 timing statically.
 
-Optional ecosystem/runtime companions are still valid. The current open
-question is whether Weiv should settle on:
-
-- an explicit optional shared-state companion
-- a broader Weiv-owned runtime/reactivity layer
-- or a narrower bridge around one officially supported external model
-
-The current comparison work is captured in
-[Shared-State Companion Research](./store-companion-research.md). The earlier
-`@weiv/store` draft remains useful as one candidate, but it is no longer the
-settled direction.
+Optional ecosystem/runtime companions are still valid, but they are no longer
+part of the active top-level implementation track. The current architecture is
+centered on the compiler/runtime foundation already on `main`, especially the
+proxy-backed tracked-state path described in
+[Proxy State Graph Design](./proxy-state-graph-design.md).
 
 The current proxy-based graph direction does not replace the existing local
 baseline. The intended split is:

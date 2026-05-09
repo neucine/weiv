@@ -127,8 +127,8 @@ that is rich enough to show:
 - where selective scheduling is still conservative
 - where owned async/callback boundaries behave well
 - where unowned callback boundaries still diagnose or fall back conservatively
-- how a recommended companion store integrates with Weiv without dominating the
-  core authoring model
+- how one bounded proxy-tracked shared-state area integrates with Weiv without
+  dominating the core authoring model
 - where inspect output is useful
 - where authoring or diagnostics still feel rough
 

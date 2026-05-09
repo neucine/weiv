@@ -10,20 +10,11 @@ regions, dirty work, owned boundaries, flushes, and patches.
 
 Use [AST Script Analysis Plan](./ast-script-analysis-plan.md) as the current
 direction for the next script-side precision upgrade.
-Use [Authoring Helpers](./authoring-helpers.md) as a deferred design direction,
-not as the current implementation plan.
 Use [Proxy State Graph Design](./proxy-state-graph-design.md) for the current
 consolidated design around proxy-backed tracked state for escaping /
 externalized mutation.
 Use [Testing Implementation Plan](./testing-implementation-plan.md) for the
 concrete rollout of the larger flagship verification app.
-Use [Companion Libraries](./companion-libs.md) for the optional ecosystem
-direction and the current open shared-state/runtime question.
-Use [Shared-State Companion Research](./store-companion-research.md) for the
-current candidate comparison and recommendation path.
-Use [Store Companion Spec](./store-companion-spec.md) and
-[Store Companion Implementation Plan](./store-companion-implementation-plan.md)
-as retained candidate drafts, not as the settled roadmap.
 
 ## Near-Term Priorities
 
@@ -126,19 +117,12 @@ Next work:
 Current state:
 
 - the larger verification-app plan now reserves one bounded shared-state area
-- there is now a candidate `@weiv/store` draft and implementation sketch
-- there is also an active research path toward broader Weiv-owned runtime or
-  MobX-like observability semantics
 - the current active tracking direction for escaping / externalized state is a
   narrow proxy-backed state graph
-- router work is still intentionally deferred
+- router work and broader companion-library questions remain deferred
 
 Next work:
 
-- decide whether the first official answer is:
-  - a custom optional companion store
-  - a Weiv-owned runtime/reactivity layer
-  - or an officially supported external runtime model
 - keep correctness independent of decorators/markers, treating explicit
   reactivity as a precision/optimization surface
 - preserve plain local component authoring as the default path

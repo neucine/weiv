@@ -10,9 +10,6 @@ The current vocabulary for this architecture is documented in
 
 The current direction for the next script-side precision upgrade is documented
 in [AST Script Analysis Plan](./ast-script-analysis-plan.md).
-The current design direction for future explicit compiler-facing script helpers
-is documented in [Authoring Helpers](./authoring-helpers.md), but that is
-currently deferred behind AST-backed analysis work.
 The current state-tracking direction for escaped / externalized state is
 documented in [Proxy State Graph Design](./proxy-state-graph-design.md), and
 the first tracked-root runtime slices are now live on `main`.
@@ -33,15 +30,9 @@ The repo currently has:
 - owned-boundary scheduling for direct browser events and selected callbacks
 - conventional `props` plus Weiv-provided `emit` component contracts
 
-The repo also now has documented shared-state/runtime design exploration:
-
-- a candidate `@weiv/store` draft API contract
-- a candidate `@weiv/store` implementation sketch
-- a broader research memo comparing that candidate with stronger runtime-backed
-  options such as MobX-style observability
-- an active proxy-based state-graph direction for escaping or externalized
-  state, with initial imported / props / narrow-local tracked-root support
-- `@weiv/router` intentionally deferred behind shared-state/runtime decisions
+The repo also now has an active proxy-based state-graph direction for escaping
+or externalized state, with initial imported / props / narrow-local
+tracked-root support.
 
 ## Direct DOM Path
 
@@ -136,9 +127,9 @@ What is still missing is a clearly larger flagship verification app that can
 show the framework's strengths and conservative gaps at a broader scale than
 TodoMVC.
 
-The shared-state/runtime direction is also still at the design/planning stage.
-There is no settled official companion/runtime package yet. The earlier
-`@weiv/store` draft is retained as a candidate, not as a finalized commitment.
+The broader shared-state/runtime ecosystem direction is not yet settled.
+Archived companion/store notes are retained for historical context, but they
+are no longer part of the active top-level docs set.
 The proxy-backed state-graph direction is no longer design-only:
 
 - tracked roots are now emitted for:
