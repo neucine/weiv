@@ -1,6 +1,6 @@
 const std = @import("std");
 const component = @import("../../../pipeline/index.zig");
-const script_analysis = @import("../../../analyze/ts/analysis.zig");
+const tracked_root = @import("../../../analyze/tracked_root.zig");
 const common = @import("common.zig");
 
 pub fn buildSetupCode(model: *const component.ComponentModel, allocator: std.mem.Allocator) ![]u8 {
@@ -64,7 +64,7 @@ pub fn buildSetupCode(model: *const component.ComponentModel, allocator: std.mem
         }
     }
     for (model.script.bindings) |binding| {
-        if (!shouldTrackLocalBinding(model, binding.name)) continue;
+        if (!tracked_root.isLocalTrackedBinding(model, binding.name)) continue;
         try out.writer(allocator).print("  {s} = __weiv_getTrackedRoot(\"{s}\", {s});\n", .{
             binding.name,
             binding.name,
@@ -139,37 +139,4 @@ pub fn buildPreservedImports(model: *const component.ComponentModel, allocator: 
 
     if (out.items.len > 0) try out.appendSlice(allocator, "\n");
     return try out.toOwnedSlice(allocator);
-}
-
-fn shouldTrackLocalBinding(model: *const component.ComponentModel, name: []const u8) bool {
-    const binding = findVisibleBinding(model, name) orelse return false;
-    if (!std.mem.eql(u8, binding.kind, "mutable")) return false;
-
-    for (model.script.imports) |import_record| {
-        if (std.mem.eql(u8, import_record.local_name, name)) return false;
-    }
-
-    if (model.script.props) |props_record| {
-        if (props_record.props_binding_name) |binding_name| {
-            if (std.mem.eql(u8, binding_name, name)) return false;
-        }
-    }
-
-    for (model.script.state_analysis.aliases) |alias| {
-        if (std.mem.eql(u8, alias.target, name)) return false;
-    }
-
-    for (model.script.state_analysis.mutations) |mutation| {
-        if (!std.mem.eql(u8, mutation.binding, name)) continue;
-        if (mutation.member_path == null) return false;
-    }
-
-    return true;
-}
-
-fn findVisibleBinding(model: *const component.ComponentModel, name: []const u8) ?script_analysis.BindingRecord {
-    for (model.script.bindings) |binding| {
-        if (binding.template_visible and std.mem.eql(u8, binding.name, name)) return binding;
-    }
-    return null;
 }

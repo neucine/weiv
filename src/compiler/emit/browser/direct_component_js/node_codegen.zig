@@ -3,6 +3,7 @@ const browser_plan = @import("../../../lower/browser_plan/index.zig");
 const ir = @import("../../../lower/ir.zig");
 const pipeline = @import("../../../pipeline/index.zig");
 const script_analysis = @import("../../../analyze/ts/analysis.zig");
+const tracked_root = @import("../../../analyze/tracked_root.zig");
 const common = @import("common.zig");
 
 const TrackedRoot = struct {
@@ -52,8 +53,8 @@ const TrackedGraphBuilder = struct {
         if (self.findPathId(full_path)) |id| return id;
         const first_dot = std.mem.indexOfScalar(u8, full_path, '.') orelse return error.InvalidTrackedPath;
         const root_name = full_path[0..first_dot];
-        const kind = trackedRootKindByName(self.component_model, root_name) orelse return error.InvalidTrackedPath;
-        const root_id = try self.ensureRoot(root_name, kind);
+        const kind = tracked_root.kindByName(self.component_model, root_name) orelse return error.InvalidTrackedPath;
+        const root_id = try self.ensureRoot(root_name, kind.label());
 
         var parent_path_id: ?usize = null;
         var search_from: usize = 0;
@@ -577,7 +578,7 @@ fn collectTrackedPathIds(
 
         if (isKeyword(root_name)) continue;
         if (isPropertyAccessExpr(expr, root_start)) continue;
-        if (trackedRootKindByName(component_model, root_name) == null) continue;
+        if (tracked_root.kindByName(component_model, root_name) == null) continue;
 
         var cursor = i;
         var segment_count: usize = 0;
@@ -963,7 +964,7 @@ fn collectExpressionDepsWithTrail(
 
         if (isKeyword(ident)) continue;
         if (isPropertyAccessExpr(expr, start)) continue;
-        if (call and isImportedBinding(component_model, ident)) continue;
+        if (call and tracked_root.isImportedBinding(component_model, ident)) continue;
 
         if (call) {
             if (findVisibleBinding(component_model, ident)) |binding| {
@@ -994,41 +995,6 @@ fn findVisibleBinding(
     }
     return null;
 }
-
-fn isImportedBinding(component_model: *const pipeline.ComponentModel, name: []const u8) bool {
-    for (component_model.script.imports) |import_record| {
-        if (std.mem.eql(u8, import_record.local_name, name)) return true;
-    }
-    return false;
-}
-
-fn trackedRootKindByName(component_model: *const pipeline.ComponentModel, name: []const u8) ?[]const u8 {
-    if (isImportedBinding(component_model, name)) return "imported-tracked";
-    if (component_model.script.props) |props_record| {
-        if (props_record.props_binding_name) |binding_name| {
-            if (std.mem.eql(u8, binding_name, name)) return "prop-tracked";
-        }
-    }
-    if (isLocalTrackedBinding(component_model, name)) return "local-tracked";
-    return null;
-}
-
-fn isLocalTrackedBinding(component_model: *const pipeline.ComponentModel, name: []const u8) bool {
-    const binding = findVisibleBinding(component_model, name) orelse return false;
-    if (!std.mem.eql(u8, binding.kind, "mutable")) return false;
-
-    for (component_model.script.state_analysis.aliases) |alias| {
-        if (std.mem.eql(u8, alias.target, name)) return false;
-    }
-
-    for (component_model.script.state_analysis.mutations) |mutation| {
-        if (!std.mem.eql(u8, mutation.binding, name)) continue;
-        if (mutation.member_path == null) return false;
-    }
-
-    return true;
-}
-
 
 fn retainVisibleBindingDeps(component_model: *const pipeline.ComponentModel, deps: *DepList) void {
     var write_index: usize = 0;

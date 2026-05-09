@@ -2,6 +2,7 @@ const std = @import("std");
 const browser_plan = @import("../browser_plan/index.zig");
 const model = @import("../../pipeline/model.zig");
 const script_analysis = @import("../../analyze/ts/analysis.zig");
+const tracked_root = @import("../../analyze/tracked_root.zig");
 
 const DepList = struct {
     items: std.ArrayList([]const u8) = .{},
@@ -463,7 +464,7 @@ const Formatter = struct {
 
             if (isKeyword(ident)) continue;
             if (isPropertyAccess(expr, start)) continue;
-            if (call and self.isImportedBinding(ident)) continue;
+            if (call and tracked_root.isImportedBinding(self.component, ident)) continue;
 
             if (call) {
                 if (self.findVisibleBinding(ident)) |binding| {
@@ -523,7 +524,7 @@ const Formatter = struct {
 
             if (isKeyword(root_name)) continue;
             if (isPropertyAccess(expr, root_start)) continue;
-            if (self.trackedRootKindByName(root_name) == null) continue;
+            if (tracked_root.kindByName(self.component, root_name) == null) continue;
 
             var cursor = i;
             var segment_count: usize = 0;
@@ -589,8 +590,8 @@ const Formatter = struct {
 
         const first_dot = std.mem.indexOfScalar(u8, full_path, '.') orelse return error.InvalidTrackedPath;
         const root_name = full_path[0..first_dot];
-        const kind = self.trackedRootKindByName(root_name) orelse return error.InvalidTrackedPath;
-        const root_id = try self.ensureTrackedRoot(root_name, kind);
+        const kind = tracked_root.kindByName(self.component, root_name) orelse return error.InvalidTrackedPath;
+        const root_id = try self.ensureTrackedRoot(root_name, kind.label());
 
         var parent_path_id: ?usize = null;
         var search_from: usize = 0;
@@ -627,40 +628,6 @@ const Formatter = struct {
             if (binding.template_visible and std.mem.eql(u8, binding.name, name)) return binding;
         }
         return null;
-    }
-
-    fn isImportedBinding(self: *const Formatter, name: []const u8) bool {
-        for (self.component.script.imports) |import| {
-            if (std.mem.eql(u8, import.local_name, name)) return true;
-        }
-        return false;
-    }
-
-    fn trackedRootKindByName(self: *const Formatter, name: []const u8) ?[]const u8 {
-        if (self.isImportedBinding(name)) return "imported-tracked";
-        if (self.component.script.props) |props_record| {
-            if (props_record.props_binding_name) |binding_name| {
-                if (std.mem.eql(u8, binding_name, name)) return "prop-tracked";
-            }
-        }
-        if (self.isLocalTrackedBinding(name)) return "local-tracked";
-        return null;
-    }
-
-    fn isLocalTrackedBinding(self: *const Formatter, name: []const u8) bool {
-        const binding = self.findVisibleBinding(name) orelse return false;
-        if (!std.mem.eql(u8, binding.kind, "mutable")) return false;
-
-        for (self.component.script.state_analysis.aliases) |alias| {
-            if (std.mem.eql(u8, alias.target, name)) return false;
-        }
-
-        for (self.component.script.state_analysis.mutations) |mutation| {
-            if (!std.mem.eql(u8, mutation.binding, name)) continue;
-            if (mutation.member_path == null) return false;
-        }
-
-        return true;
     }
 
     fn collectCallableBindingDeps(
