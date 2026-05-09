@@ -1,6 +1,7 @@
 const std = @import("std");
 const browser_plan = @import("../browser_plan/index.zig");
 const model = @import("../../pipeline/model.zig");
+const script_analysis = @import("../../analyze/ts/analysis.zig");
 
 const DepList = struct {
     items: std.ArrayList([]const u8) = .{},
@@ -26,13 +27,23 @@ const BoundaryKind = enum {
 const DiagnosticKind = enum {
     hidden_state,
     expression_mutation,
+    alias_mutation,
     unowned_callback_mutation,
+    runtime_evaluate_fallback,
+};
+
+const DiagnosticSeverity = enum {
+    warning,
+    info,
 };
 
 const Diagnostic = struct {
+    severity: DiagnosticSeverity,
     kind: DiagnosticKind,
     subject: []const u8,
+    related: ?[]const u8 = null,
     offset: ?usize = null,
+    reason: ?[]const u8 = null,
 };
 
 const Formatter = struct {
@@ -52,6 +63,8 @@ const Formatter = struct {
         try self.formatNodes(plan.nodes, 1, &.{});
         try self.out.appendSlice(self.allocator, "mutations\n");
         try self.formatMutations();
+        try self.out.appendSlice(self.allocator, "callback-registrations\n");
+        try self.formatCallbackRegistrations();
         try self.out.appendSlice(self.allocator, "boundaries\n");
         try self.formatBoundaries(plan.nodes, 1);
         if (self.diagnostics.items.len > 0) {
@@ -60,16 +73,24 @@ const Formatter = struct {
                 try self.writeIndent(1);
                 switch (diagnostic.kind) {
                     .hidden_state => try self.out.writer(self.allocator).print(
-                        "hidden-state expression={s} reason=no-visible-component-dependency\n",
-                        .{diagnostic.subject},
+                        "{s} hidden-state expression={s} reason={s}\n",
+                        .{ severityLabel(diagnostic.severity), diagnostic.subject, diagnostic.reason orelse "no-visible-component-dependency" },
                     ),
                     .expression_mutation => try self.out.writer(self.allocator).print(
-                        "expression-mutation binding={s} offset={d} reason=mutation-not-in-statement-position\n",
-                        .{ diagnostic.subject, diagnostic.offset orelse 0 },
+                        "{s} expression-mutation binding={s} offset={d} reason=mutation-not-in-statement-position\n",
+                        .{ severityLabel(diagnostic.severity), diagnostic.subject, diagnostic.offset orelse 0 },
+                    ),
+                    .alias_mutation => try self.out.writer(self.allocator).print(
+                        "{s} alias-mutation binding={s} alias={s} offset={d} reason=alias-tracking-not-implemented\n",
+                        .{ severityLabel(diagnostic.severity), diagnostic.subject, diagnostic.related orelse "", diagnostic.offset orelse 0 },
                     ),
                     .unowned_callback_mutation => try self.out.writer(self.allocator).print(
-                        "unowned-callback-mutation binding={s} offset={d} reason=callback-boundary-not-owned\n",
-                        .{ diagnostic.subject, diagnostic.offset orelse 0 },
+                        "{s} unowned-callback-mutation binding={s} offset={d} reason=callback-boundary-not-owned\n",
+                        .{ severityLabel(diagnostic.severity), diagnostic.subject, diagnostic.offset orelse 0 },
+                    ),
+                    .runtime_evaluate_fallback => try self.out.writer(self.allocator).print(
+                        "{s} runtime-evaluate-fallback expression={s} reason={s}\n",
+                        .{ severityLabel(diagnostic.severity), diagnostic.subject, classifyEvaluateFallback(diagnostic.subject) },
                     ),
                 }
             }
@@ -167,40 +188,66 @@ const Formatter = struct {
     }
 
     fn formatMutations(self: *Formatter) !void {
-        const script = self.component.sfc_document.script.content;
-        for (self.component.script.bindings) |binding| {
-            if (!binding.template_visible) continue;
-            var cursor: usize = 0;
-            while (findIdentifier(script, binding.name, cursor)) |start| {
-                cursor = start + binding.name.len;
-                if (isPropertyAccess(script, start)) continue;
-                if (isDeclarationBinding(script, start)) continue;
+        for (self.component.script.state_analysis.mutations) |mutation| {
+            const absolute_offset = self.component.sfc_document.script.content_span.start + mutation.span_start;
 
-                const kind = classifyMutationAfterBinding(script, cursor) orelse continue;
-                const absolute_offset = self.component.sfc_document.script.content_span.start + start;
-                if (!isStatementPositionMutation(script, start)) {
+            if (self.findAliasTarget(mutation.binding)) |target| {
+                if (self.isVisibleBinding(target)) {
                     try self.diagnostics.append(self.allocator, .{
-                        .kind = .expression_mutation,
-                        .subject = binding.name,
+                        .severity = .warning,
+                        .kind = .alias_mutation,
+                        .subject = target,
+                        .related = mutation.binding,
                         .offset = absolute_offset,
                     });
-                    continue;
                 }
-                if (isInsideUnownedCallback(script, start)) {
-                    try self.diagnostics.append(self.allocator, .{
-                        .kind = .unowned_callback_mutation,
-                        .subject = binding.name,
-                        .offset = absolute_offset,
-                    });
-                    continue;
-                }
-                try self.writeIndent(1);
-                try self.out.writer(self.allocator).print("{s} {s} offset={d}\n", .{
-                    binding.name,
-                    kind,
-                    absolute_offset,
-                });
+                continue;
             }
+
+            if (!self.isVisibleBinding(mutation.binding)) continue;
+
+            if (!mutation.statement_position) {
+                try self.diagnostics.append(self.allocator, .{
+                    .severity = .warning,
+                    .kind = .expression_mutation,
+                    .subject = mutation.binding,
+                    .offset = absolute_offset,
+                });
+                continue;
+            }
+
+            if (mutation.inside_callback and !mutation.callback_owned_candidate) {
+                try self.diagnostics.append(self.allocator, .{
+                    .severity = .warning,
+                    .kind = .unowned_callback_mutation,
+                    .subject = mutation.binding,
+                    .offset = absolute_offset,
+                });
+                continue;
+            }
+
+            try self.writeIndent(1);
+            try self.out.writer(self.allocator).print("{s} {s} offset={d}\n", .{
+                mutation.binding,
+                mutation.kind,
+                absolute_offset,
+            });
+        }
+    }
+
+    fn formatCallbackRegistrations(self: *Formatter) !void {
+        for (self.component.script.state_analysis.callback_registrations) |registration| {
+            try self.writeIndent(1);
+            try self.out.writer(self.allocator).print(
+                "callback callee={s} kind={s} owned_candidate={s} reason={s} offset={d}\n",
+                .{
+                    registration.callee,
+                    registration.callback_kind,
+                    if (registration.owned_candidate) "true" else "false",
+                    registration.reason,
+                    self.component.sfc_document.script.content_span.start + registration.callback_span_start,
+                },
+            );
         }
     }
 
@@ -241,7 +288,21 @@ const Formatter = struct {
         try self.writeIndent(indent);
         try self.out.writer(self.allocator).print("#{d} {s} ref={d}", .{ id, kind, ref_id });
         if (name) |value| try self.out.writer(self.allocator).print(" name={s}", .{value});
-        if (expr) |value| try self.out.writer(self.allocator).print(" expr={s}", .{value});
+        if (expr) |value| {
+            try self.out.writer(self.allocator).print(" expr={s}", .{value});
+            const compiled_direct = expressionCompilesDirect(value);
+            try self.out.writer(self.allocator).print(" eval={s}", .{
+                if (compiled_direct) "direct" else "fallback",
+            });
+            if (!compiled_direct) {
+                try self.out.writer(self.allocator).print(" reason={s}", .{classifyEvaluateFallback(value)});
+                try self.diagnostics.append(self.allocator, .{
+                    .severity = .info,
+                    .kind = .runtime_evaluate_fallback,
+                    .subject = value,
+                });
+            }
+        }
         try self.out.appendSlice(self.allocator, " deps=[");
         for (deps, 0..) |dep, idx| {
             if (idx > 0) try self.out.appendSlice(self.allocator, ",");
@@ -267,7 +328,17 @@ const Formatter = struct {
         try self.out.appendSlice(self.allocator, "\n");
     }
 
-    fn collectExpressionDeps(self: *Formatter, expr: []const u8, loop_locals: []const []const u8, deps: *DepList) !void {
+    fn collectExpressionDeps(self: *Formatter, expr: []const u8, loop_locals: []const []const u8, deps: *DepList) anyerror!void {
+        try self.collectExpressionDepsWithTrail(expr, loop_locals, deps, &.{});
+    }
+
+    fn collectExpressionDepsWithTrail(
+        self: *Formatter,
+        expr: []const u8,
+        loop_locals: []const []const u8,
+        deps: *DepList,
+        call_trail: []const []const u8,
+    ) anyerror!void {
         var saw_call = false;
         var i: usize = 0;
         while (i < expr.len) {
@@ -288,6 +359,33 @@ const Formatter = struct {
             if (isPropertyAccess(expr, start)) continue;
             if (call and self.isImportedBinding(ident)) continue;
 
+            if (call) {
+                if (self.findVisibleBinding(ident)) |binding| {
+                    try deps.appendUnique(self.allocator, ident);
+                    if (binding.callable and !containsName(call_trail, ident)) {
+                        if (self.findHelperRecord(binding.name)) |helper| {
+                            if (helper.contains_external_reads) {
+                                try self.diagnostics.append(self.allocator, .{
+                                    .severity = .warning,
+                                    .kind = .hidden_state,
+                                    .subject = expr,
+                                    .reason = "helper-contains-external-reads",
+                                });
+                            } else if (helper.contains_side_effects) {
+                                try self.diagnostics.append(self.allocator, .{
+                                    .severity = .warning,
+                                    .kind = .hidden_state,
+                                    .subject = expr,
+                                    .reason = "helper-contains-side-effects",
+                                });
+                            }
+                        }
+                        try self.collectCallableBindingDeps(binding, deps, call_trail);
+                    }
+                    continue;
+                }
+            }
+
             if (self.isVisibleBinding(ident) or containsName(loop_locals, ident)) {
                 try deps.appendUnique(self.allocator, ident);
             }
@@ -295,17 +393,23 @@ const Formatter = struct {
 
         if (deps.items.items.len == 0 and saw_call) {
             try self.diagnostics.append(self.allocator, .{
+                .severity = .warning,
                 .kind = .hidden_state,
                 .subject = expr,
+                .reason = "no-visible-component-dependency",
             });
         }
     }
 
     fn isVisibleBinding(self: *const Formatter, name: []const u8) bool {
+        return self.findVisibleBinding(name) != null;
+    }
+
+    fn findVisibleBinding(self: *const Formatter, name: []const u8) ?script_analysis.BindingRecord {
         for (self.component.script.bindings) |binding| {
-            if (binding.template_visible and std.mem.eql(u8, binding.name, name)) return true;
+            if (binding.template_visible and std.mem.eql(u8, binding.name, name)) return binding;
         }
-        return false;
+        return null;
     }
 
     fn isImportedBinding(self: *const Formatter, name: []const u8) bool {
@@ -313,6 +417,48 @@ const Formatter = struct {
             if (std.mem.eql(u8, import.local_name, name)) return true;
         }
         return false;
+    }
+
+    fn collectCallableBindingDeps(
+        self: *Formatter,
+        binding: script_analysis.BindingRecord,
+        deps: *DepList,
+        call_trail: []const []const u8,
+    ) anyerror!void {
+        const helper = self.findHelperRecord(binding.name) orelse return;
+
+        var next_trail = std.ArrayList([]const u8){};
+        defer next_trail.deinit(self.allocator);
+        try next_trail.appendSlice(self.allocator, call_trail);
+        try next_trail.append(self.allocator, binding.name);
+
+        for (helper.reads) |name| {
+            try deps.appendUnique(self.allocator, name);
+        }
+
+        for (helper.calls) |name| {
+            try deps.appendUnique(self.allocator, name);
+            if (containsName(next_trail.items, name)) continue;
+            if (self.findVisibleBinding(name)) |next_binding| {
+                if (next_binding.callable) {
+                    try self.collectCallableBindingDeps(next_binding, deps, next_trail.items);
+                }
+            }
+        }
+    }
+
+    fn findHelperRecord(self: *const Formatter, name: []const u8) ?script_analysis.HelperRecord {
+        for (self.component.script.state_analysis.helpers) |helper| {
+            if (std.mem.eql(u8, helper.name, name)) return helper;
+        }
+        return null;
+    }
+
+    fn findAliasTarget(self: *const Formatter, alias_name: []const u8) ?[]const u8 {
+        for (self.component.script.state_analysis.aliases) |alias| {
+            if (std.mem.eql(u8, alias.alias, alias_name)) return alias.target;
+        }
+        return null;
     }
 
     fn isAsyncFunction(self: *const Formatter, name: []const u8) bool {
@@ -351,195 +497,6 @@ fn containsName(names: []const []const u8, needle: []const u8) bool {
         if (std.mem.eql(u8, name, needle)) return true;
     }
     return false;
-}
-
-fn findIdentifier(source: []const u8, name: []const u8, start: usize) ?usize {
-    var cursor = start;
-    while (std.mem.indexOfPos(u8, source, cursor, name)) |found| {
-        const before_ok = found == 0 or !isIdentContinue(source[found - 1]);
-        const after = found + name.len;
-        const after_ok = after >= source.len or !isIdentContinue(source[after]);
-        if (before_ok and after_ok) return found;
-        cursor = found + name.len;
-    }
-    return null;
-}
-
-fn isDeclarationBinding(source: []const u8, ident_start: usize) bool {
-    const previous = previousIdentifier(source, ident_start) orelse return false;
-    return std.mem.eql(u8, previous, "let") or
-        std.mem.eql(u8, previous, "const") or
-        std.mem.eql(u8, previous, "var") or
-        std.mem.eql(u8, previous, "function") or
-        std.mem.eql(u8, previous, "interface") or
-        std.mem.eql(u8, previous, "type");
-}
-
-fn previousIdentifier(source: []const u8, before: usize) ?[]const u8 {
-    if (before == 0) return null;
-    var cursor = before;
-    while (cursor > 0 and isWhitespace(source[cursor - 1])) cursor -= 1;
-    if (cursor == 0) return null;
-
-    const end = cursor;
-    while (cursor > 0 and isIdentContinue(source[cursor - 1])) cursor -= 1;
-    if (cursor == end) return null;
-    return source[cursor..end];
-}
-
-fn isStatementPositionMutation(source: []const u8, ident_start: usize) bool {
-    if (isPostfixUpdate(source, ident_start)) return false;
-
-    var cursor = ident_start;
-    while (cursor > 0) {
-        cursor -= 1;
-        const ch = source[cursor];
-        if (isWhitespace(ch)) continue;
-        return ch == ';' or ch == '{' or ch == '}';
-    }
-    return true;
-}
-
-fn isPostfixUpdate(source: []const u8, ident_start: usize) bool {
-    var cursor = ident_start;
-    while (cursor > 0 and isWhitespace(source[cursor - 1])) cursor -= 1;
-    if (cursor < 2) return false;
-    const previous = source[cursor - 2 .. cursor];
-    return std.mem.eql(u8, previous, "++") or std.mem.eql(u8, previous, "--");
-}
-
-fn isInsideUnownedCallback(source: []const u8, ident_start: usize) bool {
-    var cursor = ident_start;
-    while (cursor > 0) {
-        cursor -= 1;
-        const ch = source[cursor];
-        if (ch == ';') return false;
-        if (ch == '{') {
-            const before_body = previousNonWhitespace(source, cursor) orelse return false;
-            if (source[before_body] == ')') {
-                return callbackOpenerLooksUnowned(source, before_body);
-            }
-            if (source[before_body] == '>' and before_body > 0 and source[before_body - 1] == '=') {
-                const before_arrow = previousNonWhitespace(source, before_body - 1) orelse return false;
-                if (source[before_arrow] == ')') return callbackOpenerLooksUnowned(source, before_arrow);
-                if (isIdentContinue(source[before_arrow])) return singleParamCallbackLooksUnowned(source, before_arrow);
-            }
-            return false;
-        }
-    }
-    return false;
-}
-
-fn callbackOpenerLooksUnowned(source: []const u8, close_paren: usize) bool {
-    const open_paren = findMatchingOpenParen(source, close_paren) orelse return false;
-    return callArgumentBeforeCallback(source, open_paren);
-}
-
-fn callArgumentBeforeCallback(source: []const u8, callback_open_paren: usize) bool {
-    var cursor = callback_open_paren;
-    while (cursor > 0) {
-        cursor -= 1;
-        const ch = source[cursor];
-        if (isWhitespace(ch)) continue;
-        return ch == ',' or ch == '(';
-    }
-    return false;
-}
-
-fn singleParamCallbackLooksUnowned(source: []const u8, param_end: usize) bool {
-    var cursor = param_end + 1;
-    while (cursor > 0 and isIdentContinue(source[cursor - 1])) cursor -= 1;
-    return callArgumentBeforeCallback(source, cursor);
-}
-
-fn findMatchingOpenParen(source: []const u8, close_paren: usize) ?usize {
-    var depth: usize = 0;
-    var cursor = close_paren + 1;
-    while (cursor > 0) {
-        cursor -= 1;
-        if (source[cursor] == ')') {
-            depth += 1;
-            continue;
-        }
-        if (source[cursor] == '(') {
-            if (depth == 1) return cursor;
-            depth -= 1;
-        }
-    }
-    return null;
-}
-
-fn previousNonWhitespace(source: []const u8, before: usize) ?usize {
-    var cursor = before;
-    while (cursor > 0) {
-        cursor -= 1;
-        if (isWhitespace(source[cursor])) continue;
-        return cursor;
-    }
-    return null;
-}
-
-fn classifyMutationAfterBinding(source: []const u8, idx: usize) ?[]const u8 {
-    const next = skipWhitespaceIndex(source, idx);
-    if (next >= source.len) return null;
-
-    if (source[next] == '+' and next + 1 < source.len and source[next + 1] == '+') return "update";
-    if (source[next] == '-' and next + 1 < source.len and source[next + 1] == '-') return "update";
-    if (isAssignmentOperator(source, next)) return "assignment";
-
-    if (source[next] == '.' or source[next] == '[') {
-        if (classifyMemberMutation(source[next..])) |kind| return kind;
-    }
-
-    return null;
-}
-
-fn classifyMemberMutation(source: []const u8) ?[]const u8 {
-    if (source.len == 0) return null;
-    const statement_end = std.mem.indexOfAny(u8, source, ";\n") orelse source.len;
-    const statement = source[0..statement_end];
-
-    if (containsKnownMutatingMethod(statement)) return "method";
-    if (std.mem.indexOfScalar(u8, statement, '=') != null) return "member-assignment";
-    return null;
-}
-
-fn containsKnownMutatingMethod(source: []const u8) bool {
-    const methods = [_][]const u8{
-        ".push(",
-        ".pop(",
-        ".shift(",
-        ".unshift(",
-        ".splice(",
-        ".sort(",
-        ".reverse(",
-        ".copyWithin(",
-        ".fill(",
-        ".set(",
-        ".delete(",
-        ".clear(",
-        ".add(",
-    };
-    for (methods) |method| {
-        if (std.mem.indexOf(u8, source, method) != null) return true;
-    }
-    return false;
-}
-
-fn isAssignmentOperator(source: []const u8, idx: usize) bool {
-    const ch = source[idx];
-    if (ch == '=') {
-        return idx + 1 >= source.len or source[idx + 1] != '=' and source[idx + 1] != '>';
-    }
-    if (idx + 1 >= source.len or source[idx + 1] != '=') return false;
-    return ch == '+' or ch == '-' or ch == '*' or ch == '/' or ch == '%' or
-        ch == '&' or ch == '|' or ch == '^';
-}
-
-fn skipWhitespaceIndex(source: []const u8, idx: usize) usize {
-    var cursor = idx;
-    while (cursor < source.len and isWhitespace(source[cursor])) : (cursor += 1) {}
-    return cursor;
 }
 
 fn isPropertyAccess(expr: []const u8, ident_start: usize) bool {
@@ -595,6 +552,273 @@ fn isIdentContinue(ch: u8) bool {
     return isIdentStart(ch) or (ch >= '0' and ch <= '9');
 }
 
+fn consumeIdentifierSlice(source: []const u8, cursor: *usize) bool {
+    if (cursor.* >= source.len or !isIdentStart(source[cursor.*])) return false;
+    cursor.* += 1;
+    while (cursor.* < source.len and isIdentContinue(source[cursor.*])) cursor.* += 1;
+    return true;
+}
+
 fn isWhitespace(ch: u8) bool {
     return ch == ' ' or ch == '\n' or ch == '\r' or ch == '\t';
+}
+
+fn expressionCompilesDirect(expression: []const u8) bool {
+    const trimmed = std.mem.trim(u8, expression, &std.ascii.whitespace);
+    if (trimmed.len == 0) return true;
+    if (isLiteralExpression(trimmed)) return true;
+    if (isSimpleAccessExpression(trimmed)) return true;
+    if (canRewriteScopedCallExpression(trimmed)) return true;
+    return canRewriteScopedExpression(trimmed);
+}
+
+fn classifyEvaluateFallback(expression: []const u8) []const u8 {
+    const trimmed = std.mem.trim(u8, expression, &std.ascii.whitespace);
+    if (std.mem.indexOf(u8, trimmed, "=>") != null) return "callback-argument";
+    if (std.mem.indexOfScalar(u8, trimmed, '(') != null) return "dynamic-call-arguments";
+    return "complex-expression";
+}
+
+fn severityLabel(severity: DiagnosticSeverity) []const u8 {
+    return switch (severity) {
+        .warning => "warning",
+        .info => "info",
+    };
+}
+
+fn canRewriteScopedCallExpression(expression: []const u8) bool {
+    const open_paren = std.mem.indexOfScalar(u8, expression, '(') orelse return false;
+    const callee = std.mem.trimRight(u8, expression[0..open_paren], &std.ascii.whitespace);
+    if (callee.len == 0 or !isSimpleAccessExpression(callee)) return false;
+
+    const close_paren = findMatchingParenForward(expression, open_paren) orelse return false;
+    const suffix = std.mem.trim(u8, expression[close_paren + 1 ..], &std.ascii.whitespace);
+    if (suffix.len != 0 and !isSimpleCallSuffixExpression(suffix)) return false;
+
+    var args = std.ArrayList([]const u8){};
+    defer args.deinit(std.heap.page_allocator);
+    splitCallArguments(expression[open_paren + 1 .. close_paren], &args) catch return false;
+    for (args.items) |arg| {
+        const trimmed_arg = std.mem.trim(u8, arg, &std.ascii.whitespace);
+        if (trimmed_arg.len == 0) continue;
+        if (canRewriteArrowCallbackExpression(trimmed_arg)) continue;
+        if (!canRewriteScopedExpression(trimmed_arg)) return false;
+    }
+    return true;
+}
+
+fn canRewriteScopedExpression(expression: []const u8) bool {
+    return canRewriteScopedExpressionWithLocals(expression, &.{});
+}
+
+fn canRewriteScopedExpressionWithLocals(expression: []const u8, locals: []const []const u8) bool {
+    var cursor: usize = 0;
+    while (cursor < expression.len) {
+        const ch = expression[cursor];
+        if (isWhitespace(ch)) {
+            cursor += 1;
+            continue;
+        }
+        if (ch == '\'' or ch == '"') {
+            cursor = scanQuotedString(expression, cursor) orelse return false;
+            cursor += 1;
+            continue;
+        }
+        if (isIdentStart(ch)) {
+            const start = cursor;
+            cursor += 1;
+            while (cursor < expression.len and isIdentContinue(expression[cursor])) cursor += 1;
+            const ident = expression[start..cursor];
+            if (nextNonSpaceIs(expression, cursor, '(')) return false;
+            if (isKeyword(ident) or containsName(locals, ident) or isPropertyAccess(expression, start)) continue;
+            continue;
+        }
+        if (std.ascii.isDigit(ch)) {
+            cursor += 1;
+            while (cursor < expression.len and (std.ascii.isDigit(expression[cursor]) or expression[cursor] == '.')) cursor += 1;
+            continue;
+        }
+        if (isSupportedExpressionPunctuation(ch)) {
+            cursor += 1;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+fn canRewriteArrowCallbackExpression(expression: []const u8) bool {
+    const arrow = std.mem.indexOf(u8, expression, "=>") orelse return false;
+    const params_expr = std.mem.trim(u8, expression[0..arrow], &std.ascii.whitespace);
+    const raw_body_expr = std.mem.trim(u8, expression[arrow + 2 ..], &std.ascii.whitespace);
+    const body_expr = extractArrowCallbackReturnExpression(raw_body_expr) orelse return false;
+    if (params_expr.len == 0 or body_expr.len == 0) return false;
+
+    const param = parseArrowCallbackParam(params_expr) orelse return false;
+    const locals = [_][]const u8{param};
+    return canRewriteScopedExpressionWithLocals(body_expr, &locals);
+}
+
+fn parseArrowCallbackParam(params_expr: []const u8) ?[]const u8 {
+    const trimmed = std.mem.trim(u8, params_expr, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+    if (trimmed[0] == '(') {
+        if (trimmed[trimmed.len - 1] != ')') return null;
+        const inner = std.mem.trim(u8, trimmed[1 .. trimmed.len - 1], &std.ascii.whitespace);
+        if (inner.len == 0 or !isSimpleAccessExpression(inner)) return null;
+        return inner;
+    }
+    if (!isSimpleAccessExpression(trimmed)) return null;
+    return trimmed;
+}
+
+fn extractArrowCallbackReturnExpression(body_expr: []const u8) ?[]const u8 {
+    const trimmed = std.mem.trim(u8, body_expr, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+    if (trimmed[0] != '{') return trimmed;
+    if (trimmed[trimmed.len - 1] != '}') return null;
+
+    const inner = std.mem.trim(u8, trimmed[1 .. trimmed.len - 1], &std.ascii.whitespace);
+    if (!std.mem.startsWith(u8, inner, "return")) return null;
+
+    const return_expr = std.mem.trim(u8, inner["return".len..], &std.ascii.whitespace);
+    if (return_expr.len == 0) return null;
+    if (return_expr[return_expr.len - 1] != ';') return null;
+
+    const expr = std.mem.trim(u8, return_expr[0 .. return_expr.len - 1], &std.ascii.whitespace);
+    if (expr.len == 0) return null;
+    return expr;
+}
+
+fn isSimpleCallSuffixExpression(expression: []const u8) bool {
+    var cursor: usize = 0;
+    while (cursor < expression.len) {
+        if (expression[cursor] != '.') return false;
+        cursor += 1;
+        if (!consumeIdentifier(expression, &cursor)) return false;
+    }
+    return true;
+}
+
+fn isLiteralExpression(expression: []const u8) bool {
+    if (expression.len == 0) return false;
+    if ((expression[0] == '\'' and expression[expression.len - 1] == '\'') or
+        (expression[0] == '"' and expression[expression.len - 1] == '"')) return expression.len >= 2;
+
+    if (std.mem.eql(u8, expression, "true") or
+        std.mem.eql(u8, expression, "false") or
+        std.mem.eql(u8, expression, "null") or
+        std.mem.eql(u8, expression, "undefined")) return true;
+
+    var seen_digit = false;
+    var seen_dot = false;
+    for (expression, 0..) |ch, idx| {
+        if (idx == 0 and (ch == '+' or ch == '-')) continue;
+        if (std.ascii.isDigit(ch)) {
+            seen_digit = true;
+            continue;
+        }
+        if (ch == '.' and !seen_dot) {
+            seen_dot = true;
+            continue;
+        }
+        return false;
+    }
+    return seen_digit;
+}
+
+fn isSimpleAccessExpression(expression: []const u8) bool {
+    var cursor: usize = 0;
+    if (!consumeIdentifier(expression, &cursor)) return false;
+    while (cursor < expression.len) {
+        if (expression[cursor] != '.') return false;
+        cursor += 1;
+        if (!consumeIdentifier(expression, &cursor)) return false;
+    }
+    return true;
+}
+
+fn consumeIdentifier(expression: []const u8, cursor: *usize) bool {
+    if (cursor.* >= expression.len or !isIdentStart(expression[cursor.*])) return false;
+    cursor.* += 1;
+    while (cursor.* < expression.len and isIdentContinue(expression[cursor.*])) cursor.* += 1;
+    return true;
+}
+
+fn scanQuotedString(expression: []const u8, start: usize) ?usize {
+    const quote = expression[start];
+    var cursor = start + 1;
+    while (cursor < expression.len) : (cursor += 1) {
+        if (expression[cursor] == '\\') {
+            cursor += 1;
+            continue;
+        }
+        if (expression[cursor] == quote) return cursor;
+    }
+    return null;
+}
+
+fn isSupportedExpressionPunctuation(ch: u8) bool {
+    return switch (ch) {
+        '.', '(', ')', '[', ']', '?', ':', '!', '=', '>', '<', '&', '|', '+', '-', '*', '/', '%', ',' => true,
+        else => false,
+    };
+}
+
+fn splitCallArguments(source: []const u8, out: *std.ArrayList([]const u8)) !void {
+    var start: usize = 0;
+    var depth_paren: usize = 0;
+    var depth_bracket: usize = 0;
+    var depth_brace: usize = 0;
+    var cursor: usize = 0;
+    while (cursor < source.len) : (cursor += 1) {
+        const ch = source[cursor];
+        if (ch == '\'' or ch == '"') {
+            cursor = scanQuotedString(source, cursor) orelse return error.InvalidCharacter;
+            continue;
+        }
+        switch (ch) {
+            '(' => depth_paren += 1,
+            ')' => {
+                if (depth_paren > 0) depth_paren -= 1;
+            },
+            '[' => depth_bracket += 1,
+            ']' => {
+                if (depth_bracket > 0) depth_bracket -= 1;
+            },
+            '{' => depth_brace += 1,
+            '}' => {
+                if (depth_brace > 0) depth_brace -= 1;
+            },
+            ',' => {
+                if (depth_paren == 0 and depth_bracket == 0 and depth_brace == 0) {
+                    try out.append(std.heap.page_allocator, source[start..cursor]);
+                    start = cursor + 1;
+                }
+            },
+            else => {},
+        }
+    }
+    try out.append(std.heap.page_allocator, source[start..]);
+}
+
+fn findMatchingParenForward(source: []const u8, open_paren: usize) ?usize {
+    var depth: usize = 0;
+    var cursor = open_paren;
+    while (cursor < source.len) : (cursor += 1) {
+        const ch = source[cursor];
+        if (ch == '\'' or ch == '"') {
+            cursor = scanQuotedString(source, cursor) orelse return null;
+            continue;
+        }
+        if (ch == '(') {
+            depth += 1;
+            continue;
+        }
+        if (ch == ')') {
+            depth -= 1;
+            if (depth == 0) return cursor;
+        }
+    }
+    return null;
 }

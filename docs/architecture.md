@@ -7,6 +7,11 @@
 The normalized vocabulary for this model lives in
 [Terminology](./terminology.md).
 
+The next implementation-focused upgrade for script-side precision is documented
+in [AST Script Analysis Plan](./ast-script-analysis-plan.md).
+The next likely extension point for stronger script-side state semantics is
+documented in [Authoring Helpers](./authoring-helpers.md).
+
 The current direction is:
 
 - `.weiv` single-file components
@@ -19,6 +24,24 @@ The current direction is:
 
 `weiv` should not center its default model around signals, refs, proxies, a
 virtual DOM, or public effect graphs.
+
+Where plain TypeScript becomes too ambiguous for trustworthy compile-time state
+analysis, `weiv` should prefer small explicit compiler-facing authoring helpers
+over fragile heuristic inference. But before adding explicit author syntax,
+`weiv` should first strengthen script-side precision through AST-backed backend
+analysis.
+
+Optional ecosystem/runtime companions are still valid. The current open
+question is whether Weiv should settle on:
+
+- an explicit optional shared-state companion
+- a broader Weiv-owned runtime/reactivity layer
+- or a narrower bridge around one officially supported external model
+
+The current comparison work is captured in
+[Shared-State Companion Research](./store-companion-research.md). The earlier
+`@weiv/store` draft remains useful as one candidate, but it is no longer the
+settled direction.
 
 ## Component Syntax
 
@@ -158,9 +181,9 @@ Current owned boundaries:
 Unsupported visible stale-risk patterns should diagnose instead of silently
 compiling into stale UI behavior.
 
-`weiv dump-invalidation-graph <path>` is the current inspectability command for regions,
+`weiv inspect invalidation-graph <path>` is the current inspectability command for regions,
 dependencies, mutation sites, owned boundaries, and diagnostics.
-`weiv dump-state-plan <path>` remains available as a compatibility alias.
+`weiv inspect state-plan <path>` remains available as a compatibility alias.
 
 ## Composition
 
@@ -195,10 +218,10 @@ current stale-risk cases.
 Useful commands:
 
 ```sh
-zig build run -- analyze-component examples/todomvc/App.weiv
-zig build run -- dump-ir examples/todomvc/App.weiv
-zig build run -- dump-browser-plan examples/todomvc/App.weiv
-zig build run -- dump-invalidation-graph examples/basic-counter.weiv
-zig build run -- emit-browser-direct-js examples/basic-counter.weiv
-zig build run -- emit-app examples/todomvc/App.weiv .zig-cache/todomvc-out
+zig build run -- compile analyze component examples/todomvc/App.weiv
+zig build run -- inspect ir examples/todomvc/App.weiv
+zig build run -- inspect browser-plan examples/todomvc/App.weiv
+zig build run -- inspect invalidation-graph examples/basic-counter.weiv
+zig build run -- compile emit browser-direct-js examples/basic-counter.weiv
+zig build run -- compile examples/todomvc/App.weiv .zig-cache/todomvc-out
 ```

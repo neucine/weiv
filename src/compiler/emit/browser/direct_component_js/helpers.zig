@@ -3,15 +3,19 @@ const browser_plan = @import("../../../lower/browser_plan/index.zig");
 const common = @import("common.zig");
 const node_codegen = @import("node_codegen.zig");
 
-pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void {
+pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator, needs_evaluate: bool) !void {
+    if (needs_evaluate) {
+        try out.appendSlice(allocator,
+            \\function evaluate(expression, scope) {
+            \\  const entries = Object.entries(scope);
+            \\  const names = entries.map(([name]) => name);
+            \\  const values = entries.map(([, value]) => value);
+            \\  return Function(...names, `return (${expression});`)(...values);
+            \\}
+            \\
+        );
+    }
     try out.appendSlice(allocator,
-        \\function evaluate(expression, scope) {
-        \\  const entries = Object.entries(scope);
-        \\  const names = entries.map(([name]) => name);
-        \\  const values = entries.map(([, value]) => value);
-        \\  return Function(...names, `return (${expression});`)(...values);
-        \\}
-        \\
         \\function replaceBetween(start, end, content) {
         \\  const parent = start.parentNode;
         \\  if (!parent || parent !== end.parentNode) {
@@ -68,13 +72,38 @@ pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void 
         \\  return false;
         \\}
         \\
+        \\function collectDirtyBindings(beforeScope, afterScope) {
+        \\  const dirty = [];
+        \\  const seen = new Set();
+        \\  for (const key of Object.keys(beforeScope)) {
+        \\    seen.add(key);
+        \\    if (!Object.prototype.hasOwnProperty.call(afterScope, key) || !Object.is(beforeScope[key], afterScope[key])) {
+        \\      dirty.push(key);
+        \\    }
+        \\  }
+        \\  for (const key of Object.keys(afterScope)) {
+        \\    if (seen.has(key)) {
+        \\      continue;
+        \\    }
+        \\    if (!Object.prototype.hasOwnProperty.call(beforeScope, key)) {
+        \\      dirty.push(key);
+        \\    }
+        \\  }
+        \\  return dirty;
+        \\}
+        \\
         \\function flushOwnedBoundary(instance, beforeScope) {
         \\  if (instance.destroyed) {
         \\    return beforeScope;
         \\  }
         \\  const afterScope = instance.refresh();
         \\  if (hasScopeChanged(beforeScope, afterScope)) {
-        \\    instance.update();
+        \\    const dirtyBindings = collectDirtyBindings(beforeScope, afterScope);
+        \\    if (typeof instance.updateDirty === "function") {
+        \\      instance.updateDirty(dirtyBindings, afterScope);
+        \\    } else {
+        \\      instance.update();
+        \\    }
         \\    return cloneScope(instance.refresh());
         \\  }
         \\  return cloneScope(afterScope);
@@ -216,12 +245,12 @@ fn emitSingleConditionalHelper(
     try out.appendSlice(allocator, "  }\n}\n\n");
 
     try out.writer(allocator).print(
-        "function updateConditional_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const next = Boolean(evaluate(",
+        "function updateConditional_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const next = Boolean(",
         .{conditional.start_ref_id},
     );
-    try common.emitString(conditional.condition, out, allocator);
+    try node_codegen.emitResolvedExpression(conditional.condition, "scope", out, allocator);
     try out.writer(allocator).print(
-        ", scope));\n  if (refs[{d}] !== next) {{\n    const previous = refs[{d}];\n    destroyConditionalBranch_{d}(instance, previous === true);\n    refs[{d}] = next;\n    replaceBetween(refs[{d}], refs[{d}], createConditionalFragment_{d}(instance, scope, next));\n  }}\n",
+        ");\n  if (refs[{d}] !== next) {{\n    const previous = refs[{d}];\n    destroyConditionalBranch_{d}(instance, previous === true);\n    refs[{d}] = next;\n    replaceBetween(refs[{d}], refs[{d}], createConditionalFragment_{d}(instance, scope, next));\n  }}\n",
         .{
             conditional.state_ref_id,
             conditional.state_ref_id,
@@ -299,12 +328,12 @@ fn emitKeyedComponentLoopHelper(
     );
 
     try out.writer(allocator).print(
-        "function updateForLoop_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const iterable = evaluate(",
+        "function updateForLoop_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const iterable = (",
         .{for_loop.start_ref_id},
     );
-    try common.emitString(for_loop.iterable_expr, out, allocator);
+    try node_codegen.emitResolvedExpression(for_loop.iterable_expr, "scope", out, allocator);
     try out.writer(allocator).print(
-        ", scope) ?? [];\n  const previous = refs[{d}] ?? [];\n  const previousByKey = new Map(previous.map((record) => [record.key, record]));\n  const nextRecords = [];\n  for (const item of iterable) {{\n    const key = item?.id ?? item;\n    let record = previousByKey.get(key);\n    const loopScope = {{ ...scope, [",
+        ") ?? [];\n  const previous = refs[{d}] ?? [];\n  const previousByKey = new Map(previous.map((record) => [record.key, record]));\n  const nextRecords = [];\n  for (const item of iterable) {{\n    const key = item?.id ?? item;\n    let record = previousByKey.get(key);\n    const loopScope = {{ ...scope, [",
         .{for_loop.state_ref_id},
     );
     try common.emitString(for_loop.item_name, out, allocator);
@@ -359,12 +388,12 @@ fn emitKeyedGenericLoopHelper(
     try out.appendSlice(allocator, "  }\n  replaceBetween(start, end, fragment);\n  update(scope, item);\n  return { key: item?.id ?? item, start, end, refs: entryRefs, update, destroy };\n}\n\n");
 
     try out.writer(allocator).print(
-        "function updateForLoop_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const iterable = evaluate(",
+        "function updateForLoop_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const iterable = (",
         .{for_loop.start_ref_id},
     );
-    try common.emitString(for_loop.iterable_expr, out, allocator);
+    try node_codegen.emitResolvedExpression(for_loop.iterable_expr, "scope", out, allocator);
     try out.writer(allocator).print(
-        ", scope) ?? [];\n  const previous = refs[{d}] ?? [];\n  const previousByKey = new Map(previous.map((record) => [record.key, record]));\n  const nextRecords = [];\n  for (const item of iterable) {{\n    const key = item?.id ?? item;\n    let record = previousByKey.get(key);\n    if (record) {{\n      previousByKey.delete(key);\n      record.update(scope, item);\n      moveBoundaryBefore(record.start, record.end, refs[{d}]);\n    }} else {{\n      record = createForEntry_{d}(instance, scope, item, refs[{d}]);\n    }}\n    nextRecords.push(record);\n  }}\n  for (const record of previousByKey.values()) {{\n    if (typeof record.destroy === \"function\") {{\n      record.destroy();\n    }}\n    replaceBetween(record.start, record.end, document.createDocumentFragment());\n    record.start.parentNode.removeChild(record.start);\n    record.end.parentNode.removeChild(record.end);\n  }}\n  refs[{d}] = nextRecords;\n}}\n\n",
+        ") ?? [];\n  const previous = refs[{d}] ?? [];\n  const previousByKey = new Map(previous.map((record) => [record.key, record]));\n  const nextRecords = [];\n  for (const item of iterable) {{\n    const key = item?.id ?? item;\n    let record = previousByKey.get(key);\n    if (record) {{\n      previousByKey.delete(key);\n      record.update(scope, item);\n      moveBoundaryBefore(record.start, record.end, refs[{d}]);\n    }} else {{\n      record = createForEntry_{d}(instance, scope, item, refs[{d}]);\n    }}\n    nextRecords.push(record);\n  }}\n  for (const record of previousByKey.values()) {{\n    if (typeof record.destroy === \"function\") {{\n      record.destroy();\n    }}\n    replaceBetween(record.start, record.end, document.createDocumentFragment());\n    record.start.parentNode.removeChild(record.start);\n    record.end.parentNode.removeChild(record.end);\n  }}\n  refs[{d}] = nextRecords;\n}}\n\n",
         .{ for_loop.state_ref_id, for_loop.end_ref_id, for_loop.start_ref_id, for_loop.end_ref_id, for_loop.state_ref_id },
     );
 }

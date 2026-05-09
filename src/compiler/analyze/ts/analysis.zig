@@ -7,6 +7,7 @@ pub const ScriptAnalysis = struct {
     props: ?PropsRecord,
     imports: []ImportRecord,
     bindings: []BindingRecord,
+    state_analysis: StateAnalysisRecord,
     diagnostics: []DiagnosticRecord,
 
     pub fn deinit(self: *ScriptAnalysis, allocator: std.mem.Allocator) void {
@@ -19,9 +20,28 @@ pub const ScriptAnalysis = struct {
         allocator.free(self.imports);
         for (self.bindings) |*binding| binding.deinit(allocator);
         allocator.free(self.bindings);
+        self.state_analysis.deinit(allocator);
         for (self.diagnostics) |*diagnostic| diagnostic.deinit(allocator);
         allocator.free(self.diagnostics);
         self.* = undefined;
+    }
+};
+
+pub const StateAnalysisRecord = struct {
+    helpers: []HelperRecord,
+    mutations: []MutationRecord,
+    aliases: []AliasRecord,
+    callback_registrations: []CallbackRegistrationRecord,
+
+    fn deinit(self: *StateAnalysisRecord, allocator: std.mem.Allocator) void {
+        for (self.helpers) |*record| record.deinit(allocator);
+        allocator.free(self.helpers);
+        for (self.mutations) |*record| record.deinit(allocator);
+        allocator.free(self.mutations);
+        for (self.aliases) |*record| record.deinit(allocator);
+        allocator.free(self.aliases);
+        for (self.callback_registrations) |*record| record.deinit(allocator);
+        allocator.free(self.callback_registrations);
     }
 };
 
@@ -85,6 +105,77 @@ pub const DiagnosticRecord = struct {
     }
 };
 
+pub const HelperRecord = struct {
+    name: []const u8,
+    kind: []const u8,
+    span_start: usize,
+    span_end: usize,
+    reads: [][]const u8,
+    writes: [][]const u8,
+    calls: [][]const u8,
+    async_flag: bool,
+    returns_expression_only: bool,
+    contains_external_reads: bool,
+    contains_side_effects: bool,
+
+    fn deinit(self: *HelperRecord, allocator: std.mem.Allocator) void {
+        allocator.free(self.name);
+        allocator.free(self.kind);
+        for (self.reads) |value| allocator.free(value);
+        allocator.free(self.reads);
+        for (self.writes) |value| allocator.free(value);
+        allocator.free(self.writes);
+        for (self.calls) |value| allocator.free(value);
+        allocator.free(self.calls);
+    }
+};
+
+pub const MutationRecord = struct {
+    binding: []const u8,
+    kind: []const u8,
+    span_start: usize,
+    span_end: usize,
+    statement_position: bool,
+    member_path: ?[]const u8,
+    inside_callback: bool,
+    callback_owned_candidate: bool,
+
+    fn deinit(self: *MutationRecord, allocator: std.mem.Allocator) void {
+        allocator.free(self.binding);
+        allocator.free(self.kind);
+        if (self.member_path) |value| allocator.free(value);
+    }
+};
+
+pub const AliasRecord = struct {
+    alias: []const u8,
+    target: []const u8,
+    kind: []const u8,
+    span_start: usize,
+    span_end: usize,
+
+    fn deinit(self: *AliasRecord, allocator: std.mem.Allocator) void {
+        allocator.free(self.alias);
+        allocator.free(self.target);
+        allocator.free(self.kind);
+    }
+};
+
+pub const CallbackRegistrationRecord = struct {
+    callee: []const u8,
+    callback_kind: []const u8,
+    callback_span_start: usize,
+    callback_span_end: usize,
+    owned_candidate: bool,
+    reason: []const u8,
+
+    fn deinit(self: *CallbackRegistrationRecord, allocator: std.mem.Allocator) void {
+        allocator.free(self.callee);
+        allocator.free(self.callback_kind);
+        allocator.free(self.reason);
+    }
+};
+
 const JsonScriptAnalysis = struct {
     ok: bool,
     source_path: []const u8,
@@ -92,7 +183,15 @@ const JsonScriptAnalysis = struct {
     props: ?JsonPropsRecord,
     imports: []JsonImportRecord,
     bindings: []JsonBindingRecord,
+    state_analysis: ?JsonStateAnalysisRecord,
     diagnostics: []JsonDiagnosticRecord,
+};
+
+const JsonStateAnalysisRecord = struct {
+    helpers: []JsonHelperRecord = &.{},
+    mutations: []JsonMutationRecord = &.{},
+    aliases: []JsonAliasRecord = &.{},
+    callback_registrations: []JsonCallbackRegistrationRecord = &.{},
 };
 
 const JsonPropsRecord = struct {
@@ -129,6 +228,48 @@ const JsonDiagnosticRecord = struct {
     line: u32,
     column: u32,
     code: ?[]const u8,
+};
+
+const JsonHelperRecord = struct {
+    name: []const u8,
+    kind: []const u8,
+    span_start: usize,
+    span_end: usize,
+    reads: [][]const u8,
+    writes: [][]const u8,
+    calls: [][]const u8,
+    async_flag: bool,
+    returns_expression_only: bool,
+    contains_external_reads: bool,
+    contains_side_effects: bool,
+};
+
+const JsonMutationRecord = struct {
+    binding: []const u8,
+    kind: []const u8,
+    span_start: usize,
+    span_end: usize,
+    statement_position: bool,
+    member_path: ?[]const u8,
+    inside_callback: bool,
+    callback_owned_candidate: bool,
+};
+
+const JsonAliasRecord = struct {
+    alias: []const u8,
+    target: []const u8,
+    kind: []const u8,
+    span_start: usize,
+    span_end: usize,
+};
+
+const JsonCallbackRegistrationRecord = struct {
+    callee: []const u8,
+    callback_kind: []const u8,
+    callback_span_start: usize,
+    callback_span_end: usize,
+    owned_candidate: bool,
+    reason: []const u8,
 };
 
 pub fn parseFromJson(json_source: []const u8, allocator: std.mem.Allocator) !ScriptAnalysis {
@@ -180,6 +321,66 @@ pub fn parseFromJson(json_source: []const u8, allocator: std.mem.Allocator) !Scr
         };
     }
 
+    const parsed_state = parsed.value.state_analysis orelse JsonStateAnalysisRecord{};
+
+    var helpers = try allocator.alloc(HelperRecord, parsed_state.helpers.len);
+    errdefer allocator.free(helpers);
+    for (parsed_state.helpers, 0..) |record, idx| {
+        helpers[idx] = .{
+            .name = try allocator.dupe(u8, record.name),
+            .kind = try allocator.dupe(u8, record.kind),
+            .span_start = record.span_start,
+            .span_end = record.span_end,
+            .reads = try dupeStringSlice2D(record.reads, allocator),
+            .writes = try dupeStringSlice2D(record.writes, allocator),
+            .calls = try dupeStringSlice2D(record.calls, allocator),
+            .async_flag = record.async_flag,
+            .returns_expression_only = record.returns_expression_only,
+            .contains_external_reads = record.contains_external_reads,
+            .contains_side_effects = record.contains_side_effects,
+        };
+    }
+
+    var mutations = try allocator.alloc(MutationRecord, parsed_state.mutations.len);
+    errdefer allocator.free(mutations);
+    for (parsed_state.mutations, 0..) |record, idx| {
+        mutations[idx] = .{
+            .binding = try allocator.dupe(u8, record.binding),
+            .kind = try allocator.dupe(u8, record.kind),
+            .span_start = record.span_start,
+            .span_end = record.span_end,
+            .statement_position = record.statement_position,
+            .member_path = if (record.member_path) |value| try allocator.dupe(u8, value) else null,
+            .inside_callback = record.inside_callback,
+            .callback_owned_candidate = record.callback_owned_candidate,
+        };
+    }
+
+    var aliases = try allocator.alloc(AliasRecord, parsed_state.aliases.len);
+    errdefer allocator.free(aliases);
+    for (parsed_state.aliases, 0..) |record, idx| {
+        aliases[idx] = .{
+            .alias = try allocator.dupe(u8, record.alias),
+            .target = try allocator.dupe(u8, record.target),
+            .kind = try allocator.dupe(u8, record.kind),
+            .span_start = record.span_start,
+            .span_end = record.span_end,
+        };
+    }
+
+    var callbacks = try allocator.alloc(CallbackRegistrationRecord, parsed_state.callback_registrations.len);
+    errdefer allocator.free(callbacks);
+    for (parsed_state.callback_registrations, 0..) |record, idx| {
+        callbacks[idx] = .{
+            .callee = try allocator.dupe(u8, record.callee),
+            .callback_kind = try allocator.dupe(u8, record.callback_kind),
+            .callback_span_start = record.callback_span_start,
+            .callback_span_end = record.callback_span_end,
+            .owned_candidate = record.owned_candidate,
+            .reason = try allocator.dupe(u8, record.reason),
+        };
+    }
+
     return .{
         .ok = parsed.value.ok,
         .source_path = try allocator.dupe(u8, parsed.value.source_path),
@@ -191,6 +392,20 @@ pub fn parseFromJson(json_source: []const u8, allocator: std.mem.Allocator) !Scr
         } else null,
         .imports = imports,
         .bindings = bindings,
+        .state_analysis = .{
+            .helpers = helpers,
+            .mutations = mutations,
+            .aliases = aliases,
+            .callback_registrations = callbacks,
+        },
         .diagnostics = diagnostics,
     };
+}
+
+fn dupeStringSlice2D(values: [][]const u8, allocator: std.mem.Allocator) ![][]const u8 {
+    var out = try allocator.alloc([]const u8, values.len);
+    for (values, 0..) |value, idx| {
+        out[idx] = try allocator.dupe(u8, value);
+    }
+    return out;
 }

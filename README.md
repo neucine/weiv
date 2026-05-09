@@ -39,7 +39,7 @@ Current runtime status:
 - lowered compiler IR
 - browser module emission
 - generated app bundles with Bun preview support
-- a working TodoMVC example used as the main verification app
+- a working TodoMVC example used as the main smaller app-scale verification app
 
 ## Direction
 
@@ -79,10 +79,10 @@ zig build run -- dev examples/todomvc/App.weiv
 Useful compiler commands:
 
 ```bash
-zig build run -- analyze-component examples/todomvc/App.weiv
-zig build run -- dump-ir examples/todomvc/App.weiv
-zig build run -- emit-js examples/todomvc/App.weiv
-zig build run -- emit-app examples/todomvc/App.weiv .zig-cache/todomvc-out
+zig build run -- compile analyze component examples/todomvc/App.weiv
+zig build run -- inspect ir examples/todomvc/App.weiv
+zig build run -- compile emit js examples/todomvc/App.weiv
+zig build run -- compile examples/todomvc/App.weiv .zig-cache/todomvc-out
 ```
 
 ## Repository Layout
@@ -107,9 +107,9 @@ tools/     render harness and test fixtures
 
 ## Near-Term Focus
 
-- finish selective region scheduling on top of the direct DOM path
+- keep selective region scheduling correct and inspectable as the direct DOM path matures
 - keep slot composition stable through nested/component-heavy fixtures
-- keep compiler-native state scheduling inspectable through `dump-invalidation-graph`
-- harden `weiv dev` into a stronger watch/rebuild workflow
-- keep TodoMVC as the forcing-function verification app
+- keep compiler-native state scheduling inspectable through `inspect invalidation-graph`
+- harden diagnostics and rebuild ergonomics on top of the new `weiv dev` watch loop
+- keep TodoMVC as a useful forcing-function app while defining a larger flagship verification app
 - preserve a small runtime boundary and move complexity into compiler output

@@ -8,6 +8,12 @@ direct-DOM browser path.
 The current vocabulary for this architecture is documented in
 [Terminology](./terminology.md).
 
+The current direction for the next script-side precision upgrade is documented
+in [AST Script Analysis Plan](./ast-script-analysis-plan.md).
+The current design direction for future explicit compiler-facing script helpers
+is documented in [Authoring Helpers](./authoring-helpers.md), but that is
+currently deferred behind AST-backed analysis work.
+
 The repo currently has:
 
 - `.weiv` parsing and validation
@@ -22,6 +28,14 @@ The repo currently has:
 - owned-boundary scheduling for direct browser events and selected callbacks
 - conventional `props` plus Weiv-provided `emit` component contracts
 
+The repo also now has documented shared-state/runtime design exploration:
+
+- a candidate `@weiv/store` draft API contract
+- a candidate `@weiv/store` implementation sketch
+- a broader research memo comparing that candidate with stronger runtime-backed
+  options such as MobX-style observability
+- `@weiv/router` intentionally deferred behind shared-state/runtime decisions
+
 ## Direct DOM Path
 
 The direct browser emitter now has:
@@ -35,26 +49,37 @@ The direct browser emitter now has:
 - local callback wrappers for `setTimeout`, `setInterval`, `queueMicrotask`,
   and `requestAnimationFrame`
 
-The important caveat is that selective dirty-binding-to-region execution is not
-fully implemented yet. The structure is present, but flushes still preserve
-current behavior by routing through component update traversal.
+Selective dirty-binding-to-region execution is now implemented for the direct
+browser path. The remaining caveat is that some region guards are still
+conservative, so the runtime may update a broader safe subset of regions than
+the theoretical minimum.
 
 ## Invalidation Graph
 
-`weiv dump-invalidation-graph <path>` reports:
+`weiv inspect invalidation-graph <path>` reports:
 
 - update regions
 - visible dependencies
+- whether each region expression compiled to direct access or still falls back to
+  runtime evaluation
+- coarse fallback reasons for the remaining dynamic expressions
 - mutation sites
 - owned event boundaries
 - hidden-state template call diagnostics
+- hidden-state diagnostics for local helpers that still read external state or
+  perform side effects
+- source-located conservative diagnostics for alias mutation, unowned callback
+  mutation, and expression-position mutation
+- runtime-evaluate fallback diagnostics for expressions that still need
+  `evaluate(...)`
 - expression-position mutation diagnostics
+- visible alias-mutation diagnostics for unsupported simple alias writes
 - unowned callback mutation diagnostics
 - framework binding conflict diagnostics such as user-defined `emit`
 
 This is the primary debugging surface for the compiler-native state model.
 
-`weiv dump-state-plan <path>` remains available as a compatibility alias.
+`weiv inspect state-plan <path>` remains available as a compatibility alias.
 
 ## Composition
 
@@ -90,17 +115,41 @@ error: unsupported bare runtime import in .../examples/unsupported-import/App.we
 
 That stderr is expected and does not indicate test failure.
 
+## Verification Shape
+
+The current verification shape is still uneven:
+
+- many narrow compiler/runtime fixtures
+- TodoMVC as the main app-like verification example
+
+What is still missing is a clearly larger flagship verification app that can
+show the framework's strengths and conservative gaps at a broader scale than
+TodoMVC.
+
+The shared-state/runtime direction is also still at the design/planning stage.
+There is no settled official companion/runtime package yet. The earlier
+`@weiv/store` draft is retained as a candidate, not as a finalized commitment.
+
 ## Known Caveats
 
-- `evaluate(...)` still exists in generated direct browser output.
+- `evaluate(...)` still exists in generated direct browser output for some dynamic
+  expressions, but those fallback sites are now inspectable in
+  `inspect invalidation-graph`.
 - `emit` is reserved and injected, but event payload typing still depends on
   future IDE virtual declarations from `export interface Emits`.
-- Region update functions exist, but dirty binding queues do not yet execute
-  only the minimal affected region set.
-- Local function dependency analysis is still shallow in `dump-invalidation-graph`.
-- Alias analysis is intentionally limited.
+- Region update functions are selective, but some dependency guards are still
+  conservative rather than fully minimal.
+- Local function dependency analysis now expands local helper calls, but alias
+  analysis is still intentionally shallow.
+- Alias analysis is intentionally limited beyond simple diagnosed cases.
 - Arbitrary imported callback registration is not owned by the scheduler.
-- `weiv dev` is still basic and needs watch/rebuild hardening.
+- Binding-phase diagnostics now carry a formal `error` / `warning` / `info`
+  severity model, and invalidation-graph diagnostics now surface `warning` /
+  `info` levels in the inspect output while remaining inspect-only.
+- `weiv dev` now watches and rebuilds, defaults to an ephemeral preview
+  port unless `PORT` is set, and debounces rebuilds after file changes, but
+  the loop is still polling-based and needs polish around long-running process
+  ergonomics.
 
 ## Current Health
 
@@ -109,5 +158,5 @@ The project is in a good checkpoint state:
 - architecture direction is documented
 - current implementation matches the direction
 - direct render verification is green
-- TodoMVC remains the main forcing-function example
+- TodoMVC remains a useful forcing-function example, but not a large flagship verification app
 - stale-risk state patterns are becoming inspectable instead of magical

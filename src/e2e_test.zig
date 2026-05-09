@@ -10,6 +10,7 @@ const style = @import("compiler/emit/browser/scoped_css.zig");
 const directives = @import("compiler/parse/template/directives.zig");
 const ast = @import("compiler/parse/template/ast.zig");
 const sfc = @import("compiler/parse/sfc.zig");
+const cli = @import("cli.zig");
 
 test "classic todo app components build through current pipeline" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -220,9 +221,106 @@ test "basic counter direct browser module emits create/update DOM contract" {
     try std.testing.expect(std.mem.indexOf(u8, js, "document.createElement(\"section\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "addEventListener(\"click\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "return runOwnedBoundary(instance, () => resolved(event));") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function collectDirtyBindings(beforeScope, afterScope)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const dirtyBindings = collectDirtyBindings(beforeScope, afterScope);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateDirtyRegions(instance, dirtyBindings, scope = instance.refresh())") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const dirtySet = new Set(dirtyBindings);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "instance.updateDirty = (dirtyBindings, scope) => updateDirtyRegions(instance, dirtyBindings, scope);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"count\") || dirtySet.has(\"limit\")) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"doubled\") || dirtySet.has(\"count\")) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const resolved = instance.refresh().increment;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const __next_text_0 = String((scope.props.title) ?? \"\");") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const __next_text_2 = String((scope.count) ?? \"\");") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function evaluate(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "evaluate(") == null);
     try std.testing.expect(std.mem.indexOf(u8, js, "refs[") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const __next_text_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, ".data !== __next_text_") != null);
+}
+
+test "direct browser modules compile simple callback-argument expressions directly" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ items.filter((item) => item.done).length }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\  let items = [{ done: true }, { done: false }];
+        \\</script>
+    ;
+
+    var model = try component.build(source, "inline-evaluate-fallback.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "function evaluate(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "scope.items.filter((item) => item.done).length") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "evaluate(\"items.filter((item) => item.done).length\", scope)") == null);
+}
+
+test "direct browser modules compile block-bodied callback-argument expressions directly" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ items.filter((item) => { return item.done; }).length }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\  let items = [{ done: true }, { done: false }];
+        \\</script>
+    ;
+
+    var model = try component.build(source, "inline-block-callback-evaluate-fallback.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "function evaluate(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "scope.items.filter((item) => { return item.done; }).length") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "evaluate(\"items.filter((item) => { return item.done; }).length\", scope)") == null);
+}
+
+test "direct browser modules compile bracket-access expressions directly" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ items[selectedIndex].title }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\  let selectedIndex = 0;
+        \\  let items = [{ title: "One" }, { title: "Two" }];
+        \\</script>
+    ;
+
+    var model = try component.build(source, "inline-bracket-access.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emit_direct_js.emitModule(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "function evaluate(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "scope.items[scope.selectedIndex].title") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "evaluate(\"items[selectedIndex].title\", scope)") == null);
 }
 
 test "conditional toggle direct browser module emits conditional boundary helpers" {
@@ -245,6 +343,8 @@ test "conditional toggle direct browser module emits conditional boundary helper
     try std.testing.expect(std.mem.indexOf(u8, js, "updateRegion_conditional_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "document.createComment(\"if:start\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "replaceBetween(") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateDirtyRegions(instance, dirtyBindings, scope = instance.refresh())") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"open\")) {") != null);
 }
 
 test "todo list direct browser module emits loop boundary helpers" {
@@ -267,6 +367,9 @@ test "todo list direct browser module emits loop boundary helpers" {
     try std.testing.expect(std.mem.indexOf(u8, js, "updateRegion_loop_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "document.createComment(\"for:start\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const loopScope = { ...nextScope, [\"item\"]: currentItem };") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function updateDirtyRegions(instance, dirtyBindings, scope = instance.refresh())") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"visibleItems\") || dirtySet.has(\"items\") || dirtySet.has(\"showCompleted\")) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "dirtySet.has(\"item\")") == null);
 }
 
 test "browser plan formatter exposes inspectable direct DOM plan duplicate coverage" {
@@ -313,9 +416,49 @@ test "invalidation graph formatter exposes regions dependencies and owned bounda
     try std.testing.expect(std.mem.indexOf(u8, formatted, "text ref=") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "attribute ref=") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "deps=[count]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=doubled() eval=direct deps=[doubled,count]") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "mutations") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "count assignment offset=") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "template-event name=click expr=increment owned=true") != null);
+}
+
+test "invalidation graph formatter expands nested local helper dependencies" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ message() }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let count = 1;
+        \\
+        \\  function doubled() {
+        \\    return count * 2;
+        \\  }
+        \\
+        \\  function message() {
+        \\    return doubled();
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/invalidation-graph-local-helper-deps.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=message() eval=direct deps=[message,doubled,count]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "hidden-state expression=message()") == null);
 }
 
 test "invalidation graph formatter diagnoses hidden-state template calls" {
@@ -343,8 +486,173 @@ test "invalidation graph formatter diagnoses hidden-state template calls" {
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "diagnostics") != null);
-    try std.testing.expect(std.mem.indexOf(u8, formatted, "hidden-state expression=getThemeLabel()") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning hidden-state expression=getThemeLabel()") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=no-visible-component-dependency") != null);
+}
+
+test "invalidation graph formatter diagnoses local helper external reads" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ themeLabel() }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  function themeLabel() {
+        \\    return globalThis.__theme?.label ?? "Default";
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/local-helper-hidden-state.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=themeLabel()") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning hidden-state expression=themeLabel() reason=helper-contains-external-reads") != null);
+}
+
+test "invalidation graph formatter diagnoses local helper side effects" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ nextCount() }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let count = 0;
+        \\
+        \\  function nextCount() {
+        \\    count += 1;
+        \\    return count;
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/local-helper-side-effects.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=nextCount()") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning hidden-state expression=nextCount() reason=helper-contains-side-effects") != null);
+}
+
+test "invalidation graph formatter marks simple callback-argument expressions as direct" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ items.filter((item) => item.done).length }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let items = [{ done: true }, { done: false }];
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/invalidation-graph-evaluate-fallback.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=items.filter((item) => item.done).length eval=direct deps=[items]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "runtime-evaluate-fallback expression=items.filter((item) => item.done).length") == null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=callback-argument") == null);
+}
+
+test "invalidation graph formatter marks block-bodied callback-argument expressions as direct" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ items.filter((item) => { return item.done; }).length }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let items = [{ done: true }, { done: false }];
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/invalidation-graph-block-callback-evaluate-fallback.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=items.filter((item) => { return item.done; }).length eval=direct deps=[items]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "runtime-evaluate-fallback expression=items.filter((item) => { return item.done; }).length") == null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=callback-argument") == null);
+}
+
+test "invalidation graph formatter marks bracket-access expressions as direct" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ items[selectedIndex].title }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let selectedIndex = 0;
+        \\  let items = [{ title: "One" }, { title: "Two" }];
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/invalidation-graph-bracket-access.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=items[selectedIndex].title eval=direct deps=[items,selectedIndex]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "runtime-evaluate-fallback expression=items[selectedIndex].title") == null);
 }
 
 test "invalidation graph formatter lists object and container mutation sites" {
@@ -384,6 +692,37 @@ test "invalidation graph formatter lists object and container mutation sites" {
     try std.testing.expect(std.mem.indexOf(u8, formatted, "template-event name=click expr=mutate owned=true") != null);
 }
 
+test "invalidation graph formatter classifies fallback expressions as info" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ items.map(function (item) { return item.done; }).length }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let items = [{ done: true }, { done: false }];
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/invalidation-graph-fallback-info.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=items.map(function (item) { return item.done; }).length eval=fallback reason=dynamic-call-arguments deps=[items]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "info runtime-evaluate-fallback expression=items.map(function (item) { return item.done; }).length reason=dynamic-call-arguments") != null);
+}
+
 test "invalidation graph formatter diagnoses expression-position mutations" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -417,7 +756,7 @@ test "invalidation graph formatter diagnoses expression-position mutations" {
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "diagnostics") != null);
-    try std.testing.expect(std.mem.indexOf(u8, formatted, "expression-mutation binding=count") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning expression-mutation binding=count") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=mutation-not-in-statement-position") != null);
 }
 
@@ -510,10 +849,49 @@ test "invalidation graph formatter diagnoses observable mutation inside unowned 
     const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
     defer allocator.free(formatted);
 
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "callback-registrations") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "callback callee=externalStore.subscribe kind=inline_arrow owned_candidate=false reason=unknown_registration") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "diagnostics") != null);
-    try std.testing.expect(std.mem.indexOf(u8, formatted, "unowned-callback-mutation binding=count") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning unowned-callback-mutation binding=count") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=callback-boundary-not-owned") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "count assignment offset=") == null);
+}
+
+test "invalidation graph formatter diagnoses observable alias mutation" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ user.name }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let user = { name: "Grace" };
+        \\  const alias = user;
+        \\
+        \\  function rename() {
+        \\    alias.name = "Ada";
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/invalidation-graph-alias-mutation.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var plan = try browser_plan.lower(&model.ir_document, allocator);
+    defer plan.deinit(allocator);
+
+    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "diagnostics") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning alias-mutation binding=user alias=alias") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=alias-tracking-not-implemented") != null);
 }
 
 test "direct browser setup wraps timer callbacks in owned boundaries" {
@@ -896,6 +1274,10 @@ test "todomvc app direct browser module preserves child component imports" {
     try std.testing.expect(std.mem.indexOf(u8, js, ".setProps(") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, ".setEventHandlers(") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "return runOwnedBoundary(instance, () => resolved(payload));") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const next = Boolean(scope.todos.length > 0);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const __props_9 = {\"editingId\": scope.editingId, \"items\": scope.visibleTodos()};") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const __props_16 = {\"activeCount\": scope.activeCount(), \"completedCount\": scope.completedCount(), \"filter\": scope.filter};") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const __value_6_checked = scope.isAllCompleted();") != null);
 }
 
 test "conditional direct browser modules destroy outgoing branch before replacement duplicate coverage" {
@@ -938,6 +1320,8 @@ test "direct browser modules emit specialized bound attribute patch code" {
     try std.testing.expect(std.mem.indexOf(u8, counter_js, ".hasAttribute(\"disabled\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, counter_js, ".disabled = __next_") != null);
     try std.testing.expect(std.mem.indexOf(u8, counter_js, ".setAttribute(\"disabled\", \"\")") != null);
+    try std.testing.expect(std.mem.indexOf(u8, counter_js, "const __next_text_2 = String((scope.count) ?? \"\");") != null);
+    try std.testing.expect(std.mem.indexOf(u8, counter_js, "const __value_6_disabled = scope.count >= scope.limit;") != null);
 
     const todo_item_source = try readFixture(allocator, "examples/todomvc/TodoItem.weiv");
     defer allocator.free(todo_item_source);
@@ -966,6 +1350,21 @@ test "direct browser modules emit specialized bound attribute patch code" {
     try std.testing.expect(std.mem.indexOf(u8, text_input_js, ".value !== __next_string_0_value") != null);
     try std.testing.expect(std.mem.indexOf(u8, text_input_js, "getAttribute(\"value\") !== __next_string_0_value") == null);
     try std.testing.expect(std.mem.indexOf(u8, text_input_js, ".setAttribute(\"value\", __next_string_0_value);") != null);
+
+    const todo_footer_source = try readFixture(allocator, "examples/todomvc/TodoFooter.weiv");
+    defer allocator.free(todo_footer_source);
+    var todo_footer_model = try component.build(todo_footer_source, "examples/todomvc/TodoFooter.weiv", allocator);
+    defer todo_footer_model.deinit(allocator);
+
+    const todo_footer_js = try emit_direct_js.emitModule(&todo_footer_model, allocator);
+    defer allocator.free(todo_footer_js);
+
+    try std.testing.expect(std.mem.indexOf(u8, todo_footer_js, "const __next_text_0 = String((scope.props.activeCount) ?? \"\");") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_footer_js, "const __next_text_2 = String((scope.props.activeCount === 1 ? \" item left\" : \" items left\") ?? \"\");") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_footer_js, "const next = Boolean(scope.props.completedCount > 0);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_footer_js, "const __value_5_class = scope.filterClass('all');") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_footer_js, "const __value_7_class = scope.filterClass('active');") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_footer_js, "const __value_9_class = scope.filterClass('completed');") != null);
 }
 
 test "direct browser modules specialize child component update paths" {
@@ -1010,6 +1409,21 @@ test "direct browser modules specialize child component update paths" {
     try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, ".setEventHandlers(") == null);
     try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, "refs[4].setSlots(") != null);
     try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, "refs[4].update();") != null);
+
+    const todo_item_source = try readFixture(allocator, "examples/todomvc/TodoItem.weiv");
+    defer allocator.free(todo_item_source);
+    var todo_item_model = try component.build(todo_item_source, "examples/todomvc/TodoItem.weiv", allocator);
+    defer todo_item_model.deinit(allocator);
+
+    const todo_item_js = try emit_direct_js.emitModule(&todo_item_model, allocator);
+    defer allocator.free(todo_item_js);
+
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "const __props_5 = {\"editing\": true, \"initialValue\": scope.props.todo.title, \"placeholder\": 'Edit task'};") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "const resolved = scope.handleToggle;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "refs[5].setProps({\"editing\": true, \"initialValue\": scope.props.todo.title, \"placeholder\": 'Edit task'});") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "refs[5].setEventHandlers({\"cancel\": (payload) => { const resolved = scope.handleCancel;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "const next = Boolean(scope.props.editing);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "const __value_11_class = scope.itemClass();") != null);
 
     const loop_source =
         \\<template>
@@ -1380,9 +1794,185 @@ test "user-defined emit binding reports framework conflict diagnostic" {
 
     try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
     const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqualStrings("error", diagnostic.severity);
     try std.testing.expectEqualStrings("framework.reserved_binding", diagnostic.kind);
     try std.testing.expectEqualStrings("emit", diagnostic.name);
     try std.testing.expect(std.mem.indexOf(u8, diagnostic.message, "`emit` is provided by Weiv") != null);
+}
+
+test "template helper with external reads reports conservative diagnostic" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <p>{{ themeLabel() }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  function themeLabel() {
+        \\    return globalThis.__theme?.label ?? "Default";
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/helper-external-state-diagnostic.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
+    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqualStrings("warning", diagnostic.severity);
+    try std.testing.expectEqualStrings("helper.external_state", diagnostic.kind);
+    try std.testing.expectEqualStrings("themeLabel", diagnostic.name);
+    try std.testing.expect(std.mem.indexOf(u8, diagnostic.message, "reads external state") != null);
+}
+
+test "template helper with side effects reports conservative diagnostic" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <p>{{ nextCount() }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let count = 0;
+        \\
+        \\  function nextCount() {
+        \\    count += 1;
+        \\    return count;
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/helper-side-effects-diagnostic.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
+    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqualStrings("warning", diagnostic.severity);
+    try std.testing.expectEqualStrings("helper.side_effects", diagnostic.kind);
+    try std.testing.expectEqualStrings("nextCount", diagnostic.name);
+    try std.testing.expect(std.mem.indexOf(u8, diagnostic.message, "has side effects") != null);
+}
+
+test "expression-position mutation reports conservative diagnostic" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <button on:click="mutate">{{ count }}</button>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let count = 0;
+        \\
+        \\  function mutate() {
+        \\    const next = count++;
+        \\    return next;
+        \\  }
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/expression-position-mutation-diagnostic.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
+    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqualStrings("warning", diagnostic.severity);
+    try std.testing.expectEqualStrings("mutation.expression_position", diagnostic.kind);
+    try std.testing.expectEqualStrings("count", diagnostic.name);
+    try std.testing.expect(std.mem.indexOf(u8, diagnostic.message, "nested inside a larger expression") != null);
+}
+
+test "unowned callback mutation reports conservative diagnostic" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <p>{{ count }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let count = 0;
+        \\
+        \\  externalStore.subscribe(() => {
+        \\    count += 1;
+        \\  });
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/unowned-callback-mutation-diagnostic.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
+    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqualStrings("warning", diagnostic.severity);
+    try std.testing.expectEqualStrings("callback.unowned_mutation", diagnostic.kind);
+    try std.testing.expectEqualStrings("count", diagnostic.name);
+    try std.testing.expect(std.mem.indexOf(u8, diagnostic.message, "callback boundary that Weiv does not own") != null);
+}
+
+test "alias mutation reports conservative diagnostic" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <p>{{ user.name }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\
+        \\  let user = { name: "Grace" };
+        \\  const alias = user;
+        \\
+        \\  alias.name = "Ada";
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/alias-mutation-diagnostic.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
+    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqualStrings("warning", diagnostic.severity);
+    try std.testing.expectEqualStrings("alias.mutation", diagnostic.kind);
+    try std.testing.expectEqualStrings("user", diagnostic.name);
+    try std.testing.expect(std.mem.indexOf(u8, diagnostic.message, "through a local alias") != null);
+}
+
+test "component analysis report includes structured script diagnostics" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <p>Hello</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  const count = 0;
+        \\</script>
+    ;
+
+    var model = try component.build(source, "examples/missing-props-diagnostic.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expect(model.script.ok);
+    try std.testing.expectEqual(@as(usize, 1), model.script.diagnostics.len);
+
+    const report = try cli.formatComponentAnalysisReport(model, allocator);
+    defer allocator.free(report);
+
+    try std.testing.expect(std.mem.indexOf(u8, report, "Script analysis\n  ok: true\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "  diagnostics: 1\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "    - error: Missing `export let props: Props` declaration [0:0] [0..0]\n") != null);
 }
 
 fn readFixture(allocator: std.mem.Allocator, path: []const u8) ![]u8 {

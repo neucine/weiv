@@ -19,26 +19,26 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
     const css = try style.emitScopedCss(model, allocator);
     defer allocator.free(css);
 
-    var out = std.ArrayList(u8){};
-    defer out.deinit(allocator);
+    var body = std.ArrayList(u8){};
+    defer body.deinit(allocator);
 
-    try out.appendSlice(allocator, preserved_imports);
-    try helpers.emitPrelude(&out, allocator);
-    try helpers.emitConditionalHelpers(plan.nodes, scope_id, &out, allocator);
-    try out.appendSlice(allocator, setup_js);
-    try out.appendSlice(allocator, "\n");
-    try out.writer(allocator).print("export const scopeId = \"{s}\";\n", .{scope_id});
-    try out.appendSlice(allocator, "export const css = ");
-    try @import("direct_component_js/common.zig").emitString(css, &out, allocator);
-    try out.appendSlice(allocator, ";\n\n");
-    try node_codegen.emitCreateFunction(plan, scope_id, &out, allocator);
-    try out.appendSlice(allocator, "\n");
-    try node_codegen.emitRegionUpdateFunctions(plan, &out, allocator);
-    try out.appendSlice(allocator, "\n");
-    try node_codegen.emitUpdateFunction(plan, &out, allocator);
-    try out.appendSlice(allocator, "\n");
-    try node_codegen.emitDestroyFunction(plan, &out, allocator);
-    try out.appendSlice(allocator,
+    try helpers.emitConditionalHelpers(plan.nodes, scope_id, &body, allocator);
+    try body.appendSlice(allocator, setup_js);
+    try body.appendSlice(allocator, "\n");
+    try body.writer(allocator).print("export const scopeId = \"{s}\";\n", .{scope_id});
+    try body.appendSlice(allocator, "export const css = ");
+    try @import("direct_component_js/common.zig").emitString(css, &body, allocator);
+    try body.appendSlice(allocator, ";\n\n");
+    try node_codegen.emitCreateFunction(plan, scope_id, &body, allocator);
+    try body.appendSlice(allocator, "\n");
+    try node_codegen.emitRegionUpdateFunctions(plan, &body, allocator);
+    try body.appendSlice(allocator, "\n");
+    try node_codegen.emitUpdateFunction(plan, &body, allocator);
+    try body.appendSlice(allocator, "\n");
+    try node_codegen.emitSelectiveUpdateFunction(model, plan, &body, allocator);
+    try body.appendSlice(allocator, "\n");
+    try node_codegen.emitDestroyFunction(plan, &body, allocator);
+    try body.appendSlice(allocator,
         \\
         \\export function createInstance(props = {}, eventHandlers = {}, slots = {}) {
         \\  const base = setup(props, eventHandlers);
@@ -53,6 +53,7 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\    refs: [],
         \\    destroyed: false,
         \\    update: () => {},
+        \\    updateDirty: () => {},
         \\    destroy: () => {},
         \\  };
         \\  instance.setBoundaryRunner((callback) => runOwnedBoundary(instance, callback));
@@ -65,6 +66,7 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\  const fragment = createDom(instance);
         \\  replaceBetween(start, end, fragment);
         \\  instance.update = () => updateDom(instance);
+        \\  instance.updateDirty = (dirtyBindings, scope) => updateDirtyRegions(instance, dirtyBindings, scope);
         \\  instance.destroy = () => { instance.destroyed = true; destroyDom(instance); replaceBetween(start, end, document.createDocumentFragment()); };
         \\  instance.update();
         \\  return {
@@ -87,6 +89,14 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\}
         \\
     );
+
+    const needs_evaluate = std.mem.indexOf(u8, body.items, "evaluate(") != null;
+
+    var out = std.ArrayList(u8){};
+    defer out.deinit(allocator);
+    try out.appendSlice(allocator, preserved_imports);
+    try helpers.emitPrelude(&out, allocator, needs_evaluate);
+    try out.appendSlice(allocator, body.items);
 
     return try out.toOwnedSlice(allocator);
 }

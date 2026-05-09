@@ -25,12 +25,14 @@ pub const ComponentRef = struct {
 };
 
 pub const Diagnostic = struct {
+    severity: []const u8,
     kind: []const u8,
     name: []const u8,
     message: []const u8,
     span: sfc.Span,
 
     fn deinit(self: *Diagnostic, allocator: std.mem.Allocator) void {
+        allocator.free(self.severity);
         allocator.free(self.kind);
         allocator.free(self.name);
         allocator.free(self.message);
@@ -166,6 +168,7 @@ pub fn bind(
     }
 
     try validateFrameworkBindings(script, &diagnostics, allocator);
+    try validateStateModelDiagnostics(script, &diagnostics, allocator);
 
     var loader = NeighbourLoader.init(allocator, parent_path, script);
     defer loader.deinit();
@@ -194,6 +197,54 @@ fn validateFrameworkBindings(
                 .{ .start = binding.span_start, .end = binding.span_end },
                 allocator,
             );
+        }
+    }
+}
+
+fn validateStateModelDiagnostics(
+    script: *const script_analysis.ScriptAnalysis,
+    diagnostics: *std.ArrayList(Diagnostic),
+    allocator: std.mem.Allocator,
+) !void {
+    for (script.state_analysis.mutations) |mutation| {
+        if (findAliasTarget(script, mutation.binding)) |target| {
+            if (isVisibleBinding(target, script)) {
+                try appendDiagnostic(
+                    diagnostics,
+                    "alias.mutation",
+                    target,
+                    "Mutation through a local alias is only shallowly tracked today, so Weiv will treat this site conservatively",
+                    .{ .start = mutation.span_start, .end = mutation.span_end },
+                    allocator,
+                );
+            }
+            continue;
+        }
+
+        if (!isVisibleBinding(mutation.binding, script)) continue;
+
+        if (!mutation.statement_position) {
+            try appendDiagnostic(
+                diagnostics,
+                "mutation.expression_position",
+                mutation.binding,
+                "Mutation is nested inside a larger expression, so Weiv will treat this site conservatively",
+                .{ .start = mutation.span_start, .end = mutation.span_end },
+                allocator,
+            );
+            continue;
+        }
+
+        if (mutation.inside_callback and !mutation.callback_owned_candidate) {
+            try appendDiagnostic(
+                diagnostics,
+                "callback.unowned_mutation",
+                mutation.binding,
+                "Mutation happens inside a callback boundary that Weiv does not own, so updates are conservative here",
+                .{ .start = mutation.span_start, .end = mutation.span_end },
+                allocator,
+            );
+            continue;
         }
     }
 }
@@ -372,11 +423,40 @@ fn bindExpression(
         i += 1;
         while (i < expression.len and isIdentifierContinue(expression[i])) : (i += 1) {}
         const ident = expression[start..i];
+        const is_call = nextNonSpaceIs(expression, i, '(');
 
         if (isKeyword(ident)) continue;
         if (start > 0 and expression[start - 1] == '.') continue;
         if (seen.contains(ident)) continue;
         try seen.put(ident, {});
+
+        if (is_call) {
+            if (findVisibleHelper(script, ident)) |helper| {
+                const ident_span = sfc.Span{
+                    .start = span.start + start,
+                    .end = span.start + i,
+                };
+                if (helper.contains_external_reads) {
+                    try appendDiagnostic(
+                        diagnostics,
+                        "helper.external_state",
+                        ident,
+                        "Local helper reads external state, so Weiv will treat this template call conservatively",
+                        ident_span,
+                        allocator,
+                    );
+                } else if (helper.contains_side_effects) {
+                    try appendDiagnostic(
+                        diagnostics,
+                        "helper.side_effects",
+                        ident,
+                        "Local helper has side effects, so Weiv will treat this template call conservatively",
+                        ident_span,
+                        allocator,
+                    );
+                }
+            }
+        }
 
         if (!isNameVisible(ident, script, scopes)) {
             const ident_span = sfc.Span{
@@ -397,11 +477,25 @@ fn appendDiagnostic(
     allocator: std.mem.Allocator,
 ) anyerror!void {
     try diagnostics.append(allocator, .{
+        .severity = try allocator.dupe(u8, classifyDiagnosticSeverity(kind)),
         .kind = try allocator.dupe(u8, kind),
         .name = try allocator.dupe(u8, name),
         .message = try allocator.dupe(u8, message),
         .span = span,
     });
+}
+
+fn classifyDiagnosticSeverity(kind: []const u8) []const u8 {
+    if (std.mem.eql(u8, kind, "framework.reserved_binding")) return "error";
+    if (std.mem.eql(u8, kind, "unresolved_binding")) return "error";
+    if (std.mem.eql(u8, kind, "unresolved_component")) return "error";
+    if (std.mem.startsWith(u8, kind, "slot.")) return "error";
+    if (std.mem.eql(u8, kind, "helper.external_state")) return "warning";
+    if (std.mem.eql(u8, kind, "helper.side_effects")) return "warning";
+    if (std.mem.eql(u8, kind, "mutation.expression_position")) return "warning";
+    if (std.mem.eql(u8, kind, "callback.unowned_mutation")) return "warning";
+    if (std.mem.eql(u8, kind, "alias.mutation")) return "warning";
+    return "info";
 }
 
 fn isNameVisible(name: []const u8, script: *const script_analysis.ScriptAnalysis, scopes: []const Scope) bool {
@@ -419,6 +513,32 @@ fn isNameVisible(name: []const u8, script: *const script_analysis.ScriptAnalysis
     return false;
 }
 
+fn findVisibleHelper(script: *const script_analysis.ScriptAnalysis, name: []const u8) ?script_analysis.HelperRecord {
+    for (script.bindings) |binding| {
+        if (!binding.template_visible or !binding.callable) continue;
+        if (!std.mem.eql(u8, binding.name, name)) continue;
+        for (script.state_analysis.helpers) |helper| {
+            if (std.mem.eql(u8, helper.name, name)) return helper;
+        }
+        return null;
+    }
+    return null;
+}
+
+fn findAliasTarget(script: *const script_analysis.ScriptAnalysis, alias_name: []const u8) ?[]const u8 {
+    for (script.state_analysis.aliases) |alias| {
+        if (std.mem.eql(u8, alias.alias, alias_name)) return alias.target;
+    }
+    return null;
+}
+
+fn isVisibleBinding(name: []const u8, script: *const script_analysis.ScriptAnalysis) bool {
+    for (script.bindings) |binding| {
+        if (binding.template_visible and std.mem.eql(u8, binding.name, name)) return true;
+    }
+    return false;
+}
+
 fn isComponentTag(tag_name: []const u8) bool {
     if (tag_name.len == 0) return false;
     return std.ascii.isUpper(tag_name[0]);
@@ -430,6 +550,15 @@ fn isIdentifierStart(char: u8) bool {
 
 fn isIdentifierContinue(char: u8) bool {
     return isIdentifierStart(char) or std.ascii.isDigit(char);
+}
+
+fn nextNonSpaceIs(expr: []const u8, idx: usize, expected: u8) bool {
+    var cursor = idx;
+    while (cursor < expr.len) : (cursor += 1) {
+        if (expr[cursor] == ' ' or expr[cursor] == '\n' or expr[cursor] == '\r' or expr[cursor] == '\t') continue;
+        return expr[cursor] == expected;
+    }
+    return false;
 }
 
 fn isKeyword(value: []const u8) bool {

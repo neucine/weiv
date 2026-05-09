@@ -29,5 +29,7 @@ Together, these examples exercise:
 
 ## Notes
 
-- `examples/todomvc` is the primary full-app verification example.
+- `examples/todomvc` is the primary smaller app-scale verification example.
 - The smaller fixtures remain useful for narrow compiler regressions.
+- The repo still needs a clearly larger flagship verification app above
+  TodoMVC.

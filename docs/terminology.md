@@ -85,7 +85,7 @@ This creates two region dependencies:
 - the text region depends on `label`
 
 Dependency analysis is compiler-owned. It should be visible in
-`dump-invalidation-graph`.
+`inspect invalidation-graph`.
 
 ### Dirty Binding
 
@@ -166,7 +166,7 @@ A deliberate broader update when the compiler cannot prove the exact affected
 regions.
 
 Fallbacks are allowed, but they should be explicit in generated structure and
-inspectable in `dump-invalidation-graph`. The model should prefer correct coarse updates
+inspectable in `inspect invalidation-graph`. The model should prefer correct coarse updates
 over silent stale UI.
 
 ## Inspectability
@@ -179,10 +179,10 @@ regions, mutation sites, and owned boundaries relate.
 The command is:
 
 ```sh
-zig build run -- dump-invalidation-graph path/to/Component.weiv
+zig build run -- inspect invalidation-graph path/to/Component.weiv
 ```
 
-The older `dump-state-plan` command remains as a compatibility alias.
+The older `inspect state-plan` command remains as a compatibility alias.
 
 The invalidation graph is the primary debugging surface for stale UI questions.
 
