@@ -2,9 +2,6 @@ const std = @import("std");
 const component = @import("compiler/pipeline/index.zig");
 const app_emit = @import("compiler/emit/browser/app_bundle.zig");
 const emit_direct_js = @import("compiler/emit/browser/direct_component_js.zig");
-const legacy_emit_js = @import("compiler/emit/browser/legacy/document_js.zig");
-const legacy_emit_module_js = @import("compiler/emit/browser/legacy/component_module_js.zig");
-const legacy_runtime_js = @import("compiler/emit/browser/legacy/shared_runtime_js.zig");
 const style = @import("compiler/emit/browser/scoped_css.zig");
 const browser_plan = @import("compiler/lower/browser_plan/index.zig");
 const invalidation_graph = @import("compiler/lower/invalidation_graph/index.zig");
@@ -70,7 +67,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
             try runInspectBrowserPlan(path, allocator);
             return;
         }
-        if (std.mem.eql(u8, subcommand, "invalidation-graph") or std.mem.eql(u8, subcommand, "state-plan")) {
+        if (std.mem.eql(u8, subcommand, "invalidation-graph")) {
             const path = args.next() orelse {
                 try printUsage();
                 return;
@@ -126,32 +123,12 @@ pub fn run(allocator: std.mem.Allocator) !void {
                 try runEmitJs(path, allocator);
                 return;
             }
-            if (std.mem.eql(u8, phase, "render-js")) {
-                const path = args.next() orelse {
-                    try printUsage();
-                    return;
-                };
-                try runEmitRenderJs(path, allocator);
-                return;
-            }
-            if (std.mem.eql(u8, phase, "browser-direct-js")) {
-                const path = args.next() orelse {
-                    try printUsage();
-                    return;
-                };
-                try runEmitBrowserDirectJs(path, allocator);
-                return;
-            }
             if (std.mem.eql(u8, phase, "css")) {
                 const path = args.next() orelse {
                     try printUsage();
                     return;
                 };
                 try runEmitCss(path, allocator);
-                return;
-            }
-            if (std.mem.eql(u8, phase, "runtime-js")) {
-                try runEmitRuntimeJs(allocator);
                 return;
             }
             if (std.mem.eql(u8, phase, "app")) {
@@ -166,32 +143,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
                 try app_emit.emitApp(root_path, out_dir, allocator);
                 return;
             }
-            if (std.mem.eql(u8, phase, "app-legacy")) {
-                const root_path = args.next() orelse {
-                    try printUsage();
-                    return;
-                };
-                const out_dir = args.next() orelse {
-                    try printUsage();
-                    return;
-                };
-                try app_emit.emitAppLegacy(root_path, out_dir, allocator);
-                return;
-            }
             try printUsage();
-            return;
-        }
-
-        if (std.mem.eql(u8, maybe_subcommand, "legacy")) {
-            const root_path = args.next() orelse {
-                try printUsage();
-                return;
-            };
-            const out_dir = args.next() orelse {
-                try printUsage();
-                return;
-            };
-            try app_emit.emitAppLegacy(root_path, out_dir, allocator);
             return;
         }
 
@@ -238,9 +190,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
     }
 
     if (std.mem.eql(u8, command, "inspect-invalidation-graph") or
-        std.mem.eql(u8, command, "inspect-state-plan") or
-        std.mem.eql(u8, command, "dump-invalidation-graph") or
-        std.mem.eql(u8, command, "dump-state-plan"))
+        std.mem.eql(u8, command, "dump-invalidation-graph"))
     {
         const path = args.next() orelse {
             try printUsage();
@@ -259,35 +209,12 @@ pub fn run(allocator: std.mem.Allocator) !void {
         return;
     }
 
-    if (std.mem.eql(u8, command, "emit-render-js")) {
-        const path = args.next() orelse {
-            try printUsage();
-            return;
-        };
-        try runEmitRenderJs(path, allocator);
-        return;
-    }
-
-    if (std.mem.eql(u8, command, "emit-browser-direct-js")) {
-        const path = args.next() orelse {
-            try printUsage();
-            return;
-        };
-        try runEmitBrowserDirectJs(path, allocator);
-        return;
-    }
-
     if (std.mem.eql(u8, command, "emit-css")) {
         const path = args.next() orelse {
             try printUsage();
             return;
         };
         try runEmitCss(path, allocator);
-        return;
-    }
-
-    if (std.mem.eql(u8, command, "emit-runtime-js")) {
-        try runEmitRuntimeJs(allocator);
         return;
     }
 
@@ -304,19 +231,6 @@ pub fn run(allocator: std.mem.Allocator) !void {
         return;
     }
 
-    if (std.mem.eql(u8, command, "emit-app-legacy")) {
-        const root_path = args.next() orelse {
-            try printUsage();
-            return;
-        };
-        const out_dir = args.next() orelse {
-            try printUsage();
-            return;
-        };
-        try app_emit.emitAppLegacy(root_path, out_dir, allocator);
-        return;
-    }
-
     if (std.mem.eql(u8, command, "dev")) {
         const root_path = args.next() orelse {
             try printUsage();
@@ -324,17 +238,6 @@ pub fn run(allocator: std.mem.Allocator) !void {
         };
         const out_dir = args.next() orelse ".zig-cache/weiv-dev-direct";
         try app_emit.emitApp(root_path, out_dir, allocator);
-        try runDevServer(root_path, out_dir, allocator);
-        return;
-    }
-
-    if (std.mem.eql(u8, command, "dev-legacy")) {
-        const root_path = args.next() orelse {
-            try printUsage();
-            return;
-        };
-        const out_dir = args.next() orelse ".zig-cache/weiv-dev-legacy";
-        try app_emit.emitAppLegacy(root_path, out_dir, allocator);
         try runDevServer(root_path, out_dir, allocator);
         return;
     }
@@ -412,24 +315,6 @@ fn runEmitJs(path: []const u8, allocator: std.mem.Allocator) !void {
     var loaded = try loadComponent(path, allocator);
     defer loaded.deinit(allocator);
 
-    const js = try legacy_emit_js.emitDocument(&loaded.model.ir_document, allocator);
-    defer allocator.free(js);
-    try std.fs.File.stdout().writeAll(js);
-}
-
-fn runEmitRenderJs(path: []const u8, allocator: std.mem.Allocator) !void {
-    var loaded = try loadComponent(path, allocator);
-    defer loaded.deinit(allocator);
-
-    const js = try legacy_emit_module_js.emitModule(&loaded.model, allocator);
-    defer allocator.free(js);
-    try std.fs.File.stdout().writeAll(js);
-}
-
-fn runEmitBrowserDirectJs(path: []const u8, allocator: std.mem.Allocator) !void {
-    var loaded = try loadComponent(path, allocator);
-    defer loaded.deinit(allocator);
-
     const js = try emit_direct_js.emitModule(&loaded.model, allocator);
     defer allocator.free(js);
     try std.fs.File.stdout().writeAll(js);
@@ -444,12 +329,6 @@ fn runEmitCss(path: []const u8, allocator: std.mem.Allocator) !void {
     try std.fs.File.stdout().writeAll(css);
 }
 
-fn runEmitRuntimeJs(allocator: std.mem.Allocator) !void {
-    const js = try legacy_runtime_js.emitSharedRuntime(allocator);
-    defer allocator.free(js);
-    try std.fs.File.stdout().writeAll(js);
-}
-
 fn printUsage() !void {
     try std.fs.File.stderr().writeAll(
         \\Usage:
@@ -460,30 +339,22 @@ fn printUsage() !void {
         \\  weiv compile analyze script <path>
         \\  weiv compile analyze component <path>
         \\  weiv compile emit js <path>
-        \\  weiv compile emit browser-direct-js <path>
         \\  weiv compile emit css <path>
         \\  weiv compile emit app <root.weiv> <out-dir>
         \\  weiv dev <root.weiv> [out-dir]
         \\
         \\Compatibility / internal:
-        \\  weiv inspect-state-plan <path>
         \\  weiv analyze-script <path>
         \\  weiv analyze-component <path>
         \\  weiv inspect-ir <path>
         \\  weiv inspect-browser-plan <path>
         \\  weiv inspect-invalidation-graph <path>
         \\  weiv emit-js <path>
-        \\  weiv emit-browser-direct-js <path>
         \\  weiv emit-css <path>
         \\  weiv emit-app <root.weiv> <out-dir>
-        \\  weiv dump-state-plan <path>
         \\  weiv dump-ir <path>
         \\  weiv dump-browser-plan <path>
         \\  weiv dump-invalidation-graph <path>
-        \\  weiv emit-render-js <path>
-        \\  weiv emit-runtime-js
-        \\  weiv emit-app-legacy <root.weiv> <out-dir>
-        \\  weiv dev-legacy <root.weiv> [out-dir]
         \\
     );
 }

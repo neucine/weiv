@@ -183,9 +183,8 @@ Current owned boundaries:
 Unsupported visible stale-risk patterns should diagnose instead of silently
 compiling into stale UI behavior.
 
-`weiv inspect invalidation-graph <path>` is the current inspectability command for regions,
-dependencies, mutation sites, owned boundaries, and diagnostics.
-`weiv inspect state-plan <path>` remains available as a compatibility alias.
+`weiv inspect invalidation-graph <path>` is the current inspectability command
+for regions, dependencies, mutation sites, owned boundaries, and diagnostics.
 
 ## Composition
 
@@ -240,6 +239,6 @@ zig build run -- compile analyze component examples/todomvc/App.weiv
 zig build run -- inspect ir examples/todomvc/App.weiv
 zig build run -- inspect browser-plan examples/todomvc/App.weiv
 zig build run -- inspect invalidation-graph examples/basic-counter.weiv
-zig build run -- compile emit browser-direct-js examples/basic-counter.weiv
+zig build run -- compile emit js examples/basic-counter.weiv
 zig build run -- compile examples/todomvc/App.weiv .zig-cache/todomvc-out
 ```

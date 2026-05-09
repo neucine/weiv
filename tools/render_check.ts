@@ -334,23 +334,11 @@ function emitCommand(args: string[]): string {
   return new TextDecoder().decode(proc.stdout);
 }
 
-function emitRenderModule(componentPath: string): string {
-  return emitCommand(["emit-render-js", componentPath]);
-}
-
 function emitDirectBrowserModule(componentPath: string): string {
-  return emitCommand(["emit-browser-direct-js", componentPath]);
-}
-
-function emitRuntimeModule(): string {
-  return emitCommand(["emit-runtime-js"]);
+  return emitCommand(["emit-js", componentPath]);
 }
 
 function emitAppBundle(rootPath: string, outDir: string): void {
-  emitCommand(["emit-app-legacy", rootPath, outDir]);
-}
-
-function emitDirectAppBundle(rootPath: string, outDir: string): void {
   emitCommand(["emit-app", rootPath, outDir]);
 }
 
@@ -363,7 +351,7 @@ async function loadModules(files: Record<string, string>) {
   try {
     const modules: Record<string, any> = {};
     for (const name of Object.keys(files)) {
-      if (!name.endsWith(".mjs") || name === "weiv-runtime.mjs") continue;
+      if (!name.endsWith(".mjs")) continue;
       const file = join(dir, name);
       modules[name] = await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
     }
@@ -391,8 +379,7 @@ function scopeAttr(scopeId: string): string {
 
 async function main() {
   const modules = await loadModules({
-    "weiv-runtime.mjs": emitRuntimeModule(),
-    "BasicCounter.mjs": emitRenderModule("examples/basic-counter.weiv"),
+    "BasicCounter.mjs": emitDirectBrowserModule("examples/basic-counter.weiv"),
     "BasicCounterDirect.mjs": emitDirectBrowserModule("examples/basic-counter.weiv"),
     "ConditionalToggleDirect.mjs": emitDirectBrowserModule("examples/conditional-toggle.weiv"),
     "Card.mjs": emitDirectBrowserModule("examples/slots/Card.weiv"),
@@ -406,8 +393,8 @@ async function main() {
     "PanelUsage.mjs": emitDirectBrowserModule("examples/slots/PanelUsage.weiv"),
     "TimerCallbackDirect.mjs": emitDirectBrowserModule("examples/timer-callback.weiv"),
     "TodoListDirect.mjs": emitDirectBrowserModule("examples/todo-list.weiv"),
-    "TodoItem.mjs": emitRenderModule("examples/classic-todo/TodoItem.weiv"),
-    "TodoList.mjs": emitRenderModule("examples/classic-todo/TodoList.weiv"),
+    "TodoItem.mjs": emitDirectBrowserModule("examples/classic-todo/TodoItem.weiv"),
+    "TodoList.mjs": emitDirectBrowserModule("examples/classic-todo/TodoList.weiv"),
   });
 
   const basicCounterModule = modules["BasicCounter.mjs"];
@@ -445,16 +432,6 @@ async function main() {
   if (!todoListModule.css.includes(`[data-weiv-scope="${todoListModule.scopeId}"] .todo-list`)) {
     throw new Error("TodoList CSS scope mismatch");
   }
-
-  const basicCounterHtml = basicCounterModule.renderToString({
-    title: "Counter",
-    initialCount: 2,
-  });
-  assertEqual(
-    basicCounterHtml,
-    `<section${scopeAttr(basicCounterModule.scopeId)} class="counter-card"><h2${scopeAttr(basicCounterModule.scopeId)}>Counter</h2><p${scopeAttr(basicCounterModule.scopeId)}>Current count: 2</p><p${scopeAttr(basicCounterModule.scopeId)}>Doubled: 4</p><button${scopeAttr(basicCounterModule.scopeId)}>\n      Increment\n    </button></section>`,
-    "BasicCounter render"
-  );
 
   const directDocument = new FakeDocument();
   const directTarget = directDocument.createElement("div");
@@ -930,40 +907,6 @@ async function main() {
     throw new Error("TodoMVC direct active filter did not drop toggled completed item");
   }
 
-  const todoItemHtml = todoItemModule.renderToString({
-    item: { id: "a", title: "Write tests", completed: false },
-  });
-  assertEqual(
-    todoItemHtml,
-    `<article${scopeAttr(todoItemModule.scopeId)} class="todo-item"><label${scopeAttr(todoItemModule.scopeId)} class="todo-item__label"><input${scopeAttr(todoItemModule.scopeId)} type="checkbox"></input><span${scopeAttr(todoItemModule.scopeId)} class="todo-item__copy"><strong${scopeAttr(todoItemModule.scopeId)}>Write tests</strong><em${scopeAttr(todoItemModule.scopeId)}>In progress</em></span></label></article>`,
-    "TodoItem render"
-  );
-
-  const emptyListHtml = todoListModule.renderToString({
-    items: [],
-    showCompleted: false,
-  });
-  assertEqual(
-    emptyListHtml,
-    `<section${scopeAttr(todoListModule.scopeId)} class="todo-list"><div${scopeAttr(todoListModule.scopeId)} class="todo-list__empty"><p${scopeAttr(todoListModule.scopeId)} class="todo-list__empty-title">Nothing in this lane yet</p><span${scopeAttr(todoListModule.scopeId)} class="todo-list__empty-copy">Active work will land here.</span></div></section>`,
-    "TodoList empty render"
-  );
-
-  const populatedListHtml = todoListModule.renderToString(
-    {
-      items: [{ id: "1", title: "Bind template identifiers", completed: false }],
-      showCompleted: false,
-    },
-    {
-      TodoItem: todoItemModule,
-    }
-  );
-  assertEqual(
-    populatedListHtml,
-    `<section${scopeAttr(todoListModule.scopeId)} class="todo-list"><ul${scopeAttr(todoListModule.scopeId)} class="todo-list__items"><li${scopeAttr(todoListModule.scopeId)}><article${scopeAttr(todoItemModule.scopeId)} class="todo-item"><label${scopeAttr(todoItemModule.scopeId)} class="todo-item__label"><input${scopeAttr(todoItemModule.scopeId)} type="checkbox"></input><span${scopeAttr(todoItemModule.scopeId)} class="todo-item__copy"><strong${scopeAttr(todoItemModule.scopeId)}>Bind template identifiers</strong><em${scopeAttr(todoItemModule.scopeId)}>In progress</em></span></label></article></li></ul></section>`,
-    "TodoList populated render"
-  );
-
   const bundleDir = mkdtempSync(join(tmpdir(), "weiv-app-bundle-"));
   try {
     emitAppBundle("examples/classic-todo/App.weiv", bundleDir);
@@ -998,12 +941,12 @@ async function main() {
     const rootScope = bundleModule.root.scopeId;
     const listScope = bundleModule.components.TodoList.scopeId;
     const itemScope = bundleModule.components.TodoItem.scopeId;
-    const bundledHtml = bundleModule.renderToString({ title: "Classic Todos" });
-    assertEqual(
-      bundledHtml,
-      `<main${scopeAttr(rootScope)} class="todo-app"><div${scopeAttr(rootScope)} class="todo-app__shell"><header${scopeAttr(rootScope)} class="todo-app__hero"><p${scopeAttr(rootScope)} class="todo-app__eyebrow">Verification Example</p><div${scopeAttr(rootScope)} class="todo-app__headline"><h1${scopeAttr(rootScope)}>Classic Todos</h1><p${scopeAttr(rootScope)} class="todo-app__lede">Client runtime, nested components, scoped styles, and TS-backed helpers in one polished example.</p></div><div${scopeAttr(rootScope)} class="todo-app__summary"><strong${scopeAttr(rootScope)}>2 active tasks</strong><span${scopeAttr(rootScope)}>Viewing active tasks</span></div></header><section${scopeAttr(rootScope)} class="todo-app__panel"><div${scopeAttr(rootScope)} class="todo-app__panel-header"><div${scopeAttr(rootScope)}><p${scopeAttr(rootScope)} class="todo-app__panel-label">Inbox</p><h2${scopeAttr(rootScope)}>Product Todo Board</h2></div><button${scopeAttr(rootScope)} class="todo-app__filter">Show completed</button></div><section${scopeAttr(listScope)} class="todo-list"><ul${scopeAttr(listScope)} class="todo-list__items"><li${scopeAttr(listScope)}><article${scopeAttr(itemScope)} class="todo-item"><label${scopeAttr(itemScope)} class="todo-item__label"><input${scopeAttr(itemScope)} type="checkbox"></input><span${scopeAttr(itemScope)} class="todo-item__copy"><strong${scopeAttr(itemScope)}>Polish the flagship todo verification app</strong><em${scopeAttr(itemScope)}>In progress</em></span></label></article></li><li${scopeAttr(listScope)}><article${scopeAttr(itemScope)} class="todo-item"><label${scopeAttr(itemScope)} class="todo-item__label"><input${scopeAttr(itemScope)} type="checkbox"></input><span${scopeAttr(itemScope)} class="todo-item__copy"><strong${scopeAttr(itemScope)}>Tighten DOM event semantics</strong><em${scopeAttr(itemScope)}>In progress</em></span></label></article></li></ul></section></section></div></main>`,
-      "Classic todo bundled render"
-    );
+    if (typeof bundleModule.mount !== "function") {
+      throw new Error("Classic todo bundle missing mount export");
+    }
+    if (!bundleModule.root?.scopeId || !bundleModule.components?.TodoList?.scopeId || !bundleModule.components?.TodoItem?.scopeId) {
+      throw new Error("Classic todo bundle missing scoped component metadata");
+    }
   } finally {
     rmSync(bundleDir, { recursive: true, force: true });
   }
@@ -1043,16 +986,9 @@ async function main() {
     }
 
     const importedHelperBundle = await importModule(join(importedHelperBundleDir, "bundle.mjs"));
-    const importedHelperHtml = importedHelperBundle.renderToString({
-      title: "Codex",
-      count: 7,
-    });
-    const importedScope = importedHelperBundle.root.scopeId;
-    assertEqual(
-      importedHelperHtml,
-      `<section${scopeAttr(importedScope)} class="imported-helper"><h1${scopeAttr(importedScope)}>Hello, Codex!</h1><p${scopeAttr(importedScope)}>7</p></section>`,
-      "Imported helper bundled render"
-    );
+    if (typeof importedHelperBundle.mount !== "function" || !importedHelperBundle.root?.scopeId) {
+      throw new Error("Imported helper bundle missing direct bundle contract");
+    }
   } finally {
     rmSync(importedHelperBundleDir, { recursive: true, force: true });
   }
@@ -1078,16 +1014,9 @@ async function main() {
     }
 
     const importedTsHelperBundle = await importModule(join(importedTsHelperBundleDir, "bundle.mjs"));
-    const importedTsHelperHtml = importedTsHelperBundle.renderToString({
-      title: "Codex",
-      count: 11,
-    });
-    const importedTsScope = importedTsHelperBundle.root.scopeId;
-    assertEqual(
-      importedTsHelperHtml,
-      `<section${scopeAttr(importedTsScope)} class="imported-ts-helper"><h1${scopeAttr(importedTsScope)}>TS hello, Codex!</h1><p${scopeAttr(importedTsScope)}>11</p></section>`,
-      "Imported TS helper bundled render"
-    );
+    if (typeof importedTsHelperBundle.mount !== "function" || !importedTsHelperBundle.root?.scopeId) {
+      throw new Error("Imported TS helper bundle missing direct bundle contract");
+    }
   } finally {
     rmSync(importedTsHelperBundleDir, { recursive: true, force: true });
   }
@@ -1110,12 +1039,9 @@ async function main() {
     const itemScope = todomvcBundle.components.TodoItem.scopeId;
     const footerScope = todomvcBundle.components.TodoFooter.scopeId;
     const inputScope = todomvcBundle.components.TodoTextInput.scopeId;
-    const todomvcHtml = todomvcBundle.renderToString({ title: "todos" });
-    assertEqual(
-      todomvcHtml,
-      `<main${scopeAttr(rootScope)} class="todomvc-page"><section${scopeAttr(rootScope)} class="todoapp"><header${scopeAttr(headerScope)} class="todo-header"><h1${scopeAttr(headerScope)}>todos</h1><input${scopeAttr(inputScope)} autofocus type="text" class="newtodo" placeholder="What needs to be done?" value=""></input></header><section${scopeAttr(rootScope)} class="main"><input${scopeAttr(rootScope)} class="toggle-all" type="checkbox"></input><ul${scopeAttr(listScope)} class="todo-list"><li${scopeAttr(itemScope)} class="completed"><div${scopeAttr(itemScope)} class="view"><input${scopeAttr(itemScope)} class="toggle" type="checkbox" checked></input><label${scopeAttr(itemScope)}>Port TodoMVC into the verification suite</label><button${scopeAttr(itemScope)} class="destroy"></button></div></li><li${scopeAttr(itemScope)}><div${scopeAttr(itemScope)} class="view"><input${scopeAttr(itemScope)} class="toggle" type="checkbox"></input><label${scopeAttr(itemScope)}>Verify root-owned state updates across nested components</label><button${scopeAttr(itemScope)} class="destroy"></button></div></li><li${scopeAttr(itemScope)}><div${scopeAttr(itemScope)} class="view"><input${scopeAttr(itemScope)} class="toggle" type="checkbox"></input><label${scopeAttr(itemScope)}>Exercise edit, filter, and clear-completed flows</label><button${scopeAttr(itemScope)} class="destroy"></button></div></li><li${scopeAttr(itemScope)}><div${scopeAttr(itemScope)} class="view"><input${scopeAttr(itemScope)} class="toggle" type="checkbox"></input><label${scopeAttr(itemScope)}>Keep scoped CSS realistic under a larger tree</label><button${scopeAttr(itemScope)} class="destroy"></button></div></li><li${scopeAttr(itemScope)} class="completed"><div${scopeAttr(itemScope)} class="view"><input${scopeAttr(itemScope)} class="toggle" type="checkbox" checked></input><label${scopeAttr(itemScope)}>Expose the polished preview on the LAN server</label><button${scopeAttr(itemScope)} class="destroy"></button></div></li></ul></section><footer${scopeAttr(footerScope)} class="todo-footer"><span${scopeAttr(footerScope)} class="todo-count"><strong${scopeAttr(footerScope)}>3</strong><span${scopeAttr(footerScope)} class="todo-count__suffix"> items left</span></span><ul${scopeAttr(footerScope)} class="filters"><li${scopeAttr(footerScope)}><button${scopeAttr(footerScope)} class="selected">All</button></li><li${scopeAttr(footerScope)}><button${scopeAttr(footerScope)} class="">Active</button></li><li${scopeAttr(footerScope)}><button${scopeAttr(footerScope)} class="">Completed</button></li></ul><button${scopeAttr(footerScope)} class="clear-completed">Clear completed</button></footer></section></main>`,
-      "TodoMVC bundled render"
-    );
+    if (typeof todomvcBundle.mount !== "function") {
+      throw new Error("TodoMVC bundle missing mount export");
+    }
 
     const fakeDocument = new FakeDocument();
     const appTarget = fakeDocument.createElement("div");
@@ -1208,7 +1134,7 @@ async function main() {
 
   const todomvcDirectBundleDir = mkdtempSync(join(tmpdir(), "weiv-todomvc-direct-bundle-"));
   try {
-    emitDirectAppBundle("examples/todomvc/App.weiv", todomvcDirectBundleDir);
+    emitAppBundle("examples/todomvc/App.weiv", todomvcDirectBundleDir);
     const directBundleModule = await importModule(join(todomvcDirectBundleDir, "bundle.mjs"));
     const directBundleMain = readFileSync(join(todomvcDirectBundleDir, "main.mjs"), "utf8");
     if (!directBundleMain.includes("AppBundle.mount(target, props);")) {

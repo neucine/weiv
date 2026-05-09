@@ -80,8 +80,6 @@ the theoretical minimum.
 
 This is the primary debugging surface for the compiler-native state model.
 
-`weiv inspect state-plan <path>` remains available as a compatibility alias.
-
 ## Composition
 
 Slots are implemented and covered by compiler and render tests.

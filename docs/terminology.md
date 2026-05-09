@@ -182,7 +182,7 @@ The command is:
 zig build run -- inspect invalidation-graph path/to/Component.weiv
 ```
 
-The older `inspect state-plan` command remains as a compatibility alias.
+The canonical inspect command is `inspect invalidation-graph`.
 
 The invalidation graph is the primary debugging surface for stale UI questions.
 

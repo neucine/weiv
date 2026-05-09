@@ -1,30 +1,7 @@
 const std = @import("std");
-const legacy_runtime_js = @import("legacy/shared_runtime_js.zig");
 const bundle_graph = @import("app_bundle/graph.zig");
 
-const EmitMode = enum {
-    legacy,
-    direct,
-};
-
 pub fn emitApp(root_component_path: []const u8, out_dir_path: []const u8, allocator: std.mem.Allocator) !void {
-    return emitAppDirect(root_component_path, out_dir_path, allocator);
-}
-
-pub fn emitAppLegacy(root_component_path: []const u8, out_dir_path: []const u8, allocator: std.mem.Allocator) !void {
-    try emitAppWithMode(root_component_path, out_dir_path, .legacy, allocator);
-}
-
-pub fn emitAppDirect(root_component_path: []const u8, out_dir_path: []const u8, allocator: std.mem.Allocator) !void {
-    try emitAppWithMode(root_component_path, out_dir_path, .direct, allocator);
-}
-
-fn emitAppWithMode(
-    root_component_path: []const u8,
-    out_dir_path: []const u8,
-    mode: EmitMode,
-    allocator: std.mem.Allocator,
-) !void {
     const root_abs_path = try std.fs.cwd().realpathAlloc(allocator, root_component_path);
     defer allocator.free(root_abs_path);
 
@@ -38,26 +15,13 @@ fn emitAppWithMode(
     var out_dir = try std.fs.cwd().makeOpenPath(out_dir_path, .{});
     defer out_dir.close();
 
-    if (mode == .legacy) {
-        const runtime_source = try legacy_runtime_js.emitSharedRuntime(allocator);
-        defer allocator.free(runtime_source);
-        try out_dir.writeFile(.{ .sub_path = "weiv-runtime.mjs", .data = runtime_source });
-    }
-
     const styles_css = try graph.emitStylesheet(allocator);
     defer allocator.free(styles_css);
     try out_dir.writeFile(.{ .sub_path = "styles.css", .data = styles_css });
 
-    const entry_source = switch (mode) {
-        .legacy => blk: {
-            try graph.writeComponentModules(out_dir, allocator);
-            break :blk try graph.emitEntry(root_index, allocator);
-        },
-        .direct => blk: {
-            try graph.writeComponentModulesDirect(out_dir, allocator);
-            break :blk try graph.emitDirectEntry(root_index, allocator);
-        },
-    };
+    try graph.writeComponentModulesDirect(out_dir, allocator);
+
+    const entry_source = try graph.emitDirectEntry(root_index, allocator);
     defer allocator.free(entry_source);
     try out_dir.writeFile(.{ .sub_path = "bundle.mjs", .data = entry_source });
 

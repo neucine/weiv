@@ -1,7 +1,6 @@
 const std = @import("std");
 const component = @import("../../../pipeline/index.zig");
 const emit_direct_js = @import("../direct_component_js.zig");
-const legacy_emit_module_js = @import("../legacy/component_module_js.zig");
 const parser_backend = @import("../../../../ffi/parser_backend.zig");
 const style = @import("../scoped_css.zig");
 
@@ -96,20 +95,6 @@ pub const Graph = struct {
         return try out.toOwnedSlice(allocator);
     }
 
-    pub fn writeComponentModules(self: *Graph, out_dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
-        for (self.nodes.items) |*node| {
-            const module_dir = std.fs.path.dirname(node.module_rel_path) orelse ".";
-            const runtime_import = try std.fs.path.relative(allocator, module_dir, "weiv-runtime.mjs");
-            defer allocator.free(runtime_import);
-            const runtime_specifier = try ensureRelativeSpecifier(runtime_import, allocator);
-            defer allocator.free(runtime_specifier);
-
-            const js = try legacy_emit_module_js.emitModuleWithRuntimeImport(&node.model, runtime_specifier, allocator);
-            defer allocator.free(js);
-            try out_dir.writeFile(.{ .sub_path = node.module_rel_path, .data = js });
-        }
-    }
-
     pub fn writeComponentModulesDirect(self: *Graph, out_dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
         for (self.nodes.items) |*node| {
             const js = try emit_direct_js.emitModule(&node.model, allocator);
@@ -135,67 +120,6 @@ pub const Graph = struct {
                 try validateRuntimeImportSpecifier(node.abs_path, import_record.source);
             }
         }
-    }
-
-    pub fn emitEntry(self: *Graph, root_index: usize, allocator: std.mem.Allocator) ![]u8 {
-        var out = std.ArrayList(u8){};
-        defer out.deinit(allocator);
-
-        const root_import_path = try ensureRelativeSpecifier(self.nodes.items[root_index].module_rel_path, allocator);
-        defer allocator.free(root_import_path);
-        try out.writer(allocator).print("import * as Root from \"{s}\";\n", .{root_import_path});
-
-        var sorted = std.ArrayList(ComponentImport){};
-        defer sorted.deinit(allocator);
-
-        var iter = self.component_registry.iterator();
-        while (iter.next()) |entry| {
-            try sorted.append(allocator, .{
-                .tag_name = entry.key_ptr.*,
-                .node_index = entry.value_ptr.*,
-            });
-        }
-
-        std.mem.sort(ComponentImport, sorted.items, {}, compareComponentImport);
-
-        for (sorted.items, 0..) |entry, idx| {
-            const import_alias = try std.fmt.allocPrint(allocator, "Component_{d}", .{idx});
-            defer allocator.free(import_alias);
-            const import_path = try ensureRelativeSpecifier(self.nodes.items[entry.node_index].module_rel_path, allocator);
-            defer allocator.free(import_path);
-            try out.writer(allocator).print("import * as {s} from \"{s}\";\n", .{ import_alias, import_path });
-        }
-
-        try out.appendSlice(allocator,
-            \\
-            \\export const components = {
-            \\
-        );
-        for (sorted.items, 0..) |entry, idx| {
-            try out.writer(allocator).print("  \"{s}\": Component_{d}", .{ entry.tag_name, idx });
-            if (idx + 1 < sorted.items.len) {
-                try out.appendSlice(allocator, ",\n");
-            } else {
-                try out.appendSlice(allocator, "\n");
-            }
-        }
-        try out.appendSlice(allocator,
-            \\};
-            \\
-            \\export const root = Root;
-            \\export const cssPath = "./styles.css";
-            \\
-            \\export function renderToString(props = {}) {
-            \\  return Root.renderToString(props, components);
-            \\}
-            \\
-            \\export function mount(target, props = {}) {
-            \\  return Root.mount(target, props, components);
-            \\}
-            \\
-        );
-
-        return try out.toOwnedSlice(allocator);
     }
 
     pub fn emitBrowserEntry(self: *Graph, allocator: std.mem.Allocator) ![]u8 {

@@ -4,8 +4,6 @@ const component = @import("compiler/pipeline/index.zig");
 const browser_plan = @import("compiler/lower/browser_plan/index.zig");
 const invalidation_graph = @import("compiler/lower/invalidation_graph/index.zig");
 const emit_direct_js = @import("compiler/emit/browser/direct_component_js.zig");
-const emit_js = @import("compiler/emit/browser/legacy/document_js.zig");
-const emit_module_js = @import("compiler/emit/browser/legacy/component_module_js.zig");
 const style = @import("compiler/emit/browser/scoped_css.zig");
 const directives = @import("compiler/parse/template/directives.zig");
 const ast = @import("compiler/parse/template/ast.zig");
@@ -133,68 +131,6 @@ test "classic todo app app component lowers to expected IR shape" {
         },
         else => return error.UnexpectedIrShape,
     }
-}
-
-test "classic todo list component emits expected structural JS markers" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const source = try readFixture(allocator, "examples/classic-todo/TodoList.weiv");
-    defer allocator.free(source);
-
-    var model = try component.build(source, "examples/classic-todo/TodoList.weiv", allocator);
-    defer model.deinit(allocator);
-
-    const js = try emit_js.emitDocument(&model.ir_document, allocator);
-    defer allocator.free(js);
-
-    const expected = try readFixture(allocator, "tools/fixtures/expected/classic-todo-list.emit.js");
-    defer allocator.free(expected);
-    try std.testing.expectEqualStrings(expected, js);
-}
-
-test "classic todo app component emits expected JS snapshot" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const source = try readFixture(allocator, "examples/classic-todo/App.weiv");
-    defer allocator.free(source);
-
-    var model = try component.build(source, "examples/classic-todo/App.weiv", allocator);
-    defer model.deinit(allocator);
-
-    const js = try emit_js.emitDocument(&model.ir_document, allocator);
-    defer allocator.free(js);
-
-    const expected = try readFixture(allocator, "tools/fixtures/expected/classic-todo-app.emit.js");
-    defer allocator.free(expected);
-    try std.testing.expectEqualStrings(expected, js);
-}
-
-test "basic counter render module exposes renderToString contract" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const source = try readFixture(allocator, "examples/basic-counter.weiv");
-    defer allocator.free(source);
-
-    var model = try component.build(source, "examples/basic-counter.weiv", allocator);
-    defer model.deinit(allocator);
-
-    const js = try emit_module_js.emitModule(&model, allocator);
-    defer allocator.free(js);
-
-    try std.testing.expect(std.mem.indexOf(u8, js, "export function renderToString") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "function setup(__weiv_props, __weiv_emit = () => {})") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "import { renderNodes, mountNodes, createBoundary, replaceBoundary } from \"./weiv-runtime.mjs\";") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "export const scopeId = ") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "export const css = ") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "export function mount(target, props = {}, components = {}, eventHandlers = {}, slots = {})") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "export function mountIntoBoundary(start, end, props = {}, components = {}, eventHandlers = {}, slots = {})") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "kind: \"interpolation\"") != null);
 }
 
 test "basic counter direct browser module emits create/update DOM contract" {
@@ -1337,30 +1273,6 @@ test "slot outlet parses and lowers fallback content" {
     }
 }
 
-test "legacy render module supports default slot projection and fallback" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const panel_source = try readFixture(allocator, "examples/slots/Panel.weiv");
-    defer allocator.free(panel_source);
-    var panel_model = try component.build(panel_source, "examples/slots/Panel.weiv", allocator);
-    defer panel_model.deinit(allocator);
-
-    const panel_usage_source = try readFixture(allocator, "examples/slots/PanelUsage.weiv");
-    defer allocator.free(panel_usage_source);
-    var usage_model = try component.build(panel_usage_source, "examples/slots/PanelUsage.weiv", allocator);
-    defer usage_model.deinit(allocator);
-
-    const panel_js = try emit_module_js.emitModule(&panel_model, allocator);
-    defer allocator.free(panel_js);
-    const usage_js = try emit_module_js.emitModule(&usage_model, allocator);
-    defer allocator.free(usage_js);
-
-    try std.testing.expect(std.mem.indexOf(u8, panel_js, "renderToString(props = {}, components = {}, slots = {})") != null);
-    try std.testing.expect(std.mem.indexOf(u8, usage_js, "slots: {\"default\": { nodes: [") != null);
-}
-
 test "direct browser modules expose default slot projection contract" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -1782,7 +1694,7 @@ test "todomvc direct app bundle emits browser-direct entry files" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "direct-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitAppDirect("examples/todomvc/App.weiv", out_dir, allocator);
+    try app_emit.emitApp("examples/todomvc/App.weiv", out_dir, allocator);
 
     const bundle_js = try tmp_dir.dir.readFileAlloc(allocator, "direct-bundle/bundle.mjs", 1024 * 1024);
     defer allocator.free(bundle_js);
@@ -1806,11 +1718,11 @@ test "imported helper render module preserves runtime JS imports" {
     var model = try component.build(source, "examples/imported-helper/App.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_module_js.emitModule(&model, allocator);
+    const js = try emit_direct_js.emitModule(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "import { formatTitle } from \"./format.js\";") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "return formatTitle(props.title);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "formatTitle(") != null);
 }
 
 test "imported TS helper render module rewrites runtime imports to JS" {
@@ -1824,11 +1736,11 @@ test "imported TS helper render module rewrites runtime imports to JS" {
     var model = try component.build(source, "examples/imported-ts-helper/App.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_module_js.emitModule(&model, allocator);
+    const js = try emit_direct_js.emitModule(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "import { formatTitle } from \"./format.js\";") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "return formatTitle(props.title);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "formatTitle(") != null);
 }
 
 test "basic counter emits scoped CSS" {
@@ -1864,7 +1776,7 @@ test "classic todo app emits multi-file app bundle" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitAppLegacy("examples/classic-todo/App.weiv", out_dir, allocator);
+    try app_emit.emitApp("examples/classic-todo/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "bundle/bundle.mjs", 1024 * 1024);
     defer allocator.free(app_js);
@@ -1885,7 +1797,6 @@ test "classic todo app emits multi-file app bundle" {
     const styles_css = try tmp_dir.dir.readFileAlloc(allocator, "bundle/styles.css", 1024 * 1024);
     defer allocator.free(styles_css);
 
-    try std.testing.expect(std.mem.indexOf(u8, app_js, "export function renderToString") != null);
     try std.testing.expect(std.mem.indexOf(u8, app_js, "\"TodoList\": Component_") != null);
     try std.testing.expect(std.mem.indexOf(u8, app_js, "\"TodoItem\": Component_") != null);
     try std.testing.expect(std.mem.indexOf(u8, browser_entry_js, "import { props as previewProps } from \"./props.mjs\";") != null);
@@ -1899,8 +1810,8 @@ test "classic todo app emits multi-file app bundle" {
     try std.testing.expect(std.mem.indexOf(u8, package_json, "\"start\": \"bun server.ts\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, dev_server_ts, "const server = Bun.serve({") != null);
     try std.testing.expect(std.mem.indexOf(u8, dev_server_ts, "pathname === \"/\" ? \"/index.html\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, root_module_js, "export const scopeId = ") != null);
     try std.testing.expect(std.mem.indexOf(u8, app_js, "export function mount(target, props = {})") != null);
+    try std.testing.expect(std.mem.indexOf(u8, app_js, "Root.mount(target, props)") != null);
     try std.testing.expect(std.mem.indexOf(u8, list_module_js, "export const css = ") != null);
     try std.testing.expect(std.mem.indexOf(u8, styles_css, "[data-weiv-scope=") != null);
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".todo-app") != null);
@@ -1918,12 +1829,10 @@ test "todomvc verification app emits multi-file app bundle" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "todomvc-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitAppLegacy("examples/todomvc/App.weiv", out_dir, allocator);
+    try app_emit.emitApp("examples/todomvc/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/bundle.mjs", 1024 * 1024);
     defer allocator.free(app_js);
-    const expected_app_js = try readFixture(allocator, "tools/fixtures/expected/todomvc-app/bundle.mjs");
-    defer allocator.free(expected_app_js);
     const props_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/props.mjs", 1024 * 1024);
     defer allocator.free(props_js);
     const expected_props_js = try readFixture(allocator, "tools/fixtures/expected/todomvc-app/props.mjs");
@@ -1959,12 +1868,16 @@ test "todomvc verification app emits multi-file app bundle" {
     const styles_css = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/styles.css", 1024 * 1024);
     defer allocator.free(styles_css);
 
-    try std.testing.expectEqualStrings(expected_app_js, app_js);
     try std.testing.expectEqualStrings(expected_browser_entry_js, browser_entry_js);
     try std.testing.expectEqualStrings(expected_props_js, props_js);
     try std.testing.expectEqualStrings(expected_index_html, index_html);
     try std.testing.expectEqualStrings(expected_package_json, package_json);
     try std.testing.expectEqualStrings(expected_dev_server_ts, dev_server_ts);
+    try std.testing.expect(std.mem.indexOf(u8, app_js, "export function mount(target, props = {})") != null);
+    try std.testing.expect(std.mem.indexOf(u8, app_js, "Root.mount(target, props)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, app_js, "\"TodoHeader\": Component_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, app_js, "\"TodoList\": Component_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, app_js, "\"TodoFooter\": Component_") != null);
     try std.testing.expect(std.mem.indexOf(u8, root_module_js, "toggle-all") != null);
     try std.testing.expect(std.mem.indexOf(u8, header_module_js, "What needs to be done?") != null);
     try std.testing.expect(std.mem.indexOf(u8, footer_module_js, "Clear completed") != null);
@@ -1987,7 +1900,7 @@ test "basic counter app bundle emits inferred preview props" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "counter-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitAppLegacy("examples/basic-counter.weiv", out_dir, allocator);
+    try app_emit.emitApp("examples/basic-counter.weiv", out_dir, allocator);
 
     const props_js = try tmp_dir.dir.readFileAlloc(allocator, "counter-bundle/props.mjs", 1024 * 1024);
     defer allocator.free(props_js);
@@ -2005,7 +1918,7 @@ test "imported helper app bundle copies runtime JS dependencies" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "imported-helper-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitAppLegacy("examples/imported-helper/App.weiv", out_dir, allocator);
+    try app_emit.emitApp("examples/imported-helper/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-helper-bundle/App.mjs", 1024 * 1024);
     defer allocator.free(app_js);
@@ -2034,7 +1947,7 @@ test "imported TS helper app bundle transpiles and copies TS dependencies" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "imported-ts-helper-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitAppLegacy("examples/imported-ts-helper/App.weiv", out_dir, allocator);
+    try app_emit.emitApp("examples/imported-ts-helper/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-ts-helper-bundle/App.mjs", 1024 * 1024);
     defer allocator.free(app_js);
@@ -2065,7 +1978,7 @@ test "emit app rejects unsupported bare runtime imports" {
 
     try std.testing.expectError(
         error.UnsupportedRuntimeImport,
-        app_emit.emitAppLegacy("examples/unsupported-import/App.weiv", out_dir, allocator),
+        app_emit.emitApp("examples/unsupported-import/App.weiv", out_dir, allocator),
     );
 }
 
