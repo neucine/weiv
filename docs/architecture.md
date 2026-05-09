@@ -226,6 +226,19 @@ proxy-state tracked roots and current escape warnings with rewrite guidance, so
 users do not need to rely only on `inspect invalidation-graph` to understand
 the current precision model.
 
+## Scheduling
+
+The current direct-browser scheduling flow is documented in
+[Runtime Scheduling](./runtime-scheduling.md).
+
+That document is the source of truth for:
+
+- owned-boundary flush timing
+- proxy-tracked microtask flush timing
+- subscription lifecycle
+- current ordering semantics
+- the exact guarantee around tracked captured references
+
 ## Inspectability Commands
 
 Useful commands:

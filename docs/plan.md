@@ -153,6 +153,7 @@ Next work:
   - region/path dependency tables
   - canonical proxy initialization
   - dirty-path consumption by the existing scheduler
+  - documented runtime timing / scheduling baseline
 - current proxy-state work already landed through the existing invalidation pipeline:
   - inspect-visible tracked roots
   - inspect-visible tracked paths

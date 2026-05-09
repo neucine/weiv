@@ -16,6 +16,8 @@ currently deferred behind AST-backed analysis work.
 The current state-tracking direction for escaped / externalized state is
 documented in [Proxy State Graph Design](./proxy-state-graph-design.md), and
 the first tracked-root runtime slices are now live on `main`.
+The current direct-browser timing flow is documented in
+[Runtime Scheduling](./runtime-scheduling.md).
 
 The repo currently has:
 
