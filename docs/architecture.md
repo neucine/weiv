@@ -221,7 +221,10 @@ Diagnostics are part of the product surface, not cleanup.
 The compiler should prefer clear errors for patterns that look reactive but are
 outside the owned scheduling model. Source-located diagnostics already exist for
 several template and composition mistakes, and invalidation-graph diagnostics cover the
-current stale-risk cases.
+current stale-risk cases. `compile analyze component` now also summarizes
+proxy-state tracked roots and current escape warnings with rewrite guidance, so
+users do not need to rely only on `inspect invalidation-graph` to understand
+the current precision model.
 
 ## Inspectability Commands
 
