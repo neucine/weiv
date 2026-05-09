@@ -103,8 +103,6 @@ const Formatter = struct {
         try self.formatCallbackRegistrations();
         try self.out.appendSlice(self.allocator, "boundaries\n");
         try self.formatBoundaries(plan.nodes, 1);
-        try self.formatHelperEscapeWarnings();
-        try self.formatCallEscapeWarnings();
         if (self.diagnostics.items.len > 0) {
             try self.out.appendSlice(self.allocator, "diagnostics\n");
             for (self.diagnostics.items) |diagnostic| {
@@ -318,54 +316,6 @@ const Formatter = struct {
         }
     }
 
-    fn formatHelperEscapeWarnings(self: *Formatter) !void {
-        const script = self.component.sfc_document.script.content;
-        for (self.component.script.state_analysis.helpers) |helper| {
-            if (helper.span_end <= helper.span_start or helper.span_end > script.len) continue;
-            const helper_source = script[helper.span_start..helper.span_end];
-            for (self.tracked_roots.items) |root| {
-                const return_pattern = std.fmt.allocPrint(self.allocator, "return {s}.", .{root.binding_name}) catch continue;
-                defer self.allocator.free(return_pattern);
-                const arrow_pattern = std.fmt.allocPrint(self.allocator, "=> {s}.", .{root.binding_name}) catch continue;
-                defer self.allocator.free(arrow_pattern);
-
-                if (std.mem.indexOf(u8, helper_source, return_pattern) == null and
-                    std.mem.indexOf(u8, helper_source, arrow_pattern) == null) continue;
-
-                try self.diagnostics.append(self.allocator, .{
-                    .severity = .warning,
-                    .kind = .escape_warning,
-                    .subject = root.binding_name,
-                    .related = helper.name,
-                    .offset = self.component.sfc_document.script.content_span.start + helper.span_start,
-                    .reason = "tracked-root-nested-return",
-                });
-            }
-        }
-    }
-
-    fn formatCallEscapeWarnings(self: *Formatter) !void {
-        const script = self.component.sfc_document.script.content;
-        for (self.tracked_roots.items) |root| {
-            const pattern = std.fmt.allocPrint(self.allocator, "{s}.", .{root.binding_name}) catch continue;
-            defer self.allocator.free(pattern);
-
-            var search_from: usize = 0;
-            while (std.mem.indexOfPos(u8, script, search_from, pattern)) |match_index| {
-                search_from = match_index + pattern.len;
-                if (!isLikelyCallEscape(script, match_index)) continue;
-
-                try self.diagnostics.append(self.allocator, .{
-                    .severity = .warning,
-                    .kind = .escape_warning,
-                    .subject = root.binding_name,
-                    .offset = self.component.sfc_document.script.content_span.start + match_index,
-                    .reason = "tracked-root-call-escape",
-                });
-                break;
-            }
-        }
-    }
 
     fn formatTrackedRoots(self: *Formatter) !void {
         for (self.tracked_roots.items) |root| {
@@ -788,44 +738,6 @@ fn nextNonSpaceIndex(expr: []const u8, idx: usize) ?usize {
         return cursor;
     }
     return null;
-}
-
-fn isLikelyCallEscape(script: []const u8, match_index: usize) bool {
-    if (match_index == 0) return false;
-
-    var cursor = match_index;
-    while (cursor > 0) {
-        cursor -= 1;
-        if (isWhitespace(script[cursor])) continue;
-
-        if (script[cursor] == ',') return true;
-        if (script[cursor] != '(') return false;
-        if (cursor == 0) return false;
-
-        var head = cursor;
-        while (head > 0) {
-            head -= 1;
-            if (isWhitespace(script[head])) continue;
-            break;
-        }
-
-        if (!isIdentContinue(script[head]) and script[head] != ')') return false;
-        if (script[head] == ')') return true;
-
-        var word_start = head;
-        while (word_start > 0 and isIdentContinue(script[word_start - 1])) word_start -= 1;
-        const callee = script[word_start .. head + 1];
-        if (std.mem.eql(u8, callee, "if") or
-            std.mem.eql(u8, callee, "for") or
-            std.mem.eql(u8, callee, "while") or
-            std.mem.eql(u8, callee, "switch"))
-        {
-            return false;
-        }
-        return true;
-    }
-
-    return false;
 }
 
 fn appendUniqueUsize(allocator: std.mem.Allocator, list: *std.ArrayList(usize), value: usize) !void {

@@ -811,66 +811,6 @@ test "invalidation graph formatter warns on tracked-root unowned callback mutati
     try std.testing.expect(std.mem.indexOf(u8, formatted, "warning unowned-callback-mutation binding=workspace") != null);
 }
 
-test "invalidation graph formatter warns on tracked-root nested return" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const source =
-        \\<template>
-        \\  <p>{{ workspace.profile.name }}</p>
-        \\</template>
-        \\
-        \\<script lang="ts">
-        \\  import { workspace } from "./workspace-state.ts";
-        \\  function currentProfile() {
-        \\    return workspace.profile;
-        \\  }
-        \\</script>
-    ;
-
-    var model = try component.build(source, "examples/tracked-root-nested-return.weiv", allocator);
-    defer model.deinit(allocator);
-
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
-
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
-    defer allocator.free(formatted);
-
-    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning escape-warning binding=workspace related=currentProfile") != null);
-    try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=tracked-root-nested-return") != null);
-}
-
-test "invalidation graph formatter warns on tracked-root call escape" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const source =
-        \\<template>
-        \\  <p>{{ workspace.profile.name }}</p>
-        \\</template>
-        \\
-        \\<script lang="ts">
-        \\  import { workspace } from "./workspace-state.ts";
-        \\  installPlugin(workspace.profile);
-        \\</script>
-    ;
-
-    var model = try component.build(source, "examples/tracked-root-call-escape.weiv", allocator);
-    defer model.deinit(allocator);
-
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
-
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
-    defer allocator.free(formatted);
-
-    try std.testing.expect(std.mem.indexOf(u8, formatted, "warning escape-warning binding=workspace related= offset=") != null);
-    try std.testing.expect(std.mem.indexOf(u8, formatted, "reason=tracked-root-call-escape") != null);
-}
-
 test "invalidation graph formatter diagnoses local helper external reads" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -2387,54 +2327,6 @@ test "component analysis report includes tracked root and escape warning summary
     try std.testing.expect(std.mem.indexOf(u8, report, "      rewrite: mutate through the tracked root directly instead of mutating through a local alias\n") != null);
 }
 
-test "component analysis report includes nested return escape guidance" {
-    const allocator = std.testing.allocator;
-    const source =
-        \\<template>
-        \\  <p>{{ workspace.profile.name }}</p>
-        \\</template>
-        \\
-        \\<script lang="ts">
-        \\  import { workspace } from "./workspace-state.ts";
-        \\  function currentProfile() {
-        \\    return workspace.profile;
-        \\  }
-        \\</script>
-    ;
-
-    var model = try component.build(source, "examples/analysis-tracked-root-nested-return.weiv", allocator);
-    defer model.deinit(allocator);
-
-    const report = try cli.formatComponentAnalysisReport(model, allocator);
-    defer allocator.free(report);
-
-    try std.testing.expect(std.mem.indexOf(u8, report, "reason=tracked-root-nested-return") != null);
-    try std.testing.expect(std.mem.indexOf(u8, report, "rewrite: return the tracked root or a snapshot value instead of returning a nested tracked reference") != null);
-}
-
-test "component analysis report includes call escape guidance" {
-    const allocator = std.testing.allocator;
-    const source =
-        \\<template>
-        \\  <p>{{ workspace.profile.name }}</p>
-        \\</template>
-        \\
-        \\<script lang="ts">
-        \\  import { workspace } from "./workspace-state.ts";
-        \\  installPlugin(workspace.profile);
-        \\</script>
-    ;
-
-    var model = try component.build(source, "examples/analysis-tracked-root-call-escape.weiv", allocator);
-    defer model.deinit(allocator);
-
-    const report = try cli.formatComponentAnalysisReport(model, allocator);
-    defer allocator.free(report);
-
-    try std.testing.expect(std.mem.indexOf(u8, report, "reason=tracked-root-call-escape") != null);
-    try std.testing.expect(std.mem.indexOf(u8, report, "rewrite: pass a snapshot or primitive value instead of passing a nested tracked reference into an unknown external call") != null);
-}
-
 test "component analysis report summarizes mixed tracked roots and escape warnings" {
     const allocator = std.testing.allocator;
     const source =
@@ -2455,10 +2347,6 @@ test "component analysis report summarizes mixed tracked roots and escape warnin
         \\  const localState = { flags: { ready: true } };
         \\  const alias = workspace;
         \\  alias.profile.name = "Grace";
-        \\  function currentProfile() {
-        \\    return workspace.profile;
-        \\  }
-        \\  installPlugin(props.session.currentUser);
         \\</script>
     ;
 
@@ -2473,10 +2361,8 @@ test "component analysis report summarizes mixed tracked roots and escape warnin
     try std.testing.expect(std.mem.indexOf(u8, report, "    - root id=1 binding=workspace kind=imported-tracked\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, report, "binding=props kind=prop-tracked") != null);
     try std.testing.expect(std.mem.indexOf(u8, report, "binding=localState kind=local-tracked") != null);
-    try std.testing.expect(std.mem.indexOf(u8, report, "  escape warnings: 3\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, report, "  escape warnings: 1\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, report, "reason=tracked-root-alias-escape") != null);
-    try std.testing.expect(std.mem.indexOf(u8, report, "reason=tracked-root-nested-return") != null);
-    try std.testing.expect(std.mem.indexOf(u8, report, "reason=tracked-root-call-escape") != null);
 }
 
 test "direct browser module emits mixed tracked root graph" {

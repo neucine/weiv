@@ -470,12 +470,19 @@ Diagnostics should do three things:
 Typical rewrite guidance:
 
 - pass snapshots or primitives instead of tracked mutable objects
-- return the tracked root rather than a nested reference
 - keep tracked state inside Weiv-owned APIs
-- avoid storing tracked nested references on external objects
 - mutate through the tracked root directly instead of mutating through a local alias
 - move tracked mutation into an owned boundary instead of leaving it in an
   unowned callback
+
+Current practical scope on `main` is narrower than the full design space above:
+
+- mainstream warnings currently focus on concrete Weiv tracking gaps that are
+  easy to explain, especially alias escape and unowned callback mutation
+- Weiv does not currently try to warn on every common JS detached-reference or
+  reference-replacement pattern
+- the tracked guarantee is about the visible captured binding/reference Weiv
+  owns, not arbitrary unrelated references later created elsewhere in JS
 
 Recommended severity split:
 
@@ -590,7 +597,7 @@ installPlugin(workspace.profile);
 Classification:
 
 - `workspace` -> `tracked-root`
-- call site -> `escape-warning`
+- call site -> candidate future expansion, not a mainstream warning by default
 
 ### Returned tracked nested reference
 
@@ -603,7 +610,7 @@ function currentSidebar() {
 Classification:
 
 - `workspace` -> `tracked-root`
-- return site -> `escape-warning`
+- return site -> candidate future expansion, not a mainstream warning by default
 
 ## Current Implemented Slice
 

@@ -83,8 +83,6 @@ the theoretical minimum.
 - tracked roots and tracked paths for promoted proxy-backed state roots
 - `escape-warning` diagnostics when tracked roots weaken through alias or
   unowned callback flows
-- `escape-warning` diagnostics for nested tracked-reference returns and obvious
-  nested tracked-reference call escapes
 - framework binding conflict diagnostics such as user-defined `emit`
 
 This is the primary debugging surface for the compiler-native state model.

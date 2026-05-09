@@ -164,8 +164,8 @@ Next work:
   not all local component state by default
 - keep local tracked-root promotion intentionally narrow until broader rules are proven
 - widen escape diagnostics only where the compiler can stay honest and actionable
-  - current warning coverage includes alias escape, unowned callback mutation,
-    nested tracked returns, and obvious nested tracked call escapes
+  - current warning coverage focuses on concrete Weiv tracking gaps such as
+    alias escape and unowned callback mutation
 - validate any chosen shared-state/runtime path in one bounded area of the
   larger verification app
 - defer `@weiv/router` until the shared-state/runtime boundary is settled

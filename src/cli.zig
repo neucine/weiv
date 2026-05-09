@@ -971,12 +971,6 @@ fn escapeWarningGuidance(line: []const u8) []const u8 {
     if (std.mem.indexOf(u8, line, "reason=tracked-root-unowned-callback") != null) {
         return "move the mutation into an owned boundary or route it through a Weiv-visible tracked update path";
     }
-    if (std.mem.indexOf(u8, line, "reason=tracked-root-nested-return") != null) {
-        return "return the tracked root or a snapshot value instead of returning a nested tracked reference";
-    }
-    if (std.mem.indexOf(u8, line, "reason=tracked-root-call-escape") != null) {
-        return "pass a snapshot or primitive value instead of passing a nested tracked reference into an unknown external call";
-    }
     return "keep tracked state on its canonical surface and avoid raw or escaping mutation paths";
 }
 
