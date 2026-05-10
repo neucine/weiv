@@ -1,4 +1,9 @@
-# Weiv Framework Spec
+# Weiv Framework Vision
+
+This document is the stable product-level vision for Weiv.
+
+It is intentionally higher level than [Architecture](./architecture.md), which
+describes the current compiler/runtime implementation on `main`.
 
 ## 1. Purpose
 

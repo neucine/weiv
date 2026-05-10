@@ -100,7 +100,7 @@ Current required verification:
 
 ```sh
 zig build test
-zig build render-test
+zig build component-test
 ```
 
 Both pass at the latest checkpoint.
@@ -122,7 +122,7 @@ The current verification shape is still uneven:
 - TodoMVC as the main app-like verification example in practice
 
 The first `test/examples/workspace-app` scaffold is now present, but it still
-needs fuller render-test and inspect coverage before it replaces TodoMVC as the
+needs fuller component-test and inspect coverage before it replaces TodoMVC as the
 broader app-scale anchor.
 
 The broader shared-state/runtime ecosystem direction is not yet settled.

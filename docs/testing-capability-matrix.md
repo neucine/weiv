@@ -167,7 +167,7 @@ Use for:
 
 Use for:
 
-- direct runtime mount/update behavior
+- component mount/update behavior
 - app bundle behavior
 - representative interaction flows
 - proof that selective updates patch instead of replacing the root
@@ -187,7 +187,7 @@ The first version of the flagship app is successful if:
 - it covers the required capability categories above
 - it is broader than TodoMVC in composition and update-region density
 - it remains readable enough to debug
-- it becomes part of normal `zig build test` and `zig build render-test`
+- it becomes part of normal `zig build test` and `zig build component-test`
 - it exposes at least one concrete conservative / inspectable boundary case
 
 ## Anti-Goals

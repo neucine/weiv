@@ -23,13 +23,15 @@ Current state:
 - browser emission and preview flow
 - scoped CSS emission
 - TodoMVC verification app
-- compiler, render, and interaction checks
+- workspace-app verification scaffold
+- compiler, component, and browser interaction checks
 
 Current runtime status:
 
 - good enough for verification and iteration
 - not yet the final browser architecture
 - moving from subtree rerendering toward compiler-driven DOM patching
+- proxy-tracked shared roots now exist for imports, `props`, and a narrow local-object slice
 
 ## What Exists Today
 
@@ -40,6 +42,7 @@ Current runtime status:
 - browser module emission
 - generated app bundles with Bun preview support
 - a working TodoMVC example used as the main smaller app-scale verification app
+- a larger `workspace-app` scaffold used to widen framework capability coverage
 
 ## Direction
 
@@ -67,13 +70,23 @@ Build and verify:
 
 ```bash
 zig build test
-zig build render-test
+zig build component-test
 ```
+
+`zig build render-test` remains as a compatibility alias for the component-test layer.
+
+Optional browser e2e runners live under `test/cypress/`.
 
 Preview TodoMVC:
 
 ```bash
 zig build run -- dev test/examples/todomvc/App.weiv
+```
+
+Preview the workspace app:
+
+```bash
+zig build run -- dev test/examples/workspace-app/App.weiv
 ```
 
 Useful compiler commands:
@@ -83,27 +96,30 @@ zig build run -- compile analyze component test/examples/todomvc/App.weiv
 zig build run -- inspect ir test/examples/todomvc/App.weiv
 zig build run -- compile emit js test/examples/todomvc/App.weiv
 zig build run -- compile test/examples/todomvc/App.weiv .zig-cache/todomvc-out
+zig build run -- compile test/examples/workspace-app/App.weiv .zig-cache/workspace-app-out
 ```
 
 ## Repository Layout
 
 ```text
 docs/      architecture, planning, and design notes
-test/examples/  verification fixtures and example apps
+test/component/  Bun component tests over emitted browser modules
+test/cypress/    browser e2e runners
+test/examples/   verification fixtures and example apps
+test/fixtures/   expected bundle/runtime fixtures
 libs/      Rust parser backend
-spec/      framework spec
 src/       Zig compiler, CLI, tests, and FFI layer
-tools/     render harness and test fixtures
+tools/     small repo utilities
 ```
 
 ## Key Documents
 
 - [Docs Index](./docs/README.md)
+- [Framework Vision](./docs/framework-vision.md)
 - [Current Architecture](./docs/architecture.md)
 - [Terminology](./docs/terminology.md)
 - [Current Status](./docs/status.md)
 - [Current Plan](./docs/plan.md)
-- [Framework Spec](./spec/framework-spec.md)
 
 ## Near-Term Focus
 
@@ -111,5 +127,5 @@ tools/     render harness and test fixtures
 - keep slot composition stable through nested/component-heavy fixtures
 - keep compiler-native state scheduling inspectable through `inspect invalidation-graph`
 - harden diagnostics and rebuild ergonomics on top of the new `weiv dev` watch loop
-- keep TodoMVC as a useful forcing-function app while defining a larger flagship verification app
+- keep TodoMVC as a useful forcing-function app while broadening `workspace-app` into the larger flagship verification app
 - preserve a small runtime boundary and move complexity into compiler output

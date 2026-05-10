@@ -65,14 +65,17 @@ pub fn build(b: *std.Build) void {
     const run_tests = b.addRunArtifact(tests);
     test_step.dependOn(&run_tests.step);
 
-    const render_check = b.addSystemCommand(&.{
+    const component_check = b.addSystemCommand(&.{
         "bun",
         "test",
-        "test/render/render_check.test.ts",
+        "test/component",
     });
-    render_check.setCwd(b.path("."));
-    render_check.step.dependOn(&build_parser_backend.step);
+    component_check.setCwd(b.path("."));
+    component_check.step.dependOn(&build_parser_backend.step);
 
-    const render_test_step = b.step("render-test", "Run render module verification with Bun");
-    render_test_step.dependOn(&render_check.step);
+    const component_test_step = b.step("component-test", "Run emitted component tests with Bun");
+    component_test_step.dependOn(&component_check.step);
+
+    const render_test_step = b.step("render-test", "Compatibility alias for component-test");
+    render_test_step.dependOn(&component_check.step);
 }

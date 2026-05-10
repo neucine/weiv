@@ -1,0 +1,150 @@
+import { test } from "bun:test";
+import {
+  FakeDocument,
+  byTag,
+  click,
+  emitDirectBrowserModule,
+  findElement,
+  installDocument,
+  keydown,
+  loadModules,
+} from "./support";
+
+test("basic direct components mount and patch selectively", async () => {
+  const modules = await loadModules({
+    "BasicCounter.mjs": emitDirectBrowserModule("test/examples/basic/basic-counter.weiv"),
+    "ConditionalToggleDirect.mjs": emitDirectBrowserModule("test/examples/basic/conditional-toggle.weiv"),
+    "TimerCallbackDirect.mjs": emitDirectBrowserModule("test/examples/basic/timer-callback.weiv"),
+    "TodoListDirect.mjs": emitDirectBrowserModule("test/examples/basic/todo-list.weiv"),
+  });
+
+  const basicCounterModule = modules["BasicCounter.mjs"];
+  const conditionalToggleDirectModule = modules["ConditionalToggleDirect.mjs"];
+  const timerCallbackDirectModule = modules["TimerCallbackDirect.mjs"];
+  const todoListDirectModule = modules["TodoListDirect.mjs"];
+
+  if (!basicCounterModule.css.includes(`[data-weiv-scope="${basicCounterModule.scopeId}"] .counter-card`)) {
+    throw new Error("BasicCounter CSS scope mismatch");
+  }
+
+  const directDocument = new FakeDocument();
+  const directTarget = directDocument.createElement("div");
+  directDocument.body.append(directTarget);
+  installDocument(directDocument);
+
+  const directMount = basicCounterModule.mount(directTarget, {
+    title: "Counter",
+    initialCount: 2,
+  });
+  if (directTarget.replaceChildrenCalls !== 1) {
+    throw new Error(`BasicCounter direct mount expected 1 root replaceChildren call, found ${directTarget.replaceChildrenCalls}`);
+  }
+  if (!directTarget.textContent.includes("Current count: 2") || !directTarget.textContent.includes("Doubled: 4")) {
+    throw new Error("BasicCounter direct mount initial content mismatch");
+  }
+
+  const directButton = findElement(directDocument.body, byTag("button"));
+  if (!directButton) throw new Error("BasicCounter direct mount missing button");
+  click(directButton);
+
+  if (directTarget.replaceChildrenCalls !== 1) {
+    throw new Error("BasicCounter direct update rerendered the root instead of patching in place");
+  }
+  if (!directTarget.textContent.includes("Current count: 3") || !directTarget.textContent.includes("Doubled: 6")) {
+    throw new Error("BasicCounter direct click did not patch the updated text");
+  }
+
+  for (let i = 0; i < 7; i += 1) {
+    click(directButton);
+  }
+  if (directButton.disabled !== true) {
+    throw new Error("BasicCounter direct update did not patch the disabled property");
+  }
+  if ((directMount.instance.refs as any[]).length === 0) {
+    throw new Error("BasicCounter direct mount did not record instance refs");
+  }
+
+  const timerDocument = new FakeDocument();
+  const timerTarget = timerDocument.createElement("div");
+  timerDocument.body.append(timerTarget);
+  installDocument(timerDocument);
+
+  timerCallbackDirectModule.mount(timerTarget, {});
+  if (!timerTarget.textContent.includes("0")) {
+    throw new Error("TimerCallback direct mount initial content mismatch");
+  }
+  const timerButton = findElement(timerDocument.body, byTag("button"));
+  if (!timerButton) throw new Error("TimerCallback direct mount missing button");
+  click(timerButton);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  if (timerTarget.replaceChildrenCalls !== 1) {
+    throw new Error("TimerCallback direct timer update rerendered the root");
+  }
+  if (!timerTarget.textContent.includes("1")) {
+    throw new Error("TimerCallback direct timer callback did not patch state");
+  }
+
+  const conditionalDocument = new FakeDocument();
+  const conditionalTarget = conditionalDocument.createElement("div");
+  conditionalDocument.body.append(conditionalTarget);
+  installDocument(conditionalDocument);
+
+  conditionalToggleDirectModule.mount(conditionalTarget, {});
+  if (conditionalTarget.replaceChildrenCalls !== 1) {
+    throw new Error(`ConditionalToggle direct mount expected 1 root replaceChildren call, found ${conditionalTarget.replaceChildrenCalls}`);
+  }
+  if (!conditionalTarget.textContent.includes("Panel is closed")) {
+    throw new Error("ConditionalToggle direct mount initial branch mismatch");
+  }
+
+  const conditionalButton = findElement(conditionalDocument.body, byTag("button"));
+  if (!conditionalButton) throw new Error("ConditionalToggle direct mount missing button");
+  click(conditionalButton);
+
+  if (conditionalTarget.replaceChildrenCalls !== 1) {
+    throw new Error("ConditionalToggle direct update rerendered the root instead of replacing the conditional block");
+  }
+  if (!conditionalTarget.textContent.includes("Panel is open")) {
+    throw new Error("ConditionalToggle direct toggle did not swap to the open branch");
+  }
+  if (conditionalTarget.textContent.includes("Panel is closed")) {
+    throw new Error("ConditionalToggle direct toggle left the closed branch mounted");
+  }
+
+  const todoListDirectDocument = new FakeDocument();
+  const todoListDirectTarget = todoListDirectDocument.createElement("div");
+  todoListDirectDocument.body.append(todoListDirectTarget);
+  installDocument(todoListDirectDocument);
+
+  todoListDirectModule.mount(todoListDirectTarget, { title: "Tasks" });
+  if (todoListDirectTarget.replaceChildrenCalls !== 1) {
+    throw new Error(`TodoList direct mount expected 1 root replaceChildren call, found ${todoListDirectTarget.replaceChildrenCalls}`);
+  }
+  if (!todoListDirectTarget.textContent.includes("Showing pending tasks")) {
+    throw new Error("TodoList direct mount initial conditional branch mismatch");
+  }
+  if (!todoListDirectTarget.textContent.includes("Implement template binder") ||
+      !todoListDirectTarget.textContent.includes("Test CSS scoping")) {
+    throw new Error("TodoList direct mount initial visible items mismatch");
+  }
+  if (todoListDirectTarget.textContent.includes("Write parser fixtures")) {
+    throw new Error("TodoList direct mount still shows completed item in pending mode");
+  }
+
+  const todoListDirectButton = findElement(todoListDirectDocument.body, byTag("button"));
+  if (!todoListDirectButton) throw new Error("TodoList direct mount missing toggle button");
+  click(todoListDirectButton);
+
+  if (todoListDirectTarget.replaceChildrenCalls !== 1) {
+    throw new Error("TodoList direct toggle rerendered the root instead of replacing only list/conditional blocks");
+  }
+  if (!todoListDirectTarget.textContent.includes("Showing completed tasks")) {
+    throw new Error("TodoList direct toggle did not switch the conditional branch");
+  }
+  if (!todoListDirectTarget.textContent.includes("Write parser fixtures")) {
+    throw new Error("TodoList direct toggle did not swap in the completed-item list");
+  }
+  if (todoListDirectTarget.textContent.includes("Implement template binder")) {
+    throw new Error("TodoList direct toggle left pending items mounted");
+  }
+}, 120_000);

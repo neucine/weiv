@@ -12,11 +12,11 @@ They are not all equal:
 
 Good small examples to read first:
 
-- [Basic Counter](./basic-counter.weiv)
-- [Todo List](./todo-list.weiv)
-- [Dashboard Card](./dashboard-card.weiv)
-- [Metric Badge](./MetricBadge.weiv)
-- [Conditional Toggle](./conditional-toggle.weiv)
+- [Basic Counter](./basic/basic-counter.weiv)
+- [Todo List](./basic/todo-list.weiv)
+- [Dashboard Card](./basic/dashboard-card.weiv)
+- [Metric Badge](./basic/MetricBadge.weiv)
+- [Conditional Toggle](./basic/conditional-toggle.weiv)
 
 ## App-Scale Verification
 
@@ -36,7 +36,7 @@ Current role:
 
 These exist mainly to pressure-test specific behaviors:
 
-- [Timer Callback](./timer-callback.weiv): owned callback scheduling
+- [Timer Callback](./basic/timer-callback.weiv): owned callback scheduling
 - [Imported Helper](./imported-helper/App.weiv): runtime JS import copying
 - [Imported TS Helper](./imported-ts-helper/App.weiv): TS helper transpile +
   import rewriting

@@ -32,7 +32,7 @@ Next work:
 - keep shrinking conservative region guards toward more minimal affected sets
 - improve region dependency precision for helper-driven expressions
 - keep coarse safe fallback behavior for uncertain cases
-- preserve existing behavior through `zig build render-test`
+- preserve existing behavior through `zig build component-test`
 
 ### 2. Reduce `evaluate(...)`
 
@@ -106,7 +106,7 @@ Next work:
   - conservative update sites
   - inspectability quality
   - remaining composition/state-model gaps
-- make the larger app part of both `zig build test` and `zig build render-test`
+- make the larger app part of both `zig build test` and `zig build component-test`
 - land it incrementally:
   - build-through coverage first
   - render/bundle verification next
@@ -161,7 +161,7 @@ Every behavior change should run:
 
 ```sh
 zig build test
-zig build render-test
+zig build component-test
 ```
 
 Prefer behavioral render checks for runtime correctness. Use generated-code

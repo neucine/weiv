@@ -4,6 +4,8 @@ This directory keeps only the current project map at the top level.
 
 Active docs:
 
+- [Framework Vision](./framework-vision.md): stable product goals, default
+  authoring philosophy, and long-term constraints.
 - [Architecture](./architecture.md): current compiler, runtime, state, and composition architecture.
 - [Runtime Scheduling](./runtime-scheduling.md): current mutation, flush, microtask, subscription, and update timing model.
 - [Terminology](./terminology.md): normalized vocabulary for Weiv's compiler-native UI model.

@@ -215,10 +215,10 @@ test "basic counter direct browser module emits create/update DOM contract" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "test/examples/basic-counter.weiv");
+    const source = try readFixture(allocator, "test/examples/basic/basic-counter.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/basic-counter.weiv", allocator);
+    var model = try component.build(source, "test/examples/basic/basic-counter.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -472,10 +472,10 @@ test "conditional toggle direct browser module emits conditional boundary helper
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "test/examples/conditional-toggle.weiv");
+    const source = try readFixture(allocator, "test/examples/basic/conditional-toggle.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/conditional-toggle.weiv", allocator);
+    var model = try component.build(source, "test/examples/basic/conditional-toggle.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -496,10 +496,10 @@ test "todo list direct browser module emits loop boundary helpers" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "test/examples/todo-list.weiv");
+    const source = try readFixture(allocator, "test/examples/basic/todo-list.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/todo-list.weiv", allocator);
+    var model = try component.build(source, "test/examples/basic/todo-list.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -544,10 +544,10 @@ test "invalidation graph formatter exposes regions dependencies and owned bounda
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "test/examples/basic-counter.weiv");
+    const source = try readFixture(allocator, "test/examples/basic/basic-counter.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/basic-counter.weiv", allocator);
+    var model = try component.build(source, "test/examples/basic/basic-counter.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -556,7 +556,7 @@ test "invalidation graph formatter exposes regions dependencies and owned bounda
     const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
     defer allocator.free(formatted);
 
-    try std.testing.expect(std.mem.indexOf(u8, formatted, "invalidation-graph source=test/examples/basic-counter.weiv") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "invalidation-graph source=test/examples/basic/basic-counter.weiv") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "text ref=") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "attribute ref=") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "deps=[count]") != null);
@@ -1233,10 +1233,10 @@ test "direct browser setup wraps timer callbacks in owned boundaries" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "test/examples/timer-callback.weiv");
+    const source = try readFixture(allocator, "test/examples/basic/timer-callback.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/timer-callback.weiv", allocator);
+    var model = try component.build(source, "test/examples/basic/timer-callback.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -1595,10 +1595,10 @@ test "conditional direct browser modules destroy outgoing branch before replacem
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "test/examples/conditional-toggle.weiv");
+    const source = try readFixture(allocator, "test/examples/basic/conditional-toggle.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/conditional-toggle.weiv", allocator);
+    var model = try component.build(source, "test/examples/basic/conditional-toggle.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -1615,9 +1615,9 @@ test "direct browser modules emit specialized bound attribute patch code" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const counter_source = try readFixture(allocator, "test/examples/basic-counter.weiv");
+    const counter_source = try readFixture(allocator, "test/examples/basic/basic-counter.weiv");
     defer allocator.free(counter_source);
-    var counter_model = try component.build(counter_source, "test/examples/basic-counter.weiv", allocator);
+    var counter_model = try component.build(counter_source, "test/examples/basic/basic-counter.weiv", allocator);
     defer counter_model.deinit(allocator);
 
     const counter_js = try emit_direct_js.emitModule(&counter_model, allocator);
@@ -1825,10 +1825,10 @@ test "basic counter emits scoped CSS" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "test/examples/basic-counter.weiv");
+    const source = try readFixture(allocator, "test/examples/basic/basic-counter.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/basic-counter.weiv", allocator);
+    var model = try component.build(source, "test/examples/basic/basic-counter.weiv", allocator);
     defer model.deinit(allocator);
 
     const scope_id = try style.scopeIdForPath(model.source_path, allocator);
@@ -2024,7 +2024,7 @@ test "basic counter app bundle emits inferred preview props" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "counter-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("test/examples/basic-counter.weiv", out_dir, allocator);
+    try app_emit.emitApp("test/examples/basic/basic-counter.weiv", out_dir, allocator);
 
     const props_js = try tmp_dir.dir.readFileAlloc(allocator, "counter-bundle/props.mjs", 1024 * 1024);
     defer allocator.free(props_js);
@@ -2756,9 +2756,9 @@ test "conditional direct browser modules destroy outgoing branch before replacem
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    const source = try readFixture(allocator, "test/examples/conditional-toggle.weiv");
+    const source = try readFixture(allocator, "test/examples/basic/conditional-toggle.weiv");
     defer allocator.free(source);
-    var model = try component.build(source, "test/examples/conditional-toggle.weiv", allocator);
+    var model = try component.build(source, "test/examples/basic/conditional-toggle.weiv", allocator);
     defer model.deinit(allocator);
     const js = try emit_direct_js.emitModule(&model, allocator);
     defer allocator.free(js);
@@ -2790,9 +2790,9 @@ test "direct browser modules emit specialized bound attribute patch code duplica
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    const counter_source = try readFixture(allocator, "test/examples/basic-counter.weiv");
+    const counter_source = try readFixture(allocator, "test/examples/basic/basic-counter.weiv");
     defer allocator.free(counter_source);
-    var counter_model = try component.build(counter_source, "test/examples/basic-counter.weiv", allocator);
+    var counter_model = try component.build(counter_source, "test/examples/basic/basic-counter.weiv", allocator);
     defer counter_model.deinit(allocator);
     const counter_js = try emit_direct_js.emitModule(&counter_model, allocator);
     defer allocator.free(counter_js);

@@ -238,7 +238,7 @@ Useful commands:
 zig build run -- compile analyze component test/examples/todomvc/App.weiv
 zig build run -- inspect ir test/examples/todomvc/App.weiv
 zig build run -- inspect browser-plan test/examples/todomvc/App.weiv
-zig build run -- inspect invalidation-graph test/examples/basic-counter.weiv
-zig build run -- compile emit js test/examples/basic-counter.weiv
+zig build run -- inspect invalidation-graph test/examples/basic/basic-counter.weiv
+zig build run -- compile emit js test/examples/basic/basic-counter.weiv
 zig build run -- compile test/examples/todomvc/App.weiv .zig-cache/todomvc-out
 ```

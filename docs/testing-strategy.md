@@ -120,7 +120,7 @@ Working name:
 
 - `test/examples/workspace-app`
 
-The first scaffold now exists. What remains is deeper render-test coverage,
+The first scaffold now exists. What remains is deeper component-test coverage,
 inspect assertions, and broader interaction verification.
 
 The point is not the exact product domain. The point is to create an example
@@ -140,7 +140,7 @@ that is rich enough to show:
 For the larger verification app, we should eventually have:
 
 - build-through coverage in `zig build test`
-- app bundle/render coverage in `zig build render-test`
+- app bundle/component coverage in `zig build component-test`
 - inspect snapshots or assertions for:
   - browser-plan shape
   - invalidation-graph shape

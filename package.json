@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:render": "bun test test/render/render_check.test.ts",
+    "test:component": "bun test test/component",
+    "test:runtime": "bun test test/component",
+    "test:render": "bun test test/component",
     "cypress:direct": "bun test test/cypress/run_direct.ts",
     "cypress:slots": "bun test test/cypress/run_slots.ts"
   },

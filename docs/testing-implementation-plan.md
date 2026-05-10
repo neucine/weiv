@@ -51,7 +51,7 @@ The larger verification app should deliberately cover those missing areas.
 The first version should be a single larger app, not a router or multi-page
 system.
 
-It should still fit within one emitted app bundle and one render-test target.
+It should still fit within one emitted app bundle and one component-test target.
 
 Recommended sections:
 
@@ -230,7 +230,7 @@ Prefer:
 
 ### Phase 3. Render Verification
 
-Extend `zig build render-test` coverage so the larger app proves:
+Extend `zig build component-test` coverage so the larger app proves:
 
 - render-to-string produces stable expected structure
 - direct browser mount succeeds
@@ -270,7 +270,7 @@ Recommended landing order:
 1. Create the app skeleton and component tree.
 2. Add build-through tests only.
 3. Add bundle/render verification.
-4. Add direct browser interaction checks in render-test.
+4. Add direct browser interaction checks in component-test.
 5. Add inspect assertions.
 6. Only then consider snapshots if they still add value.
 
@@ -297,6 +297,6 @@ This work is successful when:
 
 - `test/examples/workspace-app` exists and is readable as an app
 - it is clearly larger and broader than TodoMVC
-- it participates in both `zig build test` and `zig build render-test`
+- it participates in both `zig build test` and `zig build component-test`
 - it reveals useful compiler/runtime behavior beyond the current small fixtures
 - it becomes a normal part of verification, not a side demo

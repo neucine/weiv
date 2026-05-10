@@ -289,7 +289,7 @@ Every backend/schema change should preserve:
 
 ```sh
 zig build test
-zig build render-test
+zig build component-test
 ```
 
 New fixture coverage should focus on:
