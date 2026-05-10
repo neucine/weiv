@@ -3,7 +3,7 @@
     <Panel>
       <template slot:header>
         <div>
-          <h2>Overview</h2>
+          <h2>Release overview</h2>
           <p class="dashboard-section__subhead">{{ props.summary }}</p>
         </div>
       </template>
@@ -19,15 +19,15 @@
     <Panel>
       <template slot:header>
         <div>
-          <h2>Readiness</h2>
+          <h2>Decision signals</h2>
           <p class="dashboard-section__subhead">{{ props.statusMessage }}</p>
         </div>
       </template>
 
       <ul class="dashboard-section__facts">
-        <li>{{ props.pendingCount }} items still need action</li>
-        <li>{{ props.pinnedCount }} pinned items are visible in the feed</li>
-        <li>{{ props.refreshCount }} queued refresh cycles completed</li>
+        <li>{{ props.pendingCount }} work items still need action</li>
+        <li>{{ props.pinnedCount }} items are pinned for release review</li>
+        <li>{{ props.refreshCount }} queued sync cycles completed</li>
       </ul>
     </Panel>
   </section>

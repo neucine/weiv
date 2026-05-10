@@ -74,9 +74,10 @@ Right now the suite is too flat:
 - many small focused fixtures
 - TodoMVC as the main app-like verification example
 
-What is still missing is a fully integrated larger flagship verification app.
+What is still being improved is the depth of coverage around the larger
+flagship verification app.
 
-That gap matters because TodoMVC is:
+That still matters because TodoMVC is:
 
 - excellent for list-heavy local-state interaction
 - weaker at exposing richer composition density
@@ -120,8 +121,8 @@ Working name:
 
 - `test/examples/workspace-app`
 
-The first scaffold now exists. What remains is deeper component-test coverage,
-inspect assertions, and broader interaction verification.
+The app now exists and is part of normal verification. What remains is deeper
+inspect coverage and broader interaction verification.
 
 The point is not the exact product domain. The point is to create an example
 that is rich enough to show:
@@ -130,7 +131,7 @@ that is rich enough to show:
 - where selective scheduling is still conservative
 - where owned async/callback boundaries behave well
 - where unowned callback boundaries still diagnose or fall back conservatively
-- how one bounded proxy-tracked shared-state area integrates with Weiv without
+- how one bounded shared-observable area integrates with Weiv without
   dominating the core authoring model
 - where inspect output is useful
 - where authoring or diagnostics still feel rough

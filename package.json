@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test:component": "bun test test/component",
-    "test:runtime": "bun test test/component",
+    "test:runtime": "bun test test/runtime",
+    "test:observable": "bun test test/runtime",
     "test:render": "bun test test/component",
     "cypress:direct": "bun test test/cypress/run_direct.ts",
     "cypress:slots": "bun test test/cypress/run_slots.ts"

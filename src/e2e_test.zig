@@ -237,7 +237,11 @@ test "basic counter direct browser module emits create/update DOM contract" {
     try std.testing.expect(std.mem.indexOf(u8, js, "function collectDirtyBindings(beforeScope, afterScope)") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const dirtyBindings = collectDirtyBindings(beforeScope, afterScope);") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "function normalizeDirtyState(dirtyState)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const __weiv_observableBrand = Symbol.for(\"weiv.observable\");") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function __weiv_getObservableNode(value)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function __weiv_isObservable(value)") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "function __weiv_getTrackedRoot(bindingName, value)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (__weiv_isObservable(value)) {") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "function collectTrackedDirtyPaths()") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "function updateDirtyRegions(instance, dirtyState, scope = instance.refresh())") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const normalizedDirtyState = normalizeDirtyState(dirtyState);") != null);
@@ -247,6 +251,8 @@ test "basic counter direct browser module emits create/update DOM contract" {
     try std.testing.expect(std.mem.indexOf(u8, js, "instance.updateDirty({ bindings: dirtyBindings, paths: dirtyPaths }, afterScope);") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "__weiv_registerTrackedSubscriber(instance);") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "__weiv_unregisterTrackedSubscriber(instance);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "function __weiv_subscribeImportedObservables(instance)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "subscribeImportedObservables: __weiv_subscribeImportedObservables") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "instance.updateDirty = (dirtyBindings, scope) => updateDirtyRegions(instance, dirtyBindings, scope);") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"count\") || dirtySet.has(\"limit\") || dirtyRegionSet.has(4)) {") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"doubled\") || dirtySet.has(\"count\") || dirtyRegionSet.has(3)) {") != null);
@@ -367,7 +373,7 @@ test "direct browser module emits tracked state graph metadata for imported nest
     const js = try emit_direct_js.emitModule(&model, allocator);
     defer allocator.free(js);
 
-    try std.testing.expect(std.mem.indexOf(u8, js, "const __weiv_import_workspace = workspace;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "import { workspace as __weiv_import_workspace } from \"./workspace-state.js\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const workspace = __weiv_getTrackedRoot(\"workspace\", __weiv_import_workspace);") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "__weiv_scope.workspace = workspace;") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "export const trackedStateGraph = { roots: [{ rootId: 1, bindingName: \"workspace\", kind: \"imported-tracked\" }], paths: [{ pathId: 1, rootId: 1, path: \"workspace\", parentPathId: null }, { pathId: 2, rootId: 1, path: \"workspace.sidebar\", parentPathId: 1 }, { pathId: 3, rootId: 1, path: \"workspace.sidebar.collapsed\", parentPathId: 2 }, { pathId: 4, rootId: 1, path: \"workspace.currentProject\", parentPathId: 1 }, { pathId: 5, rootId: 1, path: \"workspace.currentProject.name\", parentPathId: 4 }], regions: [{ regionId: 1, trackedPathIds: [3] }, { regionId: 2, trackedPathIds: [5] }] };") != null);
@@ -1798,7 +1804,7 @@ test "imported helper render module preserves runtime JS imports" {
     const js = try emit_direct_js.emitModule(&model, allocator);
     defer allocator.free(js);
 
-    try std.testing.expect(std.mem.indexOf(u8, js, "import { formatTitle } from \"./format.js\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "import { formatTitle as __weiv_import_formatTitle } from \"./format.js\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "formatTitle(") != null);
 }
 
@@ -1816,7 +1822,7 @@ test "imported TS helper render module rewrites runtime imports to JS" {
     const js = try emit_direct_js.emitModule(&model, allocator);
     defer allocator.free(js);
 
-    try std.testing.expect(std.mem.indexOf(u8, js, "import { formatTitle } from \"./format.js\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "import { formatTitle as __weiv_import_formatTitle } from \"./format.js\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "formatTitle(") != null);
 }
 
@@ -1985,6 +1991,10 @@ test "workspace app emits multi-file app bundle" {
     defer allocator.free(root_module_js);
     const shared_module_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/workspace_shared.js", 1024 * 1024);
     defer allocator.free(shared_module_js);
+    const observable_module_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/__weiv_runtime/index.js", 1024 * 1024);
+    defer allocator.free(observable_module_js);
+    const observable_leaf_module_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/__weiv_runtime/observable.js", 1024 * 1024);
+    defer allocator.free(observable_leaf_module_js);
     const format_module_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/format.js", 1024 * 1024);
     defer allocator.free(format_module_js);
     const metric_tone_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/metric_tone.js", 1024 * 1024);
@@ -2003,11 +2013,15 @@ test "workspace app emits multi-file app bundle" {
     try std.testing.expect(std.mem.indexOf(u8, root_module_js, "queueMicrotask") != null);
     try std.testing.expect(std.mem.indexOf(u8, root_module_js, "registerExternalPulseListener") != null);
     try std.testing.expect(std.mem.indexOf(u8, shared_module_js, "export const workspaceShared") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shared_module_js, "import { observable } from \"./__weiv_runtime/index.js\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shared_module_js, "export const workspaceShared = observable({") != null);
     try std.testing.expect(std.mem.indexOf(u8, shared_module_js, "emitExternalPulse") != null);
+    try std.testing.expect(std.mem.indexOf(u8, observable_module_js, "export { observable } from \"./observable.js\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, observable_leaf_module_js, "const WEIV_OBSERVABLE = Symbol.for(\"weiv.observable\");") != null);
     try std.testing.expect(std.mem.indexOf(u8, format_module_js, "Saved just now") != null);
     try std.testing.expect(std.mem.indexOf(u8, metric_tone_js, "metric-card--up") != null);
-    try std.testing.expect(std.mem.indexOf(u8, header_module_js, "Queue refresh") != null);
-    try std.testing.expect(std.mem.indexOf(u8, detail_module_js, "Register external watch") != null);
+    try std.testing.expect(std.mem.indexOf(u8, header_module_js, "Refresh status") != null);
+    try std.testing.expect(std.mem.indexOf(u8, detail_module_js, "Connect alert feed") != null);
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".workspace-shell") != null);
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".workspace-header") != null);
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".activity-feed__list") != null);
@@ -2053,7 +2067,7 @@ test "imported helper app bundle copies runtime JS dependencies" {
     const props_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-helper-bundle/props.mjs", 1024 * 1024);
     defer allocator.free(props_js);
 
-    try std.testing.expect(std.mem.indexOf(u8, app_js, "import { formatTitle } from \"./format.js\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, app_js, "import { formatTitle as __weiv_import_formatTitle } from \"./format.js\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, helper_js, "import { suffix } from \"./punctuation.js\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, helper_js, "export function formatTitle") != null);
     try std.testing.expect(std.mem.indexOf(u8, punctuation_js, "export const suffix = \"!\";") != null);
@@ -2082,7 +2096,7 @@ test "imported TS helper app bundle transpiles and copies TS dependencies" {
     const props_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-ts-helper-bundle/props.mjs", 1024 * 1024);
     defer allocator.free(props_js);
 
-    try std.testing.expect(std.mem.indexOf(u8, app_js, "import { formatTitle } from \"./format.js\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, app_js, "import { formatTitle as __weiv_import_formatTitle } from \"./format.js\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, format_js, "import { suffix } from \"./punctuation.js\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, format_js, "export function formatTitle(value)") != null);
     try std.testing.expect(std.mem.indexOf(u8, punctuation_js, "export const suffix = \"!\";") != null);

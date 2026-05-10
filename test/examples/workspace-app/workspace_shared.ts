@@ -1,14 +1,16 @@
+import { observable } from "@weiv/runtime";
+
 export interface WorkspaceSharedState {
   selectedItemId: string;
   notifications: number;
   pulse: number;
 }
 
-export const workspaceShared: WorkspaceSharedState = {
+export const workspaceShared: WorkspaceSharedState = observable({
   selectedItemId: "activity-2",
   notifications: 3,
   pulse: 0,
-};
+});
 
 const externalPulseListeners: Array<() => void> = [];
 

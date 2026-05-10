@@ -17,15 +17,14 @@ framework-first coverage target the app must satisfy.
 
 ## Target
 
-Add a larger flagship verification app above TodoMVC.
+Keep expanding the larger flagship verification app above TodoMVC.
 
 Working name:
 
 - `test/examples/workspace-app`
 
-The goal is not to choose the perfect product domain. The goal is to create a
-verification app that is meaningfully broader than TodoMVC and exposes more of
-`weiv`'s real strengths and gaps.
+The goal is to keep one verification app that is meaningfully broader than
+TodoMVC and exposes more of `weiv`'s real strengths and gaps.
 
 ## Why This App
 
@@ -87,7 +86,7 @@ Recommended sections:
 - one async event handler path
 - one intentionally unowned external-style callback registration that remains
   conservative and inspectable
-- one small proxy-tracked shared-state region
+- one small shared-state region
 
 ## Required Feature Coverage
 
@@ -100,7 +99,7 @@ The app should intentionally exercise:
 - async event-driven state transitions
 - owned callback wrappers such as timers or microtasks
 - at least one unowned callback boundary that should diagnose conservatively
-- one small proxy-tracked shared-state integration path
+- one small shared-state integration path
 - conditionals
 - loops
 - slot/default/named projection
@@ -138,7 +137,7 @@ The exact names can change, but the shape matters:
 
 ## Data Model Guidance
 
-Keep the data static and local for the first version.
+Keep the data static and mostly local.
 
 Do not introduce:
 
@@ -149,9 +148,9 @@ Do not introduce:
 The first version should focus on compiler/runtime verification, not product
 infrastructure.
 
-One exception is intentionally allowed:
+One explicit exception is intentionally part of the design:
 
-- a very small proxy-tracked shared-state area
+- a very small shared-observable area
 
 That area should be:
 
@@ -169,14 +168,13 @@ Recommended state:
 - one or two local editing states
 - one pending/settled async state
 - one queued callback-driven state
-- one shared tracked-object state slice
+- one bounded shared-state slice
 - derived counts/summaries
 
 ## Shared-State Guidance
 
 If the larger verification app uses shared state beyond plain local owned
-bindings, it should do so in one bounded area using the current proxy-state
-direction.
+bindings, it should do so in one bounded area first.
 
 Good uses:
 
@@ -192,14 +190,11 @@ Bad uses:
 
 Recommended usage style:
 
-- define the shared tracked object in a normal `.ts` module
+- define the shared state in a normal `.ts` module
+- create that shared state explicitly with `observable()` from `@weiv/runtime`
 - import it into the relevant `.weiv` components
-- keep most component state local even when one bounded shared tracked area
+- keep most component state local even when one bounded shared area
   exists
-
-If shared-state runtime work broadens again later, it should be aligned with
-the current proxy-state direction rather than reviving the older archived
-store-companion draft by default.
 
 ## Verification Plan
 
@@ -244,8 +239,8 @@ Focus on a few high-signal interactions:
 - switching a local dashboard segment
 - completing an async local action and observing the settled UI
 - triggering a local owned callback update and observing region-local patching
-- updating one proxy-tracked shared-state region and observing the resulting
-  boundary/diagnostic behavior
+- updating one shared-observable region and observing the resulting component
+  behavior
 
 ### Phase 4. Inspect Verification
 
@@ -256,9 +251,8 @@ Add assertions for:
 - a few known conservative sites if any remain
 - owned async/callback boundaries being visible where expected
 - unowned callback diagnostics being visible where expected
-- the bounded shared-state integration being inspectable with tracked roots,
-  tracked paths, or intentionally conservative behavior, depending on its
-  integration model
+- the bounded shared-observable integration being inspectable and understandable
+  in current compiler output
 
 This is important because the larger app should also become the place where we
 see whether inspect output stays useful at scale.

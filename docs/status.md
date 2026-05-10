@@ -10,9 +10,8 @@ The current vocabulary for this architecture is documented in
 
 The current direction for the next script-side precision upgrade is documented
 in [AST Script Analysis Plan](./ast-script-analysis-plan.md).
-The current state-tracking direction for escaped / externalized state is
-documented in [Proxy State Graph Design](./proxy-state-graph-design.md), and
-the first tracked-root runtime slices are now live on `main`.
+The current active next-direction for cross-component/shared state is
+documented in [Shared Observable State Design](./shared-observable-state-design.md).
 The current direct-browser timing flow is documented in
 [Runtime Scheduling](./runtime-scheduling.md).
 
@@ -30,9 +29,8 @@ The repo currently has:
 - owned-boundary scheduling for direct browser events and selected callbacks
 - conventional `props` plus Weiv-provided `emit` component contracts
 
-The repo also now has an active proxy-based state-graph direction for escaping
-or externalized state, with initial imported / props / narrow-local
-tracked-root support.
+The repo also now has a standalone shared observable runtime plus the first
+imported-observable integration path for shared cross-boundary state.
 
 ## Direct DOM Path
 
@@ -73,9 +71,6 @@ the theoretical minimum.
 - expression-position mutation diagnostics
 - visible alias-mutation diagnostics for unsupported simple alias writes
 - unowned callback mutation diagnostics
-- tracked roots and tracked paths for promoted proxy-backed state roots
-- `escape-warning` diagnostics when tracked roots weaken through alias or
-  unowned callback flows
 - framework binding conflict diagnostics such as user-defined `emit`
 
 This is the primary debugging surface for the compiler-native state model.
@@ -125,23 +120,16 @@ The first `test/examples/workspace-app` scaffold is now present, but it still
 needs fuller component-test and inspect coverage before it replaces TodoMVC as the
 broader app-scale anchor.
 
-The broader shared-state/runtime ecosystem direction is not yet settled.
-Archived companion/store notes are retained for historical context, but they
-are no longer part of the active top-level docs set.
-The proxy-backed state-graph direction is no longer design-only:
+The broader shared-state/runtime direction is now much clearer:
 
-- tracked roots are now emitted for:
-  - imported object roots
-  - `props` object roots
-  - a narrow stable local-object slice, including safe `const` object roots
-- direct browser modules now emit tracked-state metadata and proxy-backed
-  dirty-path runtime wiring
-- `compile analyze component` now summarizes tracked roots, escape warnings,
-  and rewrite guidance
+- local component state remains compiler-first
+- shared cross-boundary state should be created explicitly with
+  `observable()` at the source
+- components consume imported observables automatically through the compiler
+  bridge
 
-What remains unsettled is the broader promotion policy and the long-term public
-shared-state/runtime surface, not whether the proxy-state graph can work at
-all.
+Archived proxy-state and companion/store notes are retained for historical
+context, but they are no longer the active top-level story.
 
 ## Known Caveats
 
@@ -156,15 +144,12 @@ all.
   analysis is still intentionally shallow.
 - Alias analysis is intentionally limited beyond simple diagnosed cases.
 - Arbitrary imported callback registration is not owned by the scheduler.
-- escaped state outside owned boundaries is still the main unresolved runtime
-  precision problem; the current active direction is a narrow proxy-backed
-  tracked state surface plus escape diagnostics and conservative fallback
+- shared observable integration is still conservative: imported observables wake
+  the existing component update path rather than a more precise observable-to-
+  region dependency map
 - Binding-phase diagnostics now carry a formal `error` / `warning` / `info`
   severity model, and invalidation-graph diagnostics now surface `warning` /
   `info` levels in the inspect output while remaining inspect-only.
-- `compile analyze component` now surfaces proxy-state tracked-root and
-  escape-warning summaries, including rewrite guidance for current warning
-  reasons.
 - `weiv dev` now watches and rebuilds, defaults to an ephemeral preview
   port unless `PORT` is set, and debounces rebuilds after file changes, but
   the loop is still polling-based and needs polish around long-running process
@@ -176,8 +161,9 @@ The project is in a good checkpoint state:
 
 - architecture direction is documented
 - current implementation matches the direction
-- proxy-state tracking is now real runtime/compiler behavior, not only a design note
+- shared observable state is now a real runtime/compiler behavior, not only a
+  design note
 - direct render verification is green
 - TodoMVC remains a useful forcing-function example, while workspace-app is the
-  larger verification track now under construction
+  larger verification track now in active use
 - stale-risk state patterns are becoming inspectable instead of magical

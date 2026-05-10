@@ -51,7 +51,7 @@
   }
 
   .workspace-shell--collapsed .workspace-shell__body {
-    grid-template-columns: 88px minmax(0, 1fr) 320px;
+    grid-template-columns: 120px minmax(0, 1fr) 320px;
   }
 
   .workspace-shell__header {

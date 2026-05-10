@@ -11,10 +11,15 @@ Active docs:
 - [Terminology](./terminology.md): normalized vocabulary for Weiv's compiler-native UI model.
 - [Status](./status.md): what works now, verification state, and known caveats.
 - [Plan](./plan.md): next implementation work from the current architecture.
+- [Shared Observable State Design](./shared-observable-state-design.md): active
+  next-direction for cross-component/shared state using explicit
+  `observable()` state at the source.
+- [Shared Observable Weiv Integration Contract](./shared-observable-weiv-integration-contract.md):
+  minimum bridge between the standalone observable runtime and future `.weiv`
+  component integration.
 - [Testing Strategy](./testing-strategy.md): testing layers, current coverage gap, and the larger verification-app direction.
 - [Testing Implementation Plan](./testing-implementation-plan.md): concrete rollout plan for the larger flagship verification app.
 - [Testing Capability Matrix](./testing-capability-matrix.md): required Weiv feature coverage for the flagship verification app.
-- [Proxy State Graph Design](./proxy-state-graph-design.md): consolidated design and current implementation direction for proxy-backed tracked state, including root selection, path tracking, escape diagnostics, compiler/runtime contract, and pipeline alignment.
 
 Historical design notes and superseded plans live in [archive](./archive/).
 

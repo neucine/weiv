@@ -107,7 +107,7 @@
 
   let shellState = {
     collapsed: false,
-    statusMessage: "Ready to inspect compiler and runtime behavior."
+    statusMessage: "Review blockers before the Friday release cut."
   };
   let saveState = {
     pending: false,
@@ -122,39 +122,39 @@
   let externalWatchRegistered = false;
 
   let metrics: Metric[] = [
-    { id: "m-1", label: "Owned callbacks", value: "7", change: 12, segment: "today" },
-    { id: "m-2", label: "Tracked roots", value: "4", change: 3, segment: "today" },
-    { id: "m-3", label: "Projected panels", value: "6", change: -2, segment: "today" },
-    { id: "m-4", label: "Selective regions", value: "18", change: 6, segment: "week" },
-    { id: "m-5", label: "Helper reads", value: "9", change: 0, segment: "week" },
-    { id: "m-6", label: "Conservative sites", value: "2", change: -1, segment: "week" }
+    { id: "m-1", label: "Open blockers", value: "3", change: -1, segment: "today" },
+    { id: "m-2", label: "Approvals waiting", value: "5", change: 2, segment: "today" },
+    { id: "m-3", label: "Queued fixes", value: "4", change: 1, segment: "today" },
+    { id: "m-4", label: "Checks passing", value: "26", change: 4, segment: "week" },
+    { id: "m-5", label: "Release notes done", value: "8", change: 0, segment: "week" },
+    { id: "m-6", label: "Risk calls pending", value: "2", change: -1, segment: "week" }
   ];
 
   let items: ActivityItem[] = [
     {
       id: "activity-1",
-      title: "Audit direct browser module output",
-      summary: "Check selective updates under a wider screen layout.",
-      detail: "Focus on independent dashboard and detail updates without root replacement.",
-      owner: "Avery",
+      title: "Confirm rollback checklist",
+      summary: "Ops needs final confirmation before the release train opens.",
+      detail: "Verify the rollback owner, status page steps, and rollback threshold before sign-off.",
+      owner: "Avery · Ops",
       pinned: true,
       state: "open"
     },
     {
       id: "activity-2",
-      title: "Verify proxy-tracked shared selection",
-      summary: "Selection should flow across feed and detail regions.",
-      detail: "This item is intentionally selected through the shared tracked state root.",
-      owner: "Mika",
+      title: "Approve checkout fix",
+      summary: "Payments patch is ready for review and release approval.",
+      detail: "Read the mitigation notes, confirm test coverage, and approve the checkout fix for rollout.",
+      owner: "Mika · Payments",
       pinned: false,
       state: "review"
     },
     {
       id: "activity-3",
-      title: "Exercise unowned callback diagnostics",
-      summary: "Register an external pulse listener and inspect the graph output.",
-      detail: "This area should stay conservative and inspectable without redefining the whole app around shared state.",
-      owner: "Noa",
+      title: "Publish release note summary",
+      summary: "Comms is waiting on the final customer-facing summary.",
+      detail: "Draft the release note summary, confirm the changed feature flags, and hand off to comms.",
+      owner: "Noa · Product",
       pinned: false,
       state: "done"
     }
@@ -165,7 +165,7 @@
   }
 
   function overviewSummary() {
-    return `${visibleMetrics().length} metrics · ${visibleFeedItems().length} visible activities`;
+    return `${visibleMetrics().length} readiness metrics · ${visibleFeedItems().length} visible work items`;
   }
 
   function visibleMetrics() {
@@ -200,54 +200,54 @@
 
   function toggleSidebar() {
     shellState.collapsed = !shellState.collapsed;
-    shellState.statusMessage = shellState.collapsed ? "Sidebar collapsed." : "Sidebar expanded.";
+    shellState.statusMessage = shellState.collapsed ? "Compact navigation enabled." : "Navigation expanded.";
   }
 
   function clearHeaderNotifications() {
     clearNotifications();
-    shellState.statusMessage = "Notification badge reset.";
+    shellState.statusMessage = "Release alerts cleared.";
   }
 
   function queueRefresh() {
-    shellState.statusMessage = "Queued a microtask refresh.";
+    shellState.statusMessage = "Refreshing the release status board.";
     queueMicrotask(() => {
       refreshCount += 1;
       saveState.lastSavedMinutes += 1;
-      shellState.statusMessage = `Refresh cycle ${refreshCount} completed.`;
+      shellState.statusMessage = `Release status refresh ${refreshCount} completed.`;
     });
   }
 
   function selectSection(section: Section) {
     activeSection = section;
-    shellState.statusMessage = `Switched to ${section}.`;
+    shellState.statusMessage = `Switched to the ${section} view.`;
   }
 
   function selectMetricSegment(segment: MetricSegment) {
     metricSegment = segment;
-    shellState.statusMessage = `Showing ${segment} metrics.`;
+    shellState.statusMessage = `Showing ${segment} readiness metrics.`;
   }
 
   function setFeedFilter(filter: FeedFilter) {
     feedFilter = filter;
-    shellState.statusMessage = `Feed filter is now ${filter}.`;
+    shellState.statusMessage = `Queue filter is now ${filter}.`;
   }
 
   function selectItem(itemId: string) {
     setSelectedItemId(itemId);
     activeSection = "details";
-    shellState.statusMessage = `Selected ${itemId}.`;
+    shellState.statusMessage = `Opened ${itemId} for review.`;
   }
 
   function togglePin(itemId: string) {
     items = items.map((item) =>
       item.id === itemId ? { ...item, pinned: !item.pinned } : item
     );
-    shellState.statusMessage = "Updated pinned state.";
+    shellState.statusMessage = "Updated the release queue priority.";
   }
 
   function saveItem(itemId: string) {
     saveState.pending = true;
-    shellState.statusMessage = "Saving detail state...";
+    shellState.statusMessage = "Saving the release decision...";
 
     setTimeout(() => {
       items = items.map((item) =>
@@ -256,22 +256,22 @@
       saveState.pending = false;
       saveState.lastSavedMinutes = 0;
       bumpNotifications();
-      shellState.statusMessage = "Saved detail state through an owned timer callback.";
+      shellState.statusMessage = "Saved the release decision through an owned timer callback.";
     }, 0);
   }
 
   function registerExternalWatch() {
     if (externalWatchRegistered) {
-      shellState.statusMessage = "External watch already registered.";
+      shellState.statusMessage = "Release alert feed is already connected.";
       return;
     }
 
     externalWatchRegistered = true;
     registerExternalPulseListener(() => {
       externalTicks += 1;
-      shellState.statusMessage = `External pulse ${externalTicks} observed.`;
+      shellState.statusMessage = `Received external update ${externalTicks}.`;
     });
-    shellState.statusMessage = "Registered an external pulse listener.";
+    shellState.statusMessage = "Connected the release alert feed.";
   }
 
   function triggerExternalPulse() {

@@ -1,19 +1,19 @@
 <template>
   <div class="workspace-header">
     <div>
-      <p class="workspace-header__eyebrow">Flagship verification app</p>
+      <p class="workspace-header__eyebrow">Release readiness workspace</p>
       <h1>{{ props.title }}</h1>
       <p class="workspace-header__subtitle">{{ props.subtitle }}</p>
     </div>
 
     <div class="workspace-header__actions">
-      <span class="workspace-header__badge">{{ props.pendingSaves }} pending</span>
-      <button class="workspace-header__ghost" on:click="handleQueueRefresh">Queue refresh</button>
-      <button class="workspace-header__ghost" on:click="handleClearNotifications">Clear notifications</button>
+      <span class="workspace-header__badge">{{ props.pendingSaves }} decisions pending</span>
+      <button class="workspace-header__ghost" on:click="handleQueueRefresh">Refresh status</button>
+      <button class="workspace-header__ghost" on:click="handleClearNotifications">Clear alerts</button>
       <button class="workspace-header__primary" on:click="handleToggleSidebar">
         {{ props.collapsed ? "Expand sidebar" : "Collapse sidebar" }}
       </button>
-      <span class="workspace-header__notification">{{ props.notifications }} alerts</span>
+      <span class="workspace-header__notification">{{ props.notifications }} release alerts</span>
     </div>
   </div>
 </template>

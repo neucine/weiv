@@ -50,6 +50,7 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\    setProps: base.setProps,
         \\    setEventHandlers: base.setEventHandlers,
         \\    setBoundaryRunner: base.setBoundaryRunner,
+        \\    subscribeImportedObservables: base.subscribeImportedObservables,
         \\    slots,
         \\    setSlots: (nextSlots = {}) => { instance.slots = nextSlots; },
         \\    refs: [],
@@ -70,7 +71,10 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\  replaceBetween(start, end, fragment);
         \\  instance.update = () => updateDom(instance);
         \\  instance.updateDirty = (dirtyBindings, scope) => updateDirtyRegions(instance, dirtyBindings, scope);
-        \\  instance.destroy = () => { __weiv_unregisterTrackedSubscriber(instance); instance.destroyed = true; destroyDom(instance); replaceBetween(start, end, document.createDocumentFragment()); };
+        \\  const __weiv_unsubscribeImportedObservables = typeof instance.subscribeImportedObservables === "function"
+        \\    ? instance.subscribeImportedObservables(instance)
+        \\    : null;
+        \\  instance.destroy = () => { if (typeof __weiv_unsubscribeImportedObservables === "function") __weiv_unsubscribeImportedObservables(); __weiv_unregisterTrackedSubscriber(instance); instance.destroyed = true; destroyDom(instance); replaceBetween(start, end, document.createDocumentFragment()); };
         \\  instance.update();
         \\  return {
         \\    instance,

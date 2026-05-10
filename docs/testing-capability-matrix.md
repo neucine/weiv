@@ -65,7 +65,7 @@ The flagship app should exercise all of these categories.
 - owned async callback mutation such as `setTimeout` or `queueMicrotask`
 - async event handler mutation
 - one intentionally unowned callback boundary that stays conservative and inspectable
-- one bounded proxy-tracked shared-state area
+- one bounded shared-state area
 
 ### Runtime And Emission
 
@@ -76,12 +76,11 @@ The flagship app should exercise all of these categories.
 - imported JS helper copying
 - imported TS helper transpilation
 
-### Proxy-State / Tracking
+### Shared-State / Tracking
 
-- imported tracked root behavior
-- `props` tracked root behavior where relevant
-- narrow local tracked root behavior where relevant
-- tracked-root analysis reporting
+- explicit shared observable behavior through `observable()` source creation
+- imported observable consumption through compiler-generated subscription
+- tracking-gap analysis reporting
 - concrete alias or unowned-callback tracking-gap visibility
 
 ### Inspectability
@@ -147,7 +146,7 @@ Good for:
 - owned callback wrappers
 - async event mutation
 - one intentionally unowned callback registration
-- one bounded proxy-tracked shared-state slice
+- one bounded shared-state slice
 
 ## Verification Mapping
 

@@ -2,8 +2,8 @@
   <Panel>
     <template slot:header>
       <div>
-        <h2>Activity feed</h2>
-        <p class="activity-feed__subhead">Shared pulse: {{ props.sharedPulse }}</p>
+        <h2>Release work queue</h2>
+        <p class="activity-feed__subhead">External updates: {{ props.sharedPulse }}</p>
       </div>
     </template>
 
@@ -17,6 +17,7 @@
       <template slot:message>
         <p>No items match the current filter.</p>
       </template>
+      <p>Try a different queue filter or reopen a completed item.</p>
     </EmptyState>
 
     <ul else class="activity-feed__list">

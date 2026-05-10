@@ -10,9 +10,8 @@ regions, dirty work, owned boundaries, flushes, and patches.
 
 Use [AST Script Analysis Plan](./ast-script-analysis-plan.md) as the current
 direction for the next script-side precision upgrade.
-Use [Proxy State Graph Design](./proxy-state-graph-design.md) for the current
-consolidated design around proxy-backed tracked state for escaping /
-externalized mutation.
+Use [Shared Observable State Design](./shared-observable-state-design.md) for
+the active next-direction for cross-component/shared state.
 Use [Testing Implementation Plan](./testing-implementation-plan.md) for the
 concrete rollout of the larger flagship verification app.
 
@@ -95,12 +94,12 @@ Current state:
 
 - the suite has many focused compiler/runtime fixtures
 - TodoMVC is still the main app-like verification example
-- `test/examples/workspace-app` now exists as the first larger flagship app scaffold
+- `test/examples/workspace-app` is now the flagship medium-scale verification app
 
 Next work:
 
 - keep TodoMVC as a smaller app-scale example, not the whole strategy
-- broaden workspace-app into fuller render and inspect coverage
+- broaden workspace-app into fuller inspect and regression coverage
 - use the larger app to expose:
   - direct strengths
   - conservative update sites
@@ -116,41 +115,21 @@ Next work:
 
 Current state:
 
-- the larger verification-app plan now reserves one bounded shared-state area
-- the current active tracking direction for escaping / externalized state is a
-  narrow proxy-backed state graph
+- the public shared-state story is now:
+  - `import { observable } from "@weiv/runtime"`
+  - create shared state at the source
+  - consume imported observables automatically in components
+- the standalone observable runtime exists and is verified independently
+- the first imported-observable component integration path is working
 - router work and broader companion-library questions remain deferred
 
 Next work:
 
-- keep correctness independent of decorators/markers, treating explicit
-  reactivity as a precision/optimization surface
 - preserve plain local component authoring as the default path
-- continue tightening the proxy-backed state graph around:
-  - canonical tracked state roots
-  - dirty-path marking
-  - compiler-owned region mapping
-  - escape diagnostics and rewrite guidance
-- build on the current compiler/runtime contract:
-  - emitted root metadata
-  - emitted path ids and ancestry
-  - region/path dependency tables
-  - canonical proxy initialization
-  - dirty-path consumption by the existing scheduler
-  - documented runtime timing / scheduling baseline
-- current proxy-state work already landed through the existing invalidation pipeline:
-  - inspect-visible tracked roots
-  - inspect-visible tracked paths
-  - region-to-tracked-path mapping
-  - `updateDirtyRegions(...)` dirty-path support
-  - runtime proxy-backed dirty-path production for current tracked-root slices
-  - CLI analysis summaries with tracked-root kinds and rewrite guidance
-- keep proxy-backed tracking focused on out-of-boundary / externalized state,
-  not all local component state by default
-- keep local tracked-root promotion intentionally narrow until broader rules are proven
-- widen escape diagnostics only where the compiler can stay honest and actionable
-  - current warning coverage focuses on concrete Weiv tracking gaps such as
-    alias escape and unowned callback mutation
+- keep the public runtime surface minimal, centered on `observable()`
+- document and harden the compiler-stable brand/metadata contract
+- keep imported observable updates correct while exploring whether more precise
+  observable-to-region scheduling is worthwhile later
 - validate any chosen shared-state/runtime path in one bounded area of the
   larger verification app
 - defer `@weiv/router` until the shared-state/runtime boundary is settled

@@ -13,9 +13,9 @@ It exists for two reasons:
 This describes the current direct browser path:
 
 - component-local invalidation graphs
-- proxy-tracked roots
+- imported shared observables
 - owned-boundary flushes
-- tracked-path microtask flushes
+- observable-notification microtask flushes
 
 It does **not** describe a future global app scheduler.
 
@@ -32,7 +32,7 @@ Conceptually:
 1. a mutation happens
 2. Weiv either:
    - flushes at the end of an owned boundary
-   - or schedules a microtask for proxy-tracked path dirtiness
+   - or schedules a microtask from shared observable notification
 3. the flush iterates subscribed component instances
 4. each instance updates synchronously through its own compiled region graph
 
@@ -42,8 +42,7 @@ The invalidation graph is component-scoped, not global.
 
 Each compiled component module has:
 
-- its own `trackedStateGraph`
-- its own region-to-path mapping
+- its own compiled invalidation/update graph
 - its own subscribed instances
 
 If multiple components observe the same underlying shared object, each component
@@ -51,7 +50,7 @@ still uses its own compiled graph to decide which of its own regions update.
 
 ## Subscription
 
-Tracked-root subscription is explicit in generated code, but internal to Weiv.
+Observable subscription is explicit in generated code, but internal to Weiv.
 
 When a component instance is created, generated code registers it:
 
@@ -84,11 +83,9 @@ The current flow is:
 1. clone `beforeScope`
 2. run the callback
 3. refresh the instance scope
-4. compute:
-   - dirty bindings
-   - currently pending dirty tracked paths
+4. compute dirty bindings
 5. synchronously call:
-   - `instance.updateDirty({ bindings, paths }, scope)`
+   - `instance.updateDirty({ bindings, paths: [] }, scope)`
    - or `instance.update()` as fallback
 
 For async owned boundaries:
@@ -96,27 +93,21 @@ For async owned boundaries:
 - Weiv flushes once after the synchronous part
 - then flushes again in `finally(...)` after the promise settles
 
-## 2. Proxy-tracked microtask flush
+## 2. Shared-observable microtask flush
 
-Proxy-tracked roots use:
+Shared observable state uses source-created `observable()` values. When a
+shared observable write happens:
 
-- `set` trap
-- `deleteProperty` trap
-
-When a tracked write happens:
-
-1. Weiv marks matching tracked path ids dirty
-2. Weiv schedules one microtask if none is already pending:
+1. the observable runtime notifies subscribed component listeners
+2. Weiv schedules work through the platform microtask queue:
 
 ```js
 globalThis.queueMicrotask(...)
 ```
 
 3. when the microtask runs:
-   - pending path ids are drained
    - subscribed instances are iterated
-   - each instance refreshes scope
-   - each instance updates synchronously through `updateDirty(...)`
+   - each instance updates synchronously through `update()`
 
 So the flush is:
 
@@ -144,7 +135,7 @@ Current correctness should **not** depend on:
 Current timing can be summarized as:
 
 - owned-boundary flush: same turn, synchronous after boundary execution
-- proxy-tracked flush: next microtask, synchronous inside that flush
+- shared-observable flush: next microtask, synchronous inside that flush
 
 So Weiv currently has:
 
@@ -188,9 +179,11 @@ The concrete implementation lives primarily in:
 If Weiv changes scheduler policy later, these are the main decision points:
 
 - do tracked-path flushes stay microtask-based?
+- do shared-observable flushes stay microtask-based?
 - does cross-component order become stable/defined?
 - does Weiv introduce parent/child ordering rules?
 - does Weiv keep component-scoped graphs but add a stronger shared-state runtime?
-- do owned-boundary and proxy-tracked flushes stay unified at `updateDirty(...)`?
+- do owned-boundary and shared-observable flushes stay unified at one update
+  entrypoint?
 
 Any future change should update this document first or alongside the code.

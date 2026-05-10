@@ -2,14 +2,14 @@
   <Panel>
     <template slot:header>
       <div>
-        <h2>Detail panel</h2>
+        <h2>Work item detail</h2>
         <p class="detail-panel__subhead">{{ props.lastSavedLabel }}</p>
       </div>
     </template>
 
     <template slot:actions>
-      <button class="detail-panel__ghost" on:click="registerWatch">Register external watch</button>
-      <button class="detail-panel__ghost" on:click="triggerExternalPulse">Emit external pulse</button>
+      <button class="detail-panel__ghost" on:click="registerWatch">Connect alert feed</button>
+      <button class="detail-panel__ghost" on:click="triggerExternalPulse">Check external status</button>
     </template>
 
     <EmptyState if="!props.item"></EmptyState>
@@ -24,8 +24,8 @@
       <DetailSection bind:body="props.item.detail" bind:title="'Detail'" />
 
       <footer class="detail-panel__footer">
-        <p class="detail-panel__ticks">External ticks: {{ props.externalTicks }}</p>
-        <button class="detail-panel__primary" on:click="saveItem">Save detail state</button>
+        <p class="detail-panel__ticks">External updates received: {{ props.externalTicks }}</p>
+        <button class="detail-panel__primary" on:click="saveItem">Save release decision</button>
       </footer>
     </section>
   </Panel>

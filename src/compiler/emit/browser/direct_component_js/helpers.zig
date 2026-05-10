@@ -105,6 +105,23 @@ pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator, needs_
         \\  };
         \\}
         \\
+        \\const __weiv_observableBrand = Symbol.for("weiv.observable");
+        \\
+        \\function __weiv_getObservableNode(value) {
+        \\  if (!value || (typeof value !== "object" && typeof value !== "function")) {
+        \\    return null;
+        \\  }
+        \\  const node = Reflect.get(value, __weiv_observableBrand);
+        \\  if (!node || typeof node !== "object") {
+        \\    return null;
+        \\  }
+        \\  return node;
+        \\}
+        \\
+        \\function __weiv_isObservable(value) {
+        \\  return __weiv_getObservableNode(value) !== null;
+        \\}
+        \\
         \\const __weiv_trackedRootCache = new Map();
         \\const __weiv_trackedSubscribers = new Set();
         \\const __weiv_pendingTrackedPathIds = new Set();
@@ -197,6 +214,9 @@ pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator, needs_
         \\}
         \\
         \\function __weiv_getTrackedRoot(bindingName, value) {
+        \\  if (__weiv_isObservable(value)) {
+        \\    return value;
+        \\  }
         \\  const rootPlan = __weiv_findTrackedRootPlan(bindingName);
         \\  if (!rootPlan) {
         \\    return value;

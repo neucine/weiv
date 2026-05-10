@@ -2,12 +2,12 @@
   <section class="empty-state">
     <header class="empty-state__header">
       <slot name="message">
-        <p class="empty-state__fallback-message">Nothing to show yet.</p>
+        <p class="empty-state__fallback-message">No work item is selected yet.</p>
       </slot>
     </header>
     <div class="empty-state__body">
       <slot>
-        <p class="empty-state__fallback-body">Choose a different filter or section.</p>
+        <p class="empty-state__fallback-body">Pick something from the release queue to inspect the decision details.</p>
       </slot>
     </div>
   </section>

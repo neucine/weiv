@@ -1,18 +1,18 @@
 <template>
-  <nav class="workspace-sidebar">
-    <p if="!props.collapsed" class="workspace-sidebar__label">Sections</p>
+  <nav bind:class="sidebarClass()">
+    <p if="!props.collapsed" class="workspace-sidebar__label">Release views</p>
 
     <button bind:class="sectionClass('overview')" on:click="showOverview">
       <span>Overview</span>
-      <small if="!props.collapsed">cards, filters, projection</small>
+      <small if="!props.collapsed">health, trends, approvals</small>
     </button>
     <button bind:class="sectionClass('activity')" on:click="showActivity">
-      <span>Activity</span>
-      <small if="!props.collapsed">loops, events, selection</small>
+      <span>Queue</span>
+      <small if="!props.collapsed">priorities, owners, selection</small>
     </button>
     <button bind:class="sectionClass('details')" on:click="showDetails">
       <span>Details</span>
-      <small if="!props.collapsed">async + external boundaries</small>
+      <small if="!props.collapsed">decisions, saves, external sync</small>
     </button>
 
     <p if="!props.collapsed" class="workspace-sidebar__status">{{ props.statusMessage }}</p>
@@ -29,6 +29,10 @@
   }
 
   export let props: Props;
+
+  function sidebarClass() {
+    return props.collapsed ? "workspace-sidebar workspace-sidebar--collapsed" : "workspace-sidebar";
+  }
 
   function sectionClass(section: Section) {
     return props.activeSection === section
@@ -86,5 +90,25 @@
 
   .workspace-sidebar__item small {
     opacity: 0.75;
+  }
+
+  .workspace-sidebar--collapsed {
+    padding: 0.75rem;
+  }
+
+  .workspace-sidebar--collapsed .workspace-sidebar__item {
+    min-height: 4.5rem;
+    justify-items: center;
+    align-content: center;
+    padding: 0.7rem 0.45rem;
+    text-align: center;
+  }
+
+  .workspace-sidebar--collapsed .workspace-sidebar__item span {
+    display: block;
+    max-width: 100%;
+    font-size: 0.82rem;
+    line-height: 1.15;
+    word-break: break-word;
   }
 </style>

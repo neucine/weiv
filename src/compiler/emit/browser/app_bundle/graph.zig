@@ -4,6 +4,9 @@ const emit_direct_js = @import("../direct_component_js.zig");
 const parser_backend = @import("../../../../ffi/parser_backend.zig");
 const style = @import("../scoped_css.zig");
 
+const weiv_runtime_package_specifier = "@weiv/runtime";
+const weiv_runtime_output_entry = "__weiv_runtime/index.js";
+
 pub const Graph = struct {
     root_dir: []const u8,
     allocator: std.mem.Allocator,
@@ -295,6 +298,10 @@ pub const Graph = struct {
         source_specifier: []const u8,
         allocator: std.mem.Allocator,
     ) !void {
+        if (std.mem.eql(u8, source_specifier, weiv_runtime_package_specifier)) {
+            try self.copyWeivRuntimeModule(out_dir, allocator);
+            return;
+        }
         if (std.fs.path.isAbsolute(source_specifier)) return;
         if (!std.mem.startsWith(u8, source_specifier, "./") and
             !std.mem.startsWith(u8, source_specifier, "../"))
@@ -313,8 +320,13 @@ pub const Graph = struct {
 
         const file_data = try std.fs.cwd().readFileAlloc(allocator, abs_source, 1024 * 1024);
         defer allocator.free(file_data);
-        const module_output = try emitRuntimeImportOutput(file_data, abs_source, allocator);
+        const module_output = try emitRuntimeImportOutput(file_data, abs_source, output_rel_source, allocator);
         defer allocator.free(module_output);
+        if (std.fs.path.dirname(output_rel_source)) |output_dirname| {
+            if (!std.mem.eql(u8, output_dirname, ".") and output_dirname.len > 0) {
+                try out_dir.makePath(output_dirname);
+            }
+        }
         try out_dir.writeFile(.{ .sub_path = output_rel_source, .data = module_output });
         try self.copied_runtime_paths.put(try self.allocator.dupe(u8, output_rel_source), {});
 
@@ -329,8 +341,64 @@ pub const Graph = struct {
         }
 
         for (nested_imports) |nested_specifier| {
-            if (!isBrowserLoadableImport(nested_specifier) and !isTranspilableTypeScriptModule(nested_specifier)) continue;
+            if (!std.mem.eql(u8, nested_specifier, weiv_runtime_package_specifier) and
+                !isBrowserLoadableImport(nested_specifier) and
+                !isTranspilableTypeScriptModule(nested_specifier)) continue;
             try self.copyRuntimeImport(out_dir, dependency_dir, nested_specifier, allocator);
+        }
+    }
+
+    fn copyWeivRuntimeModule(self: *Graph, out_dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
+        const runtime_source = try std.fs.path.join(allocator, &.{ "src", "runtime", "index.ts" });
+        defer allocator.free(runtime_source);
+        const runtime_abs_source = try std.fs.cwd().realpathAlloc(allocator, runtime_source);
+        defer allocator.free(runtime_abs_source);
+
+        try self.copyWeivRuntimeDependency(out_dir, runtime_abs_source, weiv_runtime_output_entry, allocator);
+    }
+
+    fn copyWeivRuntimeDependency(
+        self: *Graph,
+        out_dir: std.fs.Dir,
+        abs_source: []const u8,
+        output_rel_source: []const u8,
+        allocator: std.mem.Allocator,
+    ) !void {
+        if (self.copied_runtime_paths.contains(output_rel_source)) return;
+
+        const file_data = try std.fs.cwd().readFileAlloc(allocator, abs_source, 1024 * 1024);
+        defer allocator.free(file_data);
+
+        const module_output = try emitRuntimeImportOutput(file_data, abs_source, output_rel_source, allocator);
+        defer allocator.free(module_output);
+        if (std.fs.path.dirname(output_rel_source)) |output_dirname| {
+            if (!std.mem.eql(u8, output_dirname, ".") and output_dirname.len > 0) {
+                try out_dir.makePath(output_dirname);
+            }
+        }
+        try out_dir.writeFile(.{ .sub_path = output_rel_source, .data = module_output });
+        try self.copied_runtime_paths.put(try self.allocator.dupe(u8, output_rel_source), {});
+
+        const dependency_dir = std.fs.path.dirname(abs_source) orelse return;
+        const nested_imports = try parseJsModuleImports(file_data, allocator);
+        defer {
+            for (nested_imports) |item| allocator.free(item);
+            allocator.free(nested_imports);
+        }
+
+        for (nested_imports) |nested_specifier| {
+            if (!isBrowserLoadableImport(nested_specifier) and !isTranspilableTypeScriptModule(nested_specifier)) continue;
+            const nested_abs_source = try std.fs.path.resolve(allocator, &.{ dependency_dir, nested_specifier });
+            defer allocator.free(nested_abs_source);
+
+            const nested_rewritten = try emittedRuntimeImportPath(nested_specifier, allocator);
+            defer allocator.free(nested_rewritten);
+
+            const output_dir = std.fs.path.dirname(output_rel_source) orelse ".";
+            const nested_output_rel_source = try std.fs.path.resolvePosix(allocator, &.{ output_dir, nested_rewritten });
+            defer allocator.free(nested_output_rel_source);
+
+            try self.copyWeivRuntimeDependency(out_dir, nested_abs_source, nested_output_rel_source, allocator);
         }
     }
 
@@ -486,6 +554,7 @@ fn shouldCopyRuntimeImport(
     script: *const @import("../../../analyze/ts/analysis.zig").ScriptAnalysis,
 ) bool {
     if (!shouldPreserveRuntimeImport(record, script)) return false;
+    if (std.mem.eql(u8, record.source, weiv_runtime_package_specifier)) return true;
     return isBrowserLoadableImport(record.source) or isTranspilableTypeScriptModule(record.source);
 }
 
@@ -547,6 +616,10 @@ fn validateRuntimeImportSpecifier(importer_path: []const u8, source_specifier: [
         return error.UnsupportedRuntimeImport;
     }
 
+    if (std.mem.eql(u8, source_specifier, weiv_runtime_package_specifier)) {
+        return;
+    }
+
     const is_relative = std.mem.startsWith(u8, source_specifier, "./") or
         std.mem.startsWith(u8, source_specifier, "../");
     if (!is_relative) {
@@ -570,21 +643,21 @@ fn emittedRuntimeImportPath(source: []const u8, allocator: std.mem.Allocator) ![
     return try allocator.dupe(u8, source);
 }
 
-fn emitRuntimeImportOutput(source: []const u8, source_path: []const u8, allocator: std.mem.Allocator) ![]u8 {
+fn emitRuntimeImportOutput(source: []const u8, source_path: []const u8, output_rel_path: []const u8, allocator: std.mem.Allocator) ![]u8 {
     if (isTranspilableTypeScriptModule(source_path)) {
         const transpiled = try parser_backend.transpileModule(source, source_path, allocator);
         defer allocator.free(transpiled);
-        return try rewriteRuntimeImportSpecifiers(transpiled, allocator);
+        return try rewriteRuntimeImportSpecifiers(transpiled, output_rel_path, allocator);
     }
 
     if (isJavaScriptModule(source_path)) {
-        return try rewriteRuntimeImportSpecifiers(source, allocator);
+        return try rewriteRuntimeImportSpecifiers(source, output_rel_path, allocator);
     }
 
     return try allocator.dupe(u8, source);
 }
 
-fn rewriteRuntimeImportSpecifiers(source: []const u8, allocator: std.mem.Allocator) ![]u8 {
+fn rewriteRuntimeImportSpecifiers(source: []const u8, output_rel_path: []const u8, allocator: std.mem.Allocator) ![]u8 {
     var out = std.ArrayList(u8){};
     defer out.deinit(allocator);
 
@@ -593,7 +666,7 @@ fn rewriteRuntimeImportSpecifiers(source: []const u8, allocator: std.mem.Allocat
     while (lines.next()) |line| {
         if (!first) try out.append(allocator, '\n');
         first = false;
-        const rewritten = try rewriteImportLine(line, allocator);
+        const rewritten = try rewriteImportLine(line, output_rel_path, allocator);
         defer allocator.free(rewritten);
         try out.appendSlice(allocator, rewritten);
     }
@@ -601,10 +674,15 @@ fn rewriteRuntimeImportSpecifiers(source: []const u8, allocator: std.mem.Allocat
     return try out.toOwnedSlice(allocator);
 }
 
-fn rewriteImportLine(line: []const u8, allocator: std.mem.Allocator) ![]u8 {
+fn rewriteImportLine(line: []const u8, output_rel_path: []const u8, allocator: std.mem.Allocator) ![]u8 {
     if (extractQuotedSpecifier(line)) |specifier| {
         const is_import_export = std.mem.startsWith(u8, std.mem.trimLeft(u8, line, &std.ascii.whitespace), "import ") or
             std.mem.startsWith(u8, std.mem.trimLeft(u8, line, &std.ascii.whitespace), "export ");
+        if (is_import_export and std.mem.eql(u8, specifier, weiv_runtime_package_specifier)) {
+            const rewritten_specifier = try relativeRuntimePackageSpecifier(output_rel_path, allocator);
+            defer allocator.free(rewritten_specifier);
+            return try replaceFirstSpecifier(line, specifier, rewritten_specifier, allocator);
+        }
         if (is_import_export and isTranspilableTypeScriptModule(specifier)) {
             const rewritten_specifier = try emittedRuntimeImportPath(specifier, allocator);
             defer allocator.free(rewritten_specifier);
@@ -612,6 +690,16 @@ fn rewriteImportLine(line: []const u8, allocator: std.mem.Allocator) ![]u8 {
         }
     }
     return try allocator.dupe(u8, line);
+}
+
+fn relativeRuntimePackageSpecifier(output_rel_path: []const u8, allocator: std.mem.Allocator) ![]u8 {
+    const output_dir = std.fs.path.dirname(output_rel_path) orelse ".";
+    const relative = try std.fs.path.relative(allocator, output_dir, weiv_runtime_output_entry);
+    defer allocator.free(relative);
+    if (std.mem.startsWith(u8, relative, "./") or std.mem.startsWith(u8, relative, "../")) {
+        return try allocator.dupe(u8, relative);
+    }
+    return try std.fmt.allocPrint(allocator, "./{s}", .{relative});
 }
 
 fn replaceFirstSpecifier(line: []const u8, original: []const u8, replacement: []const u8, allocator: std.mem.Allocator) ![]u8 {

@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -88,7 +88,7 @@ test("classic app bundles and helper-copy flows stay healthy", async () => {
     if (!punctuationModule.includes('export const suffix = "!";')) {
       throw new Error("Imported helper bundle missing copied punctuation.js");
     }
-    if (!helperAppModule.includes('import { formatTitle } from "./format.js";')) {
+    if (!helperAppModule.includes('import { formatTitle as __weiv_import_formatTitle } from "./format.js";')) {
       throw new Error("Imported helper bundle missing preserved runtime import");
     }
     if (!helperProps.includes('title: "Preview"') || !helperProps.includes("count: 0")) {
@@ -116,7 +116,7 @@ test("classic app bundles and helper-copy flows stay healthy", async () => {
     if (!tsPunctuationModule.includes('export const suffix = "!";')) {
       throw new Error("Imported TS helper bundle missing transpiled punctuation.js");
     }
-    if (!tsHelperAppModule.includes('import { formatTitle } from "./format.js";')) {
+    if (!tsHelperAppModule.includes('import { formatTitle as __weiv_import_formatTitle } from "./format.js";')) {
       throw new Error("Imported TS helper bundle missing rewritten app import");
     }
     if (!tsHelperProps.includes('title: "Preview"') || !tsHelperProps.includes("count: 0")) {
@@ -129,6 +129,77 @@ test("classic app bundles and helper-copy flows stay healthy", async () => {
     }
   } finally {
     rmSync(importedTsHelperBundleDir, { recursive: true, force: true });
+  }
+}, 120_000);
+
+test("imported observable shared state wakes component updates", async () => {
+  const appDir = mkdtempSync(join(tmpdir(), "weiv-observable-app-"));
+  const bundleDir = mkdtempSync(join(tmpdir(), "weiv-observable-bundle-"));
+
+  try {
+    writeFileSync(
+      join(appDir, "shared.ts"),
+      `import { observable } from "@weiv/runtime";
+
+export const shared = observable({
+  count: 1,
+});
+
+export function incrementShared() {
+  shared.count += 1;
+}
+`,
+      "utf8",
+    );
+    writeFileSync(
+      join(appDir, "App.weiv"),
+      `<template>
+  <section class="shared-observable-app">
+    <p class="count">{{ shared.count }}</p>
+    <button class="increment" on:click="incrementShared">Increment shared</button>
+  </section>
+</template>
+
+<script lang="ts">
+  import { incrementShared, shared } from "./shared.ts";
+</script>
+`,
+      "utf8",
+    );
+
+    emitAppBundle(join(appDir, "App.weiv"), bundleDir);
+
+    const bundleModule = await importModule(join(bundleDir, "bundle.mjs"));
+    const fakeDocument = new FakeDocument();
+    const appTarget = fakeDocument.createElement("div");
+    appTarget.setAttribute("id", "app");
+    fakeDocument.body.append(appTarget);
+    installDocument(fakeDocument);
+
+    bundleModule.mount(appTarget, {});
+
+    const count = findElement(fakeDocument.body, byClass("count"));
+    if (!count || count.textContent.trim() !== "1") {
+      throw new Error("Observable app did not render initial shared count");
+    }
+
+    const incrementButton = findElement(fakeDocument.body, byClass("increment"));
+    if (!incrementButton) {
+      throw new Error("Observable app missing increment button");
+    }
+
+    click(incrementButton);
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    if (count.textContent.trim() !== "2") {
+      throw new Error(`Observable app did not refresh after shared mutation, found ${count.textContent.trim()}`);
+    }
+    if (appTarget.replaceChildrenCalls !== 1) {
+      throw new Error("Observable app rerendered the root instead of patching in place");
+    }
+  } finally {
+    rmSync(appDir, { recursive: true, force: true });
+    rmSync(bundleDir, { recursive: true, force: true });
   }
 }, 120_000);
 
@@ -365,5 +436,66 @@ test("TodoMVC direct modules and app bundle behave correctly", async () => {
     }
   } finally {
     rmSync(todomvcDirectBundleDir, { recursive: true, force: true });
+  }
+}, 120_000);
+
+test("workspace app bundle mounts without import initialization regressions", async () => {
+  const workspaceBundleDir = mkdtempSync(join(tmpdir(), "weiv-workspace-bundle-"));
+  try {
+    emitAppBundle("test/examples/workspace-app/App.weiv", workspaceBundleDir);
+    const workspaceBundle = await importModule(join(workspaceBundleDir, "bundle.mjs"));
+    const sharedModule = readFileSync(join(workspaceBundleDir, "workspace_shared.js"), "utf8");
+    const observableModule = readFileSync(join(workspaceBundleDir, "__weiv_runtime", "index.js"), "utf8");
+
+    if (!sharedModule.includes('import { observable } from "./__weiv_runtime/index.js";')) {
+      throw new Error("Workspace app bundle did not preserve observable helper import");
+    }
+    if (!sharedModule.includes("export const workspaceShared = observable({")) {
+      throw new Error("Workspace app bundle did not create shared state through observable()");
+    }
+    if (!observableModule.includes('export { observable } from "./observable.js";')) {
+      throw new Error("Workspace app bundle did not include the observable runtime entry module");
+    }
+    const observableLeafModule = readFileSync(join(workspaceBundleDir, "__weiv_runtime", "observable.js"), "utf8");
+    if (!observableLeafModule.includes('const WEIV_OBSERVABLE = Symbol.for("weiv.observable");')) {
+      throw new Error("Workspace app bundle did not include the observable runtime module");
+    }
+
+    const fakeDocument = new FakeDocument();
+    const appTarget = fakeDocument.createElement("div");
+    appTarget.setAttribute("id", "app");
+    fakeDocument.body.append(appTarget);
+    installDocument(fakeDocument);
+
+    workspaceBundle.mount(appTarget, {
+      workspaceName: "Compiler Lab",
+      initialSection: "overview",
+    });
+
+    if (appTarget.replaceChildrenCalls !== 1) {
+      throw new Error(`Workspace app mount expected 1 root replaceChildren call, found ${appTarget.replaceChildrenCalls}`);
+    }
+    if (!appTarget.textContent.includes("Compiler Lab")) {
+      throw new Error("Workspace app bundle did not render header content");
+    }
+    if (!appTarget.textContent.includes("Review blockers before the Friday release cut.")) {
+      throw new Error("Workspace app bundle did not render initial shared status content");
+    }
+    if (!appTarget.textContent.includes("3 release alerts")) {
+      throw new Error("Workspace app bundle did not render initial alert count");
+    }
+
+    const clearAlertsButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
+      element.textContent.trim() === "Clear alerts"
+    );
+    if (!clearAlertsButton) throw new Error("Workspace app bundle missing clear alerts button");
+    click(clearAlertsButton);
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    if (!appTarget.textContent.includes("0 release alerts")) {
+      throw new Error("Workspace app clear alerts flow did not patch the shared alert count");
+    }
+  } finally {
+    rmSync(workspaceBundleDir, { recursive: true, force: true });
   }
 }, 120_000);

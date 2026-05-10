@@ -9,8 +9,8 @@ The normalized vocabulary for this model lives in
 
 The next implementation-focused upgrade for script-side precision is documented
 in [AST Script Analysis Plan](./ast-script-analysis-plan.md).
-The current state-tracking direction for escaping / externalized state is
-documented in [Proxy State Graph Design](./proxy-state-graph-design.md).
+The current next-direction for cross-component/shared state is documented in
+[Shared Observable State Design](./shared-observable-state-design.md).
 
 The current direction is:
 
@@ -28,22 +28,19 @@ virtual DOM, or public effect graphs.
 Where plain TypeScript becomes too ambiguous for trustworthy compile-time state
 analysis, `weiv` should first strengthen script-side precision through
 AST-backed backend analysis and explicit diagnostics. For state that escapes
-simple owned component boundaries, the current likely direction is a narrow
-proxy-backed tracked state graph rather than trying to infer arbitrary mutation
-timing statically.
+simple owned component boundaries, the current next-direction is explicit shared
+observable state created at the source rather than trying to proxy plain shared
+objects later inside consuming components.
 
 Optional ecosystem/runtime companions are still valid, but they are no longer
 part of the active top-level implementation track. The current architecture is
-centered on the compiler/runtime foundation already on `main`, especially the
-proxy-backed tracked-state path described in
-[Proxy State Graph Design](./proxy-state-graph-design.md).
+centered on the compiler/runtime foundation already on `main`.
 
-The current proxy-based graph direction does not replace the existing local
-baseline. The intended split is:
+The intended state split is:
 
 - local owned state stays simple and compiler-first
-- escaping or externalized state may move through a Weiv-owned canonical tracked
-  proxy surface
+- shared state beyond the component boundary should move through a Weiv-owned
+  observable runtime contract
 
 ## Component Syntax
 
@@ -213,9 +210,8 @@ The compiler should prefer clear errors for patterns that look reactive but are
 outside the owned scheduling model. Source-located diagnostics already exist for
 several template and composition mistakes, and invalidation-graph diagnostics cover the
 current stale-risk cases. `compile analyze component` now also summarizes
-proxy-state tracked roots and current escape warnings with rewrite guidance, so
-users do not need to rely only on `inspect invalidation-graph` to understand
-the current precision model.
+current warnings and rewrite guidance, so users do not need to rely only on
+`inspect invalidation-graph` to understand the current precision model.
 
 ## Scheduling
 
@@ -225,7 +221,7 @@ The current direct-browser scheduling flow is documented in
 That document is the source of truth for:
 
 - owned-boundary flush timing
-- proxy-tracked microtask flush timing
+- shared-observable microtask flush timing
 - subscription lifecycle
 - current ordering semantics
 - the exact guarantee around tracked captured references
