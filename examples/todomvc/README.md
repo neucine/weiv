@@ -13,6 +13,9 @@ The port keeps the important framework exercise points:
 - child event emission
 - create, toggle, edit, delete, filter, toggle-all, and clear-completed flows
 - scoped styles across a larger component tree
+- direct browser mounting and selective patching
+- app bundle generation and preview bootstrapping
 
 Unlike the benchmark source, this version is shaped around the current `weiv`
-runtime model rather than store decorators or class-component semantics.
+runtime model rather than older render-runtime assumptions, store decorators,
+or class-component semantics.

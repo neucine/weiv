@@ -1,35 +1,67 @@
 # Weiv Examples
 
-These examples are the canonical Phase 0 authoring references for `weiv`.
+These examples are the current authoring and verification fixtures for `weiv`.
 
-They exist to validate the locked syntax and give Phase 1 compiler work a stable fixture set.
+They are not all equal:
 
-## Example Set
+- some are human-facing reference examples
+- some are focused compiler/runtime fixtures
+- some are negative fixtures used to prove diagnostics or unsupported cases
+
+## Reference Examples
+
+Good small examples to read first:
 
 - [Basic Counter](./basic-counter.weiv)
 - [Todo List](./todo-list.weiv)
 - [Dashboard Card](./dashboard-card.weiv)
 - [Metric Badge](./MetricBadge.weiv)
+- [Conditional Toggle](./conditional-toggle.weiv)
+
+## App-Scale Verification
+
+Multi-component verification examples:
+
 - [Classic Todo App](./classic-todo/README.md)
 - [TodoMVC Verification App](./todomvc/README.md)
 
-## Coverage
+Current role:
 
-Together, these examples exercise:
+- `examples/todomvc` is the main smaller app-scale verification example
+- `examples/classic-todo` is still useful as a simpler multi-component app
+- the repo still needs a clearly larger flagship verification app above
+  TodoMVC
 
-- props
-- local mutable state
-- helper functions
-- event binding
-- conditional rendering
-- list rendering
-- child component composition
-- scoped styles
-- larger multi-component app verification
+## Focused Runtime / Compiler Fixtures
 
-## Notes
+These exist mainly to pressure-test specific behaviors:
 
-- `examples/todomvc` is the primary smaller app-scale verification example.
-- The smaller fixtures remain useful for narrow compiler regressions.
-- The repo still needs a clearly larger flagship verification app above
-  TodoMVC.
+- [Timer Callback](./timer-callback.weiv): owned callback scheduling
+- [Imported Helper](./imported-helper/App.weiv): runtime JS import copying
+- [Imported TS Helper](./imported-ts-helper/App.weiv): TS helper transpile +
+  import rewriting
+
+## Slot / Projection Fixtures
+
+The `slots/` directory is a focused fixture set for:
+
+- default slots
+- named slots
+- fallback content
+- grouped slot templates
+- projected updates
+- nested slot trees
+
+Useful entry points:
+
+- [Panel](./slots/Panel.weiv)
+- [Panel Usage](./slots/PanelUsage.weiv)
+- [Card](./slots/Card.weiv)
+- [Slot Showcase](./slots/SlotShowcase.weiv)
+
+## Negative Fixture
+
+- `unsupported-import/`
+
+This is an intentional failure case used to verify unsupported bare runtime
+import diagnostics.
