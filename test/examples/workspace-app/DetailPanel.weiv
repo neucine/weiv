@@ -1,0 +1,109 @@
+<template>
+  <Panel>
+    <template slot:header>
+      <div>
+        <h2>Detail panel</h2>
+        <p class="detail-panel__subhead">{{ props.lastSavedLabel }}</p>
+      </div>
+    </template>
+
+    <template slot:actions>
+      <button class="detail-panel__ghost" on:click="registerWatch">Register external watch</button>
+      <button class="detail-panel__ghost" on:click="triggerExternalPulse">Emit external pulse</button>
+    </template>
+
+    <EmptyState if="!props.item"></EmptyState>
+
+    <section else class="detail-panel__content">
+      <header class="detail-panel__headline">
+        <strong>{{ props.item.title }}</strong>
+        <span>{{ props.pending ? "Saving..." : props.item.state }}</span>
+      </header>
+
+      <DetailSection bind:body="props.item.summary" bind:title="'Summary'" />
+      <DetailSection bind:body="props.item.detail" bind:title="'Detail'" />
+
+      <footer class="detail-panel__footer">
+        <p class="detail-panel__ticks">External ticks: {{ props.externalTicks }}</p>
+        <button class="detail-panel__primary" on:click="saveItem">Save detail state</button>
+      </footer>
+    </section>
+  </Panel>
+</template>
+
+<script lang="ts">
+  import DetailSection from "./DetailSection.weiv";
+  import EmptyState from "./EmptyState.weiv";
+  import Panel from "./Panel.weiv";
+
+  export interface DetailItem {
+    id: string;
+    title: string;
+    summary: string;
+    detail: string;
+    state: string;
+  }
+
+  export interface Props {
+    item: DetailItem | null;
+    pending: boolean;
+    lastSavedLabel: string;
+    externalTicks: number;
+  }
+
+  export let props: Props;
+
+  function saveItem() {
+    if (!props.item) {
+      return;
+    }
+    emit("save-item", props.item.id);
+  }
+
+  function registerWatch() {
+    emit("register-external-watch", null);
+  }
+
+  function triggerExternalPulse() {
+    emit("trigger-external-pulse", null);
+  }
+</script>
+
+<style>
+  .detail-panel__subhead,
+  .detail-panel__ticks {
+    color: #6b7a8d;
+  }
+
+  .detail-panel__content {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .detail-panel__headline,
+  .detail-panel__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .detail-panel__ghost,
+  .detail-panel__primary {
+    border-radius: 999px;
+    padding: 0.55rem 0.85rem;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .detail-panel__ghost {
+    border: 1px solid #dbe4ec;
+    background: #fff;
+  }
+
+  .detail-panel__primary {
+    border: none;
+    background: #182c42;
+    color: #fff;
+  }
+</style>

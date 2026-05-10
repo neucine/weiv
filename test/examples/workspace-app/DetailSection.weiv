@@ -1,0 +1,29 @@
+<template>
+  <section class="detail-section">
+    <h3>{{ props.title }}</h3>
+    <p>{{ props.body }}</p>
+  </section>
+</template>
+
+<script lang="ts">
+  export interface Props {
+    title: string;
+    body: string;
+  }
+
+  export let props: Props;
+</script>
+
+<style>
+  .detail-section {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.85rem 0;
+    border-top: 1px solid #edf2f6;
+  }
+
+  .detail-section:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+</style>

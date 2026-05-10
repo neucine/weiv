@@ -22,15 +22,15 @@ Good small examples to read first:
 
 Multi-component verification examples:
 
+- [Workspace App](./workspace-app/README.md)
 - [Classic Todo App](./classic-todo/README.md)
 - [TodoMVC Verification App](./todomvc/README.md)
 
 Current role:
 
+- `test/examples/workspace-app` is the larger flagship verification app scaffold
 - `test/examples/todomvc` is the main smaller app-scale verification example
 - `test/examples/classic-todo` is still useful as a simpler multi-component app
-- the repo still needs a clearly larger flagship verification app above
-  TodoMVC
 
 ## Focused Runtime / Compiler Fixtures
 

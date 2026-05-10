@@ -1,0 +1,113 @@
+<template>
+  <Panel>
+    <template slot:header>
+      <div>
+        <h2>Activity feed</h2>
+        <p class="activity-feed__subhead">Shared pulse: {{ props.sharedPulse }}</p>
+      </div>
+    </template>
+
+    <template slot:actions>
+      <button bind:class="filterClass('all')" on:click="showAll">All</button>
+      <button bind:class="filterClass('pinned')" on:click="showPinned">Pinned</button>
+      <button bind:class="filterClass('open')" on:click="showOpen">Open</button>
+    </template>
+
+    <EmptyState if="props.items.length === 0">
+      <template slot:message>
+        <p>No items match the current filter.</p>
+      </template>
+    </EmptyState>
+
+    <ul else class="activity-feed__list">
+      <ActivityItem
+        for="item in props.items"
+        bind:id="item.id"
+        bind:owner="item.owner"
+        bind:pinned="item.pinned"
+        bind:selected="props.selectedId === item.id"
+        bind:summary="item.summary"
+        bind:title="item.title"
+        on:select-item="forwardSelect"
+        on:toggle-pin="forwardPin"
+      />
+    </ul>
+  </Panel>
+</template>
+
+<script lang="ts">
+  import ActivityItem from "./ActivityItem.weiv";
+  import EmptyState from "./EmptyState.weiv";
+  import Panel from "./Panel.weiv";
+
+  export type FeedFilter = "all" | "pinned" | "open";
+
+  export interface ActivityItemView {
+    id: string;
+    title: string;
+    summary: string;
+    owner: string;
+    pinned: boolean;
+  }
+
+  export interface Props {
+    items: ActivityItemView[];
+    selectedId: string;
+    filter: FeedFilter;
+    sharedPulse: number;
+  }
+
+  export let props: Props;
+
+  function filterClass(filter: FeedFilter) {
+    return props.filter === filter ? "activity-feed__filter activity-feed__filter--active" : "activity-feed__filter";
+  }
+
+  function showAll() {
+    emit("set-filter", "all");
+  }
+
+  function showPinned() {
+    emit("set-filter", "pinned");
+  }
+
+  function showOpen() {
+    emit("set-filter", "open");
+  }
+
+  function forwardSelect(itemId: string) {
+    emit("select-item", itemId);
+  }
+
+  function forwardPin(itemId: string) {
+    emit("toggle-pin", itemId);
+  }
+</script>
+
+<style>
+  .activity-feed__subhead {
+    color: #68798e;
+  }
+
+  .activity-feed__filter {
+    margin-left: 0.4rem;
+    border: 1px solid #dbe4ec;
+    border-radius: 999px;
+    padding: 0.5rem 0.75rem;
+    background: #fff;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .activity-feed__filter--active {
+    border-color: #182c42;
+    background: #182c42;
+    color: #fff;
+  }
+
+  .activity-feed__list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+</style>

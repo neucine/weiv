@@ -11,6 +11,7 @@ Active docs:
 - [Plan](./plan.md): next implementation work from the current architecture.
 - [Testing Strategy](./testing-strategy.md): testing layers, current coverage gap, and the larger verification-app direction.
 - [Testing Implementation Plan](./testing-implementation-plan.md): concrete rollout plan for the larger flagship verification app.
+- [Testing Capability Matrix](./testing-capability-matrix.md): required Weiv feature coverage for the flagship verification app.
 - [Proxy State Graph Design](./proxy-state-graph-design.md): consolidated design and current implementation direction for proxy-backed tracked state, including root selection, path tracking, escape diagnostics, compiler/runtime contract, and pipeline alignment.
 
 Historical design notes and superseded plans live in [archive](./archive/).

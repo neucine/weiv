@@ -1,0 +1,34 @@
+<template>
+  <section class="empty-state">
+    <header class="empty-state__header">
+      <slot name="message">
+        <p class="empty-state__fallback-message">Nothing to show yet.</p>
+      </slot>
+    </header>
+    <div class="empty-state__body">
+      <slot>
+        <p class="empty-state__fallback-body">Choose a different filter or section.</p>
+      </slot>
+    </div>
+  </section>
+</template>
+
+<script lang="ts">
+  export interface Props {}
+
+  export let props: Props;
+</script>
+
+<style>
+  .empty-state {
+    border: 1px dashed #c7d1db;
+    border-radius: 16px;
+    padding: 1rem;
+    background: #f8fbff;
+  }
+
+  .empty-state__fallback-message,
+  .empty-state__fallback-body {
+    color: #6d7b8d;
+  }
+</style>

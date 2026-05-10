@@ -87,6 +87,83 @@ test "todomvc verification app components build through current pipeline" {
     );
 }
 
+test "workspace app components build through current pipeline" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    try expectComponentBuild(
+        allocator,
+        try readFixture(allocator, "test/examples/workspace-app/App.weiv"),
+        "test/examples/workspace-app/App.weiv",
+        6,
+        2,
+    );
+    try expectComponentBuild(
+        allocator,
+        try readFixture(allocator, "test/examples/workspace-app/WorkspaceShell.weiv"),
+        "test/examples/workspace-app/WorkspaceShell.weiv",
+        0,
+        0,
+    );
+    try expectComponentBuild(
+        allocator,
+        try readFixture(allocator, "test/examples/workspace-app/WorkspaceHeader.weiv"),
+        "test/examples/workspace-app/WorkspaceHeader.weiv",
+        0,
+        0,
+    );
+    try expectComponentBuild(
+        allocator,
+        try readFixture(allocator, "test/examples/workspace-app/WorkspaceSidebar.weiv"),
+        "test/examples/workspace-app/WorkspaceSidebar.weiv",
+        0,
+        0,
+    );
+    try expectComponentBuild(
+        allocator,
+        try readFixture(allocator, "test/examples/workspace-app/DashboardSection.weiv"),
+        "test/examples/workspace-app/DashboardSection.weiv",
+        3,
+        0,
+    );
+    try expectComponentBuild(
+        allocator,
+        try readFixture(allocator, "test/examples/workspace-app/MetricGrid.weiv"),
+        "test/examples/workspace-app/MetricGrid.weiv",
+        1,
+        0,
+    );
+    try expectComponentBuild(
+        allocator,
+        try readFixture(allocator, "test/examples/workspace-app/ActivityFeed.weiv"),
+        "test/examples/workspace-app/ActivityFeed.weiv",
+        3,
+        0,
+    );
+    try expectComponentBuild(
+        allocator,
+        try readFixture(allocator, "test/examples/workspace-app/DetailPanel.weiv"),
+        "test/examples/workspace-app/DetailPanel.weiv",
+        4,
+        0,
+    );
+    try expectComponentBuild(
+        allocator,
+        try readFixture(allocator, "test/examples/workspace-app/Panel.weiv"),
+        "test/examples/workspace-app/Panel.weiv",
+        0,
+        0,
+    );
+    try expectComponentBuild(
+        allocator,
+        try readFixture(allocator, "test/examples/workspace-app/EmptyState.weiv"),
+        "test/examples/workspace-app/EmptyState.weiv",
+        0,
+        0,
+    );
+}
+
 test "classic todo app app component lowers to expected IR shape" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -1888,6 +1965,53 @@ test "todomvc verification app emits multi-file app bundle" {
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".todo-footer") != null);
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".toggle-all") != null);
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".newtodo") != null);
+}
+
+test "workspace app emits multi-file app bundle" {
+    const allocator = std.testing.allocator;
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    const tmp_root = try std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", tmp_dir.sub_path[0..] });
+    defer allocator.free(tmp_root);
+    const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "workspace-bundle" });
+    defer allocator.free(out_dir);
+
+    try app_emit.emitApp("test/examples/workspace-app/App.weiv", out_dir, allocator);
+
+    const bundle_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/bundle.mjs", 1024 * 1024);
+    defer allocator.free(bundle_js);
+    const root_module_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/App.mjs", 1024 * 1024);
+    defer allocator.free(root_module_js);
+    const shared_module_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/workspace_shared.js", 1024 * 1024);
+    defer allocator.free(shared_module_js);
+    const format_module_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/format.js", 1024 * 1024);
+    defer allocator.free(format_module_js);
+    const metric_tone_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/metric_tone.js", 1024 * 1024);
+    defer allocator.free(metric_tone_js);
+    const header_module_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/WorkspaceHeader.mjs", 1024 * 1024);
+    defer allocator.free(header_module_js);
+    const detail_module_js = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/DetailPanel.mjs", 1024 * 1024);
+    defer allocator.free(detail_module_js);
+    const styles_css = try tmp_dir.dir.readFileAlloc(allocator, "workspace-bundle/styles.css", 1024 * 1024);
+    defer allocator.free(styles_css);
+
+    try std.testing.expect(std.mem.indexOf(u8, bundle_js, "export function mount(target, props = {})") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bundle_js, "\"WorkspaceHeader\": Component_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bundle_js, "\"ActivityFeed\": Component_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bundle_js, "\"DetailPanel\": Component_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, root_module_js, "queueMicrotask") != null);
+    try std.testing.expect(std.mem.indexOf(u8, root_module_js, "registerExternalPulseListener") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shared_module_js, "export const workspaceShared") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shared_module_js, "emitExternalPulse") != null);
+    try std.testing.expect(std.mem.indexOf(u8, format_module_js, "Saved just now") != null);
+    try std.testing.expect(std.mem.indexOf(u8, metric_tone_js, "metric-card--up") != null);
+    try std.testing.expect(std.mem.indexOf(u8, header_module_js, "Queue refresh") != null);
+    try std.testing.expect(std.mem.indexOf(u8, detail_module_js, "Register external watch") != null);
+    try std.testing.expect(std.mem.indexOf(u8, styles_css, ".workspace-shell") != null);
+    try std.testing.expect(std.mem.indexOf(u8, styles_css, ".workspace-header") != null);
+    try std.testing.expect(std.mem.indexOf(u8, styles_css, ".activity-feed__list") != null);
+    try std.testing.expect(std.mem.indexOf(u8, styles_css, ".detail-panel__content") != null);
 }
 
 test "basic counter app bundle emits inferred preview props" {

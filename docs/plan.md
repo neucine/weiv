@@ -95,12 +95,12 @@ Current state:
 
 - the suite has many focused compiler/runtime fixtures
 - TodoMVC is still the main app-like verification example
-- there is no clearly larger flagship verification app above it
+- `test/examples/workspace-app` now exists as the first larger flagship app scaffold
 
 Next work:
 
-- define and build a larger flagship verification app
 - keep TodoMVC as a smaller app-scale example, not the whole strategy
+- broaden workspace-app into fuller render and inspect coverage
 - use the larger app to expose:
   - direct strengths
   - conservative update sites

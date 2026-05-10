@@ -12,6 +12,8 @@ It answers:
 - what should land first versus later
 
 Use [Testing Strategy](./testing-strategy.md) for the high-level rationale.
+Use [Testing Capability Matrix](./testing-capability-matrix.md) for the
+framework-first coverage target the app must satisfy.
 
 ## Target
 
@@ -104,6 +106,9 @@ The app should intentionally exercise:
 - slot/default/named projection
 - independent updates in different regions of the same screen
 - realistic scoped CSS density
+
+These are still implementation-facing summaries. The canonical framework-first
+coverage list now lives in [Testing Capability Matrix](./testing-capability-matrix.md).
 
 ## File Layout
 

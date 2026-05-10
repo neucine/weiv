@@ -1,0 +1,51 @@
+<template>
+  <section class="panel">
+    <header class="panel__header">
+      <div class="panel__heading">
+        <slot name="header">
+          <h2 class="panel__fallback-title">Untitled panel</h2>
+        </slot>
+      </div>
+      <div class="panel__actions">
+        <slot name="actions"></slot>
+      </div>
+    </header>
+    <div class="panel__body">
+      <slot>
+        <p class="panel__fallback-body">No content yet.</p>
+      </slot>
+    </div>
+  </section>
+</template>
+
+<script lang="ts">
+  export interface Props {}
+
+  export let props: Props;
+</script>
+
+<style>
+  .panel {
+    border: 1px solid #d7e0e8;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 18px 40px rgba(24, 44, 66, 0.08);
+  }
+
+  .panel__header {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1rem 0.75rem;
+  }
+
+  .panel__body {
+    padding: 0 1rem 1rem;
+  }
+
+  .panel__fallback-title,
+  .panel__fallback-body {
+    color: #66758a;
+  }
+</style>

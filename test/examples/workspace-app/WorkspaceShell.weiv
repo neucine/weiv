@@ -1,0 +1,67 @@
+<template>
+  <main bind:class="shellClass()">
+    <header class="workspace-shell__header">
+      <slot name="header"></slot>
+    </header>
+
+    <div class="workspace-shell__body">
+      <aside class="workspace-shell__sidebar">
+        <slot name="sidebar"></slot>
+      </aside>
+
+      <section class="workspace-shell__main">
+        <slot></slot>
+      </section>
+
+      <aside class="workspace-shell__detail">
+        <slot name="detail"></slot>
+      </aside>
+    </div>
+  </main>
+</template>
+
+<script lang="ts">
+  export interface Props {
+    collapsed: boolean;
+  }
+
+  export let props: Props;
+
+  function shellClass() {
+    return props.collapsed ? "workspace-shell workspace-shell--collapsed" : "workspace-shell";
+  }
+</script>
+
+<style>
+  .workspace-shell {
+    min-height: 100vh;
+    padding: 1.25rem;
+    background:
+      radial-gradient(circle at top left, rgba(255, 224, 184, 0.6), transparent 28%),
+      linear-gradient(180deg, #f8fbff 0%, #eef3f8 100%);
+    color: #182c42;
+    font-family: "IBM Plex Sans", "Helvetica Neue", sans-serif;
+  }
+
+  .workspace-shell__body {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr) 320px;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .workspace-shell--collapsed .workspace-shell__body {
+    grid-template-columns: 88px minmax(0, 1fr) 320px;
+  }
+
+  .workspace-shell__header {
+    margin-bottom: 1rem;
+  }
+
+  @media (max-width: 1100px) {
+    .workspace-shell__body,
+    .workspace-shell--collapsed .workspace-shell__body {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

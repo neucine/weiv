@@ -1,0 +1,93 @@
+<template>
+  <div class="workspace-header">
+    <div>
+      <p class="workspace-header__eyebrow">Flagship verification app</p>
+      <h1>{{ props.title }}</h1>
+      <p class="workspace-header__subtitle">{{ props.subtitle }}</p>
+    </div>
+
+    <div class="workspace-header__actions">
+      <span class="workspace-header__badge">{{ props.pendingSaves }} pending</span>
+      <button class="workspace-header__ghost" on:click="handleQueueRefresh">Queue refresh</button>
+      <button class="workspace-header__ghost" on:click="handleClearNotifications">Clear notifications</button>
+      <button class="workspace-header__primary" on:click="handleToggleSidebar">
+        {{ props.collapsed ? "Expand sidebar" : "Collapse sidebar" }}
+      </button>
+      <span class="workspace-header__notification">{{ props.notifications }} alerts</span>
+    </div>
+  </div>
+</template>
+
+<script lang="ts">
+  export interface Props {
+    title: string;
+    subtitle: string;
+    notifications: number;
+    pendingSaves: number;
+    collapsed: boolean;
+  }
+
+  export let props: Props;
+
+  function handleToggleSidebar() {
+    emit("toggle-sidebar", null);
+  }
+
+  function handleQueueRefresh() {
+    emit("queue-refresh", null);
+  }
+
+  function handleClearNotifications() {
+    emit("clear-notifications", null);
+  }
+</script>
+
+<style>
+  .workspace-header {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid #d7e0e8;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.84);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 20px 50px rgba(24, 44, 66, 0.08);
+  }
+
+  .workspace-header__eyebrow,
+  .workspace-header__subtitle,
+  .workspace-header__badge,
+  .workspace-header__notification {
+    color: #607086;
+  }
+
+  .workspace-header__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: end;
+    gap: 0.75rem;
+  }
+
+  .workspace-header__ghost,
+  .workspace-header__primary {
+    border-radius: 999px;
+    padding: 0.75rem 1rem;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .workspace-header__ghost {
+    border: 1px solid #cad4df;
+    background: #fff;
+    color: #30455d;
+  }
+
+  .workspace-header__primary {
+    border: none;
+    background: #182c42;
+    color: #fff;
+  }
+</style>

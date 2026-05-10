@@ -1,0 +1,81 @@
+<template>
+  <li bind:class="itemClass()">
+    <button class="activity-item__content" on:click="selectItem">
+      <strong>{{ props.title }}</strong>
+      <p>{{ props.summary }}</p>
+      <small>{{ props.owner }}</small>
+    </button>
+    <button class="activity-item__pin" on:click="togglePin">
+      {{ props.pinned ? "Unpin" : "Pin" }}
+    </button>
+  </li>
+</template>
+
+<script lang="ts">
+  export interface Props {
+    id: string;
+    title: string;
+    summary: string;
+    owner: string;
+    selected: boolean;
+    pinned: boolean;
+  }
+
+  export let props: Props;
+
+  function itemClass() {
+    if (props.selected) {
+      return "activity-item activity-item--selected";
+    }
+    return "activity-item";
+  }
+
+  function selectItem() {
+    emit("select-item", props.id);
+  }
+
+  function togglePin(event: Event) {
+    event.preventDefault();
+    emit("toggle-pin", props.id);
+  }
+</script>
+
+<style>
+  .activity-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    padding: 0.9rem 0;
+    border-top: 1px solid #edf2f6;
+  }
+
+  .activity-item:first-child {
+    border-top: none;
+  }
+
+  .activity-item--selected {
+    color: #0c2138;
+  }
+
+  .activity-item__content,
+  .activity-item__pin {
+    font: inherit;
+  }
+
+  .activity-item__content {
+    border: none;
+    background: none;
+    text-align: left;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .activity-item__pin {
+    align-self: start;
+    border: 1px solid #dbe4ec;
+    border-radius: 999px;
+    padding: 0.45rem 0.7rem;
+    background: #fff;
+    cursor: pointer;
+  }
+</style>

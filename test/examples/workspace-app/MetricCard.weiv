@@ -1,0 +1,54 @@
+<template>
+  <article bind:class="cardClass()">
+    <p class="metric-card__label">{{ props.label }}</p>
+    <strong class="metric-card__value">{{ props.value }}</strong>
+    <p class="metric-card__change">{{ props.change > 0 ? "+" : "" }}{{ props.change }}%</p>
+  </article>
+</template>
+
+<script lang="ts">
+  import { metricToneClass } from "./metric_tone.js";
+
+  export interface Props {
+    label: string;
+    value: string;
+    change: number;
+  }
+
+  export let props: Props;
+
+  function cardClass() {
+    return `metric-card ${metricToneClass(props.change)}`;
+  }
+</script>
+
+<style>
+  .metric-card {
+    display: grid;
+    gap: 0.35rem;
+    padding: 1rem;
+    border-radius: 18px;
+    background: #f6f9fc;
+  }
+
+  .metric-card__label,
+  .metric-card__change {
+    color: #697a90;
+  }
+
+  .metric-card__value {
+    font-size: 1.8rem;
+  }
+
+  .metric-card--up {
+    box-shadow: inset 0 0 0 1px rgba(43, 148, 101, 0.18);
+  }
+
+  .metric-card--down {
+    box-shadow: inset 0 0 0 1px rgba(196, 83, 74, 0.18);
+  }
+
+  .metric-card--flat {
+    box-shadow: inset 0 0 0 1px rgba(108, 124, 145, 0.18);
+  }
+</style>

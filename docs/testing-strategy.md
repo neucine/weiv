@@ -74,7 +74,7 @@ Right now the suite is too flat:
 - many small focused fixtures
 - TodoMVC as the main app-like verification example
 
-What is missing is a genuinely larger flagship verification app.
+What is still missing is a fully integrated larger flagship verification app.
 
 That gap matters because TodoMVC is:
 
@@ -97,11 +97,11 @@ Concretely:
 
 - keep `test/examples/todomvc` as a useful smaller app-scale example
 - keep small focused fixtures for sharp regression coverage
-- add a dedicated larger verification-app track above TodoMVC
+- keep expanding the dedicated larger verification-app track above TodoMVC
 
 ## Larger Verification App
 
-The next missing piece should be a larger app, not just a denser single screen.
+The next important piece is a larger app, not just a denser single screen.
 
 Recommended shape:
 
@@ -119,6 +119,9 @@ Recommended shape:
 Working name:
 
 - `test/examples/workspace-app`
+
+The first scaffold now exists. What remains is deeper render-test coverage,
+inspect assertions, and broader interaction verification.
 
 The point is not the exact product domain. The point is to create an example
 that is rich enough to show:
@@ -148,6 +151,8 @@ not just a one-off demo.
 
 Use [Testing Implementation Plan](./testing-implementation-plan.md) for the
 concrete rollout steps.
+Use [Testing Capability Matrix](./testing-capability-matrix.md) for the
+required Weiv feature coverage of the flagship app.
 
 ## Policy
 

@@ -119,11 +119,11 @@ That stderr is expected and does not indicate test failure.
 The current verification shape is still uneven:
 
 - many narrow compiler/runtime fixtures
-- TodoMVC as the main app-like verification example
+- TodoMVC as the main app-like verification example in practice
 
-What is still missing is a clearly larger flagship verification app that can
-show the framework's strengths and conservative gaps at a broader scale than
-TodoMVC.
+The first `test/examples/workspace-app` scaffold is now present, but it still
+needs fuller render-test and inspect coverage before it replaces TodoMVC as the
+broader app-scale anchor.
 
 The broader shared-state/runtime ecosystem direction is not yet settled.
 Archived companion/store notes are retained for historical context, but they
@@ -178,5 +178,6 @@ The project is in a good checkpoint state:
 - current implementation matches the direction
 - proxy-state tracking is now real runtime/compiler behavior, not only a design note
 - direct render verification is green
-- TodoMVC remains a useful forcing-function example, but not a large flagship verification app
+- TodoMVC remains a useful forcing-function example, while workspace-app is the
+  larger verification track now under construction
 - stale-risk state patterns are becoming inspectable instead of magical
