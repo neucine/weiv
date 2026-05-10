@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/assets/weiv.svg" alt="weiv" width="120" />
+  <img src="./docs/assets/weiv.png" alt="weiv" width="120" />
 </p>
 
 Frontend, with room to breathe.
