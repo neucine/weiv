@@ -27,8 +27,8 @@ Multi-component verification examples:
 
 Current role:
 
-- `examples/todomvc` is the main smaller app-scale verification example
-- `examples/classic-todo` is still useful as a simpler multi-component app
+- `test/examples/todomvc` is the main smaller app-scale verification example
+- `test/examples/classic-todo` is still useful as a simpler multi-component app
 - the repo still needs a clearly larger flagship verification app above
   TodoMVC
 

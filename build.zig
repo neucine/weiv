@@ -67,7 +67,8 @@ pub fn build(b: *std.Build) void {
 
     const render_check = b.addSystemCommand(&.{
         "bun",
-        "tools/render_check.ts",
+        "test",
+        "test/render/render_check.test.ts",
     });
     render_check.setCwd(b.path("."));
     render_check.step.dependOn(&build_parser_backend.step);

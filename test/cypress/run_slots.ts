@@ -1,9 +1,10 @@
+import { test } from "bun:test";
 import { createServer } from "node:net";
 
 const cwd = process.cwd();
 const outDir = ".zig-cache/cypress-slots-direct";
-const entry = "examples/slots/SlotShowcase.weiv";
-const specPath = "cypress/e2e/slots-direct.cy.js";
+const entry = "test/examples/slots/SlotShowcase.weiv";
+const specPath = "test/cypress/assets/e2e/slots-direct.cy.js";
 
 async function findFreePort(): Promise<number> {
   return await new Promise((resolve, reject) => {
@@ -58,7 +59,18 @@ async function main() {
   try {
     await waitForServer(baseUrl, 60_000);
     const cypress = Bun.spawn({
-      cmd: ["bunx", "cypress", "run", "--headless", "--browser", "electron", "--spec", specPath],
+      cmd: [
+        "bunx",
+        "cypress",
+        "run",
+        "--config-file",
+        "test/cypress.config.mjs",
+        "--headless",
+        "--browser",
+        "electron",
+        "--spec",
+        specPath,
+      ],
       cwd,
       env: { ...process.env, CYPRESS_BASE_URL: baseUrl },
       stdout: "inherit",
@@ -73,4 +85,6 @@ async function main() {
   }
 }
 
-await main();
+test("cypress slots runtime flow", async () => {
+  await main();
+}, 120_000);

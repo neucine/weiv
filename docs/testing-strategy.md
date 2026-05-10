@@ -95,7 +95,7 @@ The repo should aim for this testing pyramid:
 
 Concretely:
 
-- keep `examples/todomvc` as a useful smaller app-scale example
+- keep `test/examples/todomvc` as a useful smaller app-scale example
 - keep small focused fixtures for sharp regression coverage
 - add a dedicated larger verification-app track above TodoMVC
 
@@ -118,7 +118,7 @@ Recommended shape:
 
 Working name:
 
-- `examples/workspace-app`
+- `test/examples/workspace-app`
 
 The point is not the exact product domain. The point is to create an example
 that is rich enough to show:

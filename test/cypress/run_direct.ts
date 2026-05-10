@@ -1,7 +1,10 @@
+import { test } from "bun:test";
 import { createServer } from "node:net";
 
-const cwd = "/Users/chao.yang/Private/weiv";
+const cwd = process.cwd();
 const outDir = ".zig-cache/cypress-todomvc-direct";
+const entry = "test/examples/todomvc/App.weiv";
+const specPath = "test/cypress/assets/e2e/todomvc-direct.cy.js";
 
 async function findFreePort(): Promise<number> {
   return await new Promise((resolve, reject) => {
@@ -43,7 +46,7 @@ async function main() {
   const baseUrl = `http://127.0.0.1:${port}`;
 
   const server = Bun.spawn({
-    cmd: ["zig", "build", "run", "--", "dev", "examples/todomvc/App.weiv", outDir],
+    cmd: ["zig", "build", "run", "--", "dev", entry, outDir],
     cwd,
     env: {
       ...process.env,
@@ -67,7 +70,18 @@ async function main() {
     await waitForServer(baseUrl, 60_000);
 
     const cypress = Bun.spawn({
-      cmd: ["bunx", "cypress", "run", "--headless", "--browser", "electron"],
+      cmd: [
+        "bunx",
+        "cypress",
+        "run",
+        "--config-file",
+        "test/cypress.config.mjs",
+        "--headless",
+        "--browser",
+        "electron",
+        "--spec",
+        specPath,
+      ],
       cwd,
       env: {
         ...process.env,
@@ -88,4 +102,6 @@ async function main() {
   }
 }
 
-await main();
+test("cypress direct runtime flow", async () => {
+  await main();
+}, 120_000);

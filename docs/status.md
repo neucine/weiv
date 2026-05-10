@@ -109,7 +109,7 @@ Both pass at the latest checkpoint.
 stderr:
 
 ```text
-error: unsupported bare runtime import in .../examples/unsupported-import/App.weiv: lodash-es
+error: unsupported bare runtime import in .../test/examples/unsupported-import/App.weiv: lodash-es
 ```
 
 That stderr is expected and does not indicate test failure.

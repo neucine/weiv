@@ -235,10 +235,10 @@ That document is the source of truth for:
 Useful commands:
 
 ```sh
-zig build run -- compile analyze component examples/todomvc/App.weiv
-zig build run -- inspect ir examples/todomvc/App.weiv
-zig build run -- inspect browser-plan examples/todomvc/App.weiv
-zig build run -- inspect invalidation-graph examples/basic-counter.weiv
-zig build run -- compile emit js examples/basic-counter.weiv
-zig build run -- compile examples/todomvc/App.weiv .zig-cache/todomvc-out
+zig build run -- compile analyze component test/examples/todomvc/App.weiv
+zig build run -- inspect ir test/examples/todomvc/App.weiv
+zig build run -- inspect browser-plan test/examples/todomvc/App.weiv
+zig build run -- inspect invalidation-graph test/examples/basic-counter.weiv
+zig build run -- compile emit js test/examples/basic-counter.weiv
+zig build run -- compile test/examples/todomvc/App.weiv .zig-cache/todomvc-out
 ```

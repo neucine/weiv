@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -324,7 +325,7 @@ function emitCommand(args: string[]): string {
     cmd: ["zig", "build", "run", "--", ...args],
     stdout: "pipe",
     stderr: "pipe",
-    cwd: "/Users/chao.yang/Private/weiv",
+    cwd: process.cwd(),
   });
 
   if (proc.exitCode !== 0) {
@@ -377,24 +378,24 @@ function scopeAttr(scopeId: string): string {
   return ` data-weiv-scope="${scopeId}"`;
 }
 
-async function main() {
+async function runRenderChecks() {
   const modules = await loadModules({
-    "BasicCounter.mjs": emitDirectBrowserModule("examples/basic-counter.weiv"),
-    "BasicCounterDirect.mjs": emitDirectBrowserModule("examples/basic-counter.weiv"),
-    "ConditionalToggleDirect.mjs": emitDirectBrowserModule("examples/conditional-toggle.weiv"),
-    "Card.mjs": emitDirectBrowserModule("examples/slots/Card.weiv"),
-    "CardToggleUsage.mjs": emitDirectBrowserModule("examples/slots/CardToggleUsage.weiv"),
-    "CardUsage.mjs": emitDirectBrowserModule("examples/slots/CardUsage.weiv"),
-    "PanelConditionalUsage.mjs": emitDirectBrowserModule("examples/slots/PanelConditionalUsage.weiv"),
-    "Panel.mjs": emitDirectBrowserModule("examples/slots/Panel.weiv"),
-    "PanelLoopUsage.mjs": emitDirectBrowserModule("examples/slots/PanelLoopUsage.weiv"),
-    "PanelNestedCardUsage.mjs": emitDirectBrowserModule("examples/slots/PanelNestedCardUsage.weiv"),
-    "PanelToggleUsage.mjs": emitDirectBrowserModule("examples/slots/PanelToggleUsage.weiv"),
-    "PanelUsage.mjs": emitDirectBrowserModule("examples/slots/PanelUsage.weiv"),
-    "TimerCallbackDirect.mjs": emitDirectBrowserModule("examples/timer-callback.weiv"),
-    "TodoListDirect.mjs": emitDirectBrowserModule("examples/todo-list.weiv"),
-    "TodoItem.mjs": emitDirectBrowserModule("examples/classic-todo/TodoItem.weiv"),
-    "TodoList.mjs": emitDirectBrowserModule("examples/classic-todo/TodoList.weiv"),
+    "BasicCounter.mjs": emitDirectBrowserModule("test/examples/basic-counter.weiv"),
+    "BasicCounterDirect.mjs": emitDirectBrowserModule("test/examples/basic-counter.weiv"),
+    "ConditionalToggleDirect.mjs": emitDirectBrowserModule("test/examples/conditional-toggle.weiv"),
+    "Card.mjs": emitDirectBrowserModule("test/examples/slots/Card.weiv"),
+    "CardToggleUsage.mjs": emitDirectBrowserModule("test/examples/slots/CardToggleUsage.weiv"),
+    "CardUsage.mjs": emitDirectBrowserModule("test/examples/slots/CardUsage.weiv"),
+    "PanelConditionalUsage.mjs": emitDirectBrowserModule("test/examples/slots/PanelConditionalUsage.weiv"),
+    "Panel.mjs": emitDirectBrowserModule("test/examples/slots/Panel.weiv"),
+    "PanelLoopUsage.mjs": emitDirectBrowserModule("test/examples/slots/PanelLoopUsage.weiv"),
+    "PanelNestedCardUsage.mjs": emitDirectBrowserModule("test/examples/slots/PanelNestedCardUsage.weiv"),
+    "PanelToggleUsage.mjs": emitDirectBrowserModule("test/examples/slots/PanelToggleUsage.weiv"),
+    "PanelUsage.mjs": emitDirectBrowserModule("test/examples/slots/PanelUsage.weiv"),
+    "TimerCallbackDirect.mjs": emitDirectBrowserModule("test/examples/timer-callback.weiv"),
+    "TodoListDirect.mjs": emitDirectBrowserModule("test/examples/todo-list.weiv"),
+    "TodoItem.mjs": emitDirectBrowserModule("test/examples/classic-todo/TodoItem.weiv"),
+    "TodoList.mjs": emitDirectBrowserModule("test/examples/classic-todo/TodoList.weiv"),
   });
 
   const basicCounterModule = modules["BasicCounter.mjs"];
@@ -414,12 +415,12 @@ async function main() {
   const todoItemModule = modules["TodoItem.mjs"];
   const todoListModule = modules["TodoList.mjs"];
   const todomvcDirectModules = await loadModules({
-    "App.mjs": emitDirectBrowserModule("examples/todomvc/App.weiv"),
-    "TodoFooter.mjs": emitDirectBrowserModule("examples/todomvc/TodoFooter.weiv"),
-    "TodoHeader.mjs": emitDirectBrowserModule("examples/todomvc/TodoHeader.weiv"),
-    "TodoItem.mjs": emitDirectBrowserModule("examples/todomvc/TodoItem.weiv"),
-    "TodoList.mjs": emitDirectBrowserModule("examples/todomvc/TodoList.weiv"),
-    "TodoTextInput.mjs": emitDirectBrowserModule("examples/todomvc/TodoTextInput.weiv"),
+    "App.mjs": emitDirectBrowserModule("test/examples/todomvc/App.weiv"),
+    "TodoFooter.mjs": emitDirectBrowserModule("test/examples/todomvc/TodoFooter.weiv"),
+    "TodoHeader.mjs": emitDirectBrowserModule("test/examples/todomvc/TodoHeader.weiv"),
+    "TodoItem.mjs": emitDirectBrowserModule("test/examples/todomvc/TodoItem.weiv"),
+    "TodoList.mjs": emitDirectBrowserModule("test/examples/todomvc/TodoList.weiv"),
+    "TodoTextInput.mjs": emitDirectBrowserModule("test/examples/todomvc/TodoTextInput.weiv"),
   });
   const todomvcDirectAppModule = todomvcDirectModules["App.mjs"];
 
@@ -909,7 +910,7 @@ async function main() {
 
   const bundleDir = mkdtempSync(join(tmpdir(), "weiv-app-bundle-"));
   try {
-    emitAppBundle("examples/classic-todo/App.weiv", bundleDir);
+    emitAppBundle("test/examples/classic-todo/App.weiv", bundleDir);
     const indexHtml = readFileSync(join(bundleDir, "index.html"), "utf8");
     const browserEntry = readFileSync(join(bundleDir, "main.mjs"), "utf8");
     const propsModule = readFileSync(join(bundleDir, "props.mjs"), "utf8");
@@ -953,7 +954,7 @@ async function main() {
 
   const counterBundleDir = mkdtempSync(join(tmpdir(), "weiv-counter-bundle-"));
   try {
-    emitAppBundle("examples/basic-counter.weiv", counterBundleDir);
+    emitAppBundle("test/examples/basic-counter.weiv", counterBundleDir);
     const counterProps = readFileSync(join(counterBundleDir, "props.mjs"), "utf8");
     if (!counterProps.includes('title: "Preview"') || !counterProps.includes("initialCount: 0")) {
       throw new Error("BasicCounter bundled props.mjs missing inferred preview props");
@@ -964,7 +965,7 @@ async function main() {
 
   const importedHelperBundleDir = mkdtempSync(join(tmpdir(), "weiv-imported-helper-bundle-"));
   try {
-    emitAppBundle("examples/imported-helper/App.weiv", importedHelperBundleDir);
+    emitAppBundle("test/examples/imported-helper/App.weiv", importedHelperBundleDir);
     const helperModule = readFileSync(join(importedHelperBundleDir, "format.js"), "utf8");
     const punctuationModule = readFileSync(join(importedHelperBundleDir, "punctuation.js"), "utf8");
     const helperAppModule = readFileSync(join(importedHelperBundleDir, "App.mjs"), "utf8");
@@ -995,7 +996,7 @@ async function main() {
 
   const importedTsHelperBundleDir = mkdtempSync(join(tmpdir(), "weiv-imported-ts-helper-bundle-"));
   try {
-    emitAppBundle("examples/imported-ts-helper/App.weiv", importedTsHelperBundleDir);
+    emitAppBundle("test/examples/imported-ts-helper/App.weiv", importedTsHelperBundleDir);
     const tsHelperModule = readFileSync(join(importedTsHelperBundleDir, "format.js"), "utf8");
     const tsPunctuationModule = readFileSync(join(importedTsHelperBundleDir, "punctuation.js"), "utf8");
     const tsHelperAppModule = readFileSync(join(importedTsHelperBundleDir, "App.mjs"), "utf8");
@@ -1023,7 +1024,7 @@ async function main() {
 
   const todomvcBundleDir = mkdtempSync(join(tmpdir(), "weiv-todomvc-bundle-"));
   try {
-    emitAppBundle("examples/todomvc/App.weiv", todomvcBundleDir);
+    emitAppBundle("test/examples/todomvc/App.weiv", todomvcBundleDir);
     const todomvcBundle = await importModule(join(todomvcBundleDir, "bundle.mjs"));
     const todomvcStyles = readFileSync(join(todomvcBundleDir, "styles.css"), "utf8");
     if (!todomvcStyles.includes(".todo-header") ||
@@ -1134,7 +1135,7 @@ async function main() {
 
   const todomvcDirectBundleDir = mkdtempSync(join(tmpdir(), "weiv-todomvc-direct-bundle-"));
   try {
-    emitAppBundle("examples/todomvc/App.weiv", todomvcDirectBundleDir);
+    emitAppBundle("test/examples/todomvc/App.weiv", todomvcDirectBundleDir);
     const directBundleModule = await importModule(join(todomvcDirectBundleDir, "bundle.mjs"));
     const directBundleMain = readFileSync(join(todomvcDirectBundleDir, "main.mjs"), "utf8");
     if (!directBundleMain.includes("AppBundle.mount(target, props);")) {
@@ -1167,4 +1168,6 @@ async function main() {
   process.stdout.write("render checks passed\n");
 }
 
-await main();
+test("direct runtime render checks", async () => {
+  await runRenderChecks();
+}, 120_000);

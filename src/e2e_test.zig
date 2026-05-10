@@ -17,22 +17,22 @@ test "classic todo app components build through current pipeline" {
 
     try expectComponentBuild(
         allocator,
-        try readFixture(allocator, "examples/classic-todo/App.weiv"),
-        "examples/classic-todo/App.weiv",
+        try readFixture(allocator, "test/examples/classic-todo/App.weiv"),
+        "test/examples/classic-todo/App.weiv",
         1,
         0,
     );
     try expectComponentBuild(
         allocator,
-        try readFixture(allocator, "examples/classic-todo/TodoList.weiv"),
-        "examples/classic-todo/TodoList.weiv",
+        try readFixture(allocator, "test/examples/classic-todo/TodoList.weiv"),
+        "test/examples/classic-todo/TodoList.weiv",
         1,
         0,
     );
     try expectComponentBuild(
         allocator,
-        try readFixture(allocator, "examples/classic-todo/TodoItem.weiv"),
-        "examples/classic-todo/TodoItem.weiv",
+        try readFixture(allocator, "test/examples/classic-todo/TodoItem.weiv"),
+        "test/examples/classic-todo/TodoItem.weiv",
         0,
         0,
     );
@@ -45,43 +45,43 @@ test "todomvc verification app components build through current pipeline" {
 
     try expectComponentBuild(
         allocator,
-        try readFixture(allocator, "examples/todomvc/App.weiv"),
-        "examples/todomvc/App.weiv",
+        try readFixture(allocator, "test/examples/todomvc/App.weiv"),
+        "test/examples/todomvc/App.weiv",
         3,
         0,
     );
     try expectComponentBuild(
         allocator,
-        try readFixture(allocator, "examples/todomvc/TodoHeader.weiv"),
-        "examples/todomvc/TodoHeader.weiv",
+        try readFixture(allocator, "test/examples/todomvc/TodoHeader.weiv"),
+        "test/examples/todomvc/TodoHeader.weiv",
         1,
         0,
     );
     try expectComponentBuild(
         allocator,
-        try readFixture(allocator, "examples/todomvc/TodoFooter.weiv"),
-        "examples/todomvc/TodoFooter.weiv",
+        try readFixture(allocator, "test/examples/todomvc/TodoFooter.weiv"),
+        "test/examples/todomvc/TodoFooter.weiv",
         0,
         0,
     );
     try expectComponentBuild(
         allocator,
-        try readFixture(allocator, "examples/todomvc/TodoList.weiv"),
-        "examples/todomvc/TodoList.weiv",
+        try readFixture(allocator, "test/examples/todomvc/TodoList.weiv"),
+        "test/examples/todomvc/TodoList.weiv",
         1,
         0,
     );
     try expectComponentBuild(
         allocator,
-        try readFixture(allocator, "examples/todomvc/TodoItem.weiv"),
-        "examples/todomvc/TodoItem.weiv",
+        try readFixture(allocator, "test/examples/todomvc/TodoItem.weiv"),
+        "test/examples/todomvc/TodoItem.weiv",
         1,
         0,
     );
     try expectComponentBuild(
         allocator,
-        try readFixture(allocator, "examples/todomvc/TodoTextInput.weiv"),
-        "examples/todomvc/TodoTextInput.weiv",
+        try readFixture(allocator, "test/examples/todomvc/TodoTextInput.weiv"),
+        "test/examples/todomvc/TodoTextInput.weiv",
         0,
         0,
     );
@@ -92,10 +92,10 @@ test "classic todo app app component lowers to expected IR shape" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/classic-todo/App.weiv");
+    const source = try readFixture(allocator, "test/examples/classic-todo/App.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/classic-todo/App.weiv", allocator);
+    var model = try component.build(source, "test/examples/classic-todo/App.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
@@ -138,10 +138,10 @@ test "basic counter direct browser module emits create/update DOM contract" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/basic-counter.weiv");
+    const source = try readFixture(allocator, "test/examples/basic-counter.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/basic-counter.weiv", allocator);
+    var model = try component.build(source, "test/examples/basic-counter.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -284,7 +284,7 @@ test "direct browser module emits tracked state graph metadata for imported nest
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/direct-browser-tracked-imported-paths.weiv", allocator);
+    var model = try component.build(source, "test/examples/direct-browser-tracked-imported-paths.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -325,7 +325,7 @@ test "direct browser module emits tracked state graph metadata for prop nested p
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/direct-browser-tracked-prop-paths.weiv", allocator);
+    var model = try component.build(source, "test/examples/direct-browser-tracked-prop-paths.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -354,7 +354,7 @@ test "direct browser module emits tracked state graph metadata for local let nes
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/direct-browser-tracked-local-paths.weiv", allocator);
+    var model = try component.build(source, "test/examples/direct-browser-tracked-local-paths.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -379,7 +379,7 @@ test "component analysis promotes immutable local object root with nested path u
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/analysis-tracked-immutable-local-root.weiv", allocator);
+    var model = try component.build(source, "test/examples/analysis-tracked-immutable-local-root.weiv", allocator);
     defer model.deinit(allocator);
 
     const report = try cli.formatComponentAnalysisReport(model, allocator);
@@ -395,10 +395,10 @@ test "conditional toggle direct browser module emits conditional boundary helper
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/conditional-toggle.weiv");
+    const source = try readFixture(allocator, "test/examples/conditional-toggle.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/conditional-toggle.weiv", allocator);
+    var model = try component.build(source, "test/examples/conditional-toggle.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -419,10 +419,10 @@ test "todo list direct browser module emits loop boundary helpers" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/todo-list.weiv");
+    const source = try readFixture(allocator, "test/examples/todo-list.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/todo-list.weiv", allocator);
+    var model = try component.build(source, "test/examples/todo-list.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -444,10 +444,10 @@ test "browser plan formatter exposes inspectable direct DOM plan duplicate cover
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/slots/CardUsage.weiv");
+    const source = try readFixture(allocator, "test/examples/slots/CardUsage.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/slots/CardUsage.weiv", allocator);
+    var model = try component.build(source, "test/examples/slots/CardUsage.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -467,10 +467,10 @@ test "invalidation graph formatter exposes regions dependencies and owned bounda
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/basic-counter.weiv");
+    const source = try readFixture(allocator, "test/examples/basic-counter.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/basic-counter.weiv", allocator);
+    var model = try component.build(source, "test/examples/basic-counter.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -479,7 +479,7 @@ test "invalidation graph formatter exposes regions dependencies and owned bounda
     const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
     defer allocator.free(formatted);
 
-    try std.testing.expect(std.mem.indexOf(u8, formatted, "invalidation-graph source=examples/basic-counter.weiv") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "invalidation-graph source=test/examples/basic-counter.weiv") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "text ref=") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "attribute ref=") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "deps=[count]") != null);
@@ -515,7 +515,7 @@ test "invalidation graph formatter expands nested local helper dependencies" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/invalidation-graph-local-helper-deps.weiv", allocator);
+    var model = try component.build(source, "test/examples/invalidation-graph-local-helper-deps.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -543,7 +543,7 @@ test "invalidation graph formatter diagnoses hidden-state template calls" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/hidden-state-call.weiv", allocator);
+    var model = try component.build(source, "test/examples/hidden-state-call.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -573,7 +573,7 @@ test "invalidation graph formatter inventories tracked imported nested paths" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/invalidation-graph-tracked-imported-paths.weiv", allocator);
+    var model = try component.build(source, "test/examples/invalidation-graph-tracked-imported-paths.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -610,7 +610,7 @@ test "invalidation graph formatter inventories tracked prop nested paths" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/inspect-tracked-prop-paths.weiv", allocator);
+    var model = try component.build(source, "test/examples/inspect-tracked-prop-paths.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -641,7 +641,7 @@ test "invalidation graph formatter inventories tracked local let nested paths" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/inspect-tracked-local-paths.weiv", allocator);
+    var model = try component.build(source, "test/examples/inspect-tracked-local-paths.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -674,7 +674,7 @@ test "local tracked roots are not selected when root assignment exists" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/no-tracked-local-root-assignment.weiv", allocator);
+    var model = try component.build(source, "test/examples/no-tracked-local-root-assignment.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -701,7 +701,7 @@ test "invalidation graph formatter warns on tracked-root alias escape" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/tracked-root-alias-escape.weiv", allocator);
+    var model = try component.build(source, "test/examples/tracked-root-alias-escape.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -733,7 +733,7 @@ test "invalidation graph formatter warns on tracked-root unowned callback mutati
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/tracked-root-unowned-callback.weiv", allocator);
+    var model = try component.build(source, "test/examples/tracked-root-unowned-callback.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -767,7 +767,7 @@ test "invalidation graph formatter diagnoses local helper external reads" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/local-helper-hidden-state.weiv", allocator);
+    var model = try component.build(source, "test/examples/local-helper-hidden-state.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -803,7 +803,7 @@ test "invalidation graph formatter diagnoses local helper side effects" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/local-helper-side-effects.weiv", allocator);
+    var model = try component.build(source, "test/examples/local-helper-side-effects.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -834,7 +834,7 @@ test "invalidation graph formatter marks simple callback-argument expressions as
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/invalidation-graph-evaluate-fallback.weiv", allocator);
+    var model = try component.build(source, "test/examples/invalidation-graph-evaluate-fallback.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -866,7 +866,7 @@ test "invalidation graph formatter marks block-bodied callback-argument expressi
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/invalidation-graph-block-callback-evaluate-fallback.weiv", allocator);
+    var model = try component.build(source, "test/examples/invalidation-graph-block-callback-evaluate-fallback.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -899,7 +899,7 @@ test "invalidation graph formatter marks bracket-access expressions as direct" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/invalidation-graph-bracket-access.weiv", allocator);
+    var model = try component.build(source, "test/examples/invalidation-graph-bracket-access.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -935,7 +935,7 @@ test "invalidation graph formatter lists object and container mutation sites" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/invalidation-graph-mutations.weiv", allocator);
+    var model = try component.build(source, "test/examples/invalidation-graph-mutations.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -967,7 +967,7 @@ test "invalidation graph formatter classifies fallback expressions as info" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/invalidation-graph-fallback-info.weiv", allocator);
+    var model = try component.build(source, "test/examples/invalidation-graph-fallback-info.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -1003,7 +1003,7 @@ test "invalidation graph formatter diagnoses expression-position mutations" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/invalidation-graph-expression-mutation.weiv", allocator);
+    var model = try component.build(source, "test/examples/invalidation-graph-expression-mutation.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -1022,10 +1022,10 @@ test "invalidation graph formatter classifies child event boundaries as owned" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/todomvc/TodoList.weiv");
+    const source = try readFixture(allocator, "test/examples/todomvc/TodoList.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/todomvc/TodoList.weiv", allocator);
+    var model = try component.build(source, "test/examples/todomvc/TodoList.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -1062,7 +1062,7 @@ test "invalidation graph formatter classifies async template event handlers as o
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/invalidation-graph-async-event.weiv", allocator);
+    var model = try component.build(source, "test/examples/invalidation-graph-async-event.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -1097,7 +1097,7 @@ test "invalidation graph formatter diagnoses observable mutation inside unowned 
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/invalidation-graph-unowned-callback.weiv", allocator);
+    var model = try component.build(source, "test/examples/invalidation-graph-unowned-callback.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -1137,7 +1137,7 @@ test "invalidation graph formatter diagnoses observable alias mutation" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/invalidation-graph-alias-mutation.weiv", allocator);
+    var model = try component.build(source, "test/examples/invalidation-graph-alias-mutation.weiv", allocator);
     defer model.deinit(allocator);
 
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -1156,10 +1156,10 @@ test "direct browser setup wraps timer callbacks in owned boundaries" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/timer-callback.weiv");
+    const source = try readFixture(allocator, "test/examples/timer-callback.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/timer-callback.weiv", allocator);
+    var model = try component.build(source, "test/examples/timer-callback.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -1193,7 +1193,7 @@ test "slot outlet and default projection survive through normalized template and
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/slots/PanelUsage.weiv", allocator);
+    var model = try component.build(source, "test/examples/slots/PanelUsage.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), model.normalized_template.nodes.len);
@@ -1241,7 +1241,7 @@ test "slot outlet parses and lowers fallback content" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/slots/Panel.weiv", allocator);
+    var model = try component.build(source, "test/examples/slots/Panel.weiv", allocator);
     defer model.deinit(allocator);
 
     switch (model.normalized_template.nodes[0]) {
@@ -1278,14 +1278,14 @@ test "direct browser modules expose default slot projection contract" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const panel_source = try readFixture(allocator, "examples/slots/Panel.weiv");
+    const panel_source = try readFixture(allocator, "test/examples/slots/Panel.weiv");
     defer allocator.free(panel_source);
-    var panel_model = try component.build(panel_source, "examples/slots/Panel.weiv", allocator);
+    var panel_model = try component.build(panel_source, "test/examples/slots/Panel.weiv", allocator);
     defer panel_model.deinit(allocator);
 
-    const panel_usage_source = try readFixture(allocator, "examples/slots/PanelUsage.weiv");
+    const panel_usage_source = try readFixture(allocator, "test/examples/slots/PanelUsage.weiv");
     defer allocator.free(panel_usage_source);
-    var usage_model = try component.build(panel_usage_source, "examples/slots/PanelUsage.weiv", allocator);
+    var usage_model = try component.build(panel_usage_source, "test/examples/slots/PanelUsage.weiv", allocator);
     defer usage_model.deinit(allocator);
 
     const panel_js = try emit_direct_js.emitModule(&panel_model, allocator);
@@ -1313,10 +1313,10 @@ test "named slot grouping lowers into explicit slot provisions" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/slots/CardUsage.weiv");
+    const source = try readFixture(allocator, "test/examples/slots/CardUsage.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/slots/CardUsage.weiv", allocator);
+    var model = try component.build(source, "test/examples/slots/CardUsage.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
@@ -1338,14 +1338,14 @@ test "named slot browser modules expose slot map contract" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const card_source = try readFixture(allocator, "examples/slots/Card.weiv");
+    const card_source = try readFixture(allocator, "test/examples/slots/Card.weiv");
     defer allocator.free(card_source);
-    var card_model = try component.build(card_source, "examples/slots/Card.weiv", allocator);
+    var card_model = try component.build(card_source, "test/examples/slots/Card.weiv", allocator);
     defer card_model.deinit(allocator);
 
-    const card_usage_source = try readFixture(allocator, "examples/slots/CardUsage.weiv");
+    const card_usage_source = try readFixture(allocator, "test/examples/slots/CardUsage.weiv");
     defer allocator.free(card_usage_source);
-    var usage_model = try component.build(card_usage_source, "examples/slots/CardUsage.weiv", allocator);
+    var usage_model = try component.build(card_usage_source, "test/examples/slots/CardUsage.weiv", allocator);
     defer usage_model.deinit(allocator);
 
     const card_js = try emit_direct_js.emitModule(&card_model, allocator);
@@ -1489,10 +1489,10 @@ test "todomvc app direct browser module preserves child component imports" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/todomvc/App.weiv");
+    const source = try readFixture(allocator, "test/examples/todomvc/App.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/todomvc/App.weiv", allocator);
+    var model = try component.build(source, "test/examples/todomvc/App.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -1518,10 +1518,10 @@ test "conditional direct browser modules destroy outgoing branch before replacem
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/conditional-toggle.weiv");
+    const source = try readFixture(allocator, "test/examples/conditional-toggle.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/conditional-toggle.weiv", allocator);
+    var model = try component.build(source, "test/examples/conditional-toggle.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -1538,9 +1538,9 @@ test "direct browser modules emit specialized bound attribute patch code" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const counter_source = try readFixture(allocator, "examples/basic-counter.weiv");
+    const counter_source = try readFixture(allocator, "test/examples/basic-counter.weiv");
     defer allocator.free(counter_source);
-    var counter_model = try component.build(counter_source, "examples/basic-counter.weiv", allocator);
+    var counter_model = try component.build(counter_source, "test/examples/basic-counter.weiv", allocator);
     defer counter_model.deinit(allocator);
 
     const counter_js = try emit_direct_js.emitModule(&counter_model, allocator);
@@ -1556,9 +1556,9 @@ test "direct browser modules emit specialized bound attribute patch code" {
     try std.testing.expect(std.mem.indexOf(u8, counter_js, "const __next_text_2 = String((scope.count) ?? \"\");") != null);
     try std.testing.expect(std.mem.indexOf(u8, counter_js, "const __value_6_disabled = scope.count >= scope.limit;") != null);
 
-    const todo_item_source = try readFixture(allocator, "examples/todomvc/TodoItem.weiv");
+    const todo_item_source = try readFixture(allocator, "test/examples/todomvc/TodoItem.weiv");
     defer allocator.free(todo_item_source);
-    var todo_item_model = try component.build(todo_item_source, "examples/todomvc/TodoItem.weiv", allocator);
+    var todo_item_model = try component.build(todo_item_source, "test/examples/todomvc/TodoItem.weiv", allocator);
     defer todo_item_model.deinit(allocator);
 
     const todo_item_js = try emit_direct_js.emitModule(&todo_item_model, allocator);
@@ -1570,9 +1570,9 @@ test "direct browser modules emit specialized bound attribute patch code" {
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, ".checked = __next_") != null);
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, ".setAttribute(\"checked\", \"\")") != null);
 
-    const text_input_source = try readFixture(allocator, "examples/todomvc/TodoTextInput.weiv");
+    const text_input_source = try readFixture(allocator, "test/examples/todomvc/TodoTextInput.weiv");
     defer allocator.free(text_input_source);
-    var text_input_model = try component.build(text_input_source, "examples/todomvc/TodoTextInput.weiv", allocator);
+    var text_input_model = try component.build(text_input_source, "test/examples/todomvc/TodoTextInput.weiv", allocator);
     defer text_input_model.deinit(allocator);
 
     const text_input_js = try emit_direct_js.emitModule(&text_input_model, allocator);
@@ -1584,9 +1584,9 @@ test "direct browser modules emit specialized bound attribute patch code" {
     try std.testing.expect(std.mem.indexOf(u8, text_input_js, "getAttribute(\"value\") !== __next_string_0_value") == null);
     try std.testing.expect(std.mem.indexOf(u8, text_input_js, ".setAttribute(\"value\", __next_string_0_value);") != null);
 
-    const todo_footer_source = try readFixture(allocator, "examples/todomvc/TodoFooter.weiv");
+    const todo_footer_source = try readFixture(allocator, "test/examples/todomvc/TodoFooter.weiv");
     defer allocator.free(todo_footer_source);
-    var todo_footer_model = try component.build(todo_footer_source, "examples/todomvc/TodoFooter.weiv", allocator);
+    var todo_footer_model = try component.build(todo_footer_source, "test/examples/todomvc/TodoFooter.weiv", allocator);
     defer todo_footer_model.deinit(allocator);
 
     const todo_footer_js = try emit_direct_js.emitModule(&todo_footer_model, allocator);
@@ -1630,9 +1630,9 @@ test "direct browser modules specialize child component update paths" {
     try std.testing.expect(std.mem.indexOf(u8, static_js, "refs[2].setSlots(") == null);
     try std.testing.expect(std.mem.indexOf(u8, static_js, "refs[2].update();") == null);
 
-    const panel_usage_source = try readFixture(allocator, "examples/slots/PanelUsage.weiv");
+    const panel_usage_source = try readFixture(allocator, "test/examples/slots/PanelUsage.weiv");
     defer allocator.free(panel_usage_source);
-    var panel_usage_model = try component.build(panel_usage_source, "examples/slots/PanelUsage.weiv", allocator);
+    var panel_usage_model = try component.build(panel_usage_source, "test/examples/slots/PanelUsage.weiv", allocator);
     defer panel_usage_model.deinit(allocator);
 
     const panel_usage_js = try emit_direct_js.emitModule(&panel_usage_model, allocator);
@@ -1643,9 +1643,9 @@ test "direct browser modules specialize child component update paths" {
     try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, "refs[4].setSlots(") != null);
     try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, "refs[4].update();") != null);
 
-    const todo_item_source = try readFixture(allocator, "examples/todomvc/TodoItem.weiv");
+    const todo_item_source = try readFixture(allocator, "test/examples/todomvc/TodoItem.weiv");
     defer allocator.free(todo_item_source);
-    var todo_item_model = try component.build(todo_item_source, "examples/todomvc/TodoItem.weiv", allocator);
+    var todo_item_model = try component.build(todo_item_source, "test/examples/todomvc/TodoItem.weiv", allocator);
     defer todo_item_model.deinit(allocator);
 
     const todo_item_js = try emit_direct_js.emitModule(&todo_item_model, allocator);
@@ -1694,7 +1694,7 @@ test "todomvc direct app bundle emits browser-direct entry files" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "direct-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("examples/todomvc/App.weiv", out_dir, allocator);
+    try app_emit.emitApp("test/examples/todomvc/App.weiv", out_dir, allocator);
 
     const bundle_js = try tmp_dir.dir.readFileAlloc(allocator, "direct-bundle/bundle.mjs", 1024 * 1024);
     defer allocator.free(bundle_js);
@@ -1712,10 +1712,10 @@ test "imported helper render module preserves runtime JS imports" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/imported-helper/App.weiv");
+    const source = try readFixture(allocator, "test/examples/imported-helper/App.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/imported-helper/App.weiv", allocator);
+    var model = try component.build(source, "test/examples/imported-helper/App.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -1730,10 +1730,10 @@ test "imported TS helper render module rewrites runtime imports to JS" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/imported-ts-helper/App.weiv");
+    const source = try readFixture(allocator, "test/examples/imported-ts-helper/App.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/imported-ts-helper/App.weiv", allocator);
+    var model = try component.build(source, "test/examples/imported-ts-helper/App.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -1748,10 +1748,10 @@ test "basic counter emits scoped CSS" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/basic-counter.weiv");
+    const source = try readFixture(allocator, "test/examples/basic-counter.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "examples/basic-counter.weiv", allocator);
+    var model = try component.build(source, "test/examples/basic-counter.weiv", allocator);
     defer model.deinit(allocator);
 
     const scope_id = try style.scopeIdForPath(model.source_path, allocator);
@@ -1776,7 +1776,7 @@ test "classic todo app emits multi-file app bundle" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("examples/classic-todo/App.weiv", out_dir, allocator);
+    try app_emit.emitApp("test/examples/classic-todo/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "bundle/bundle.mjs", 1024 * 1024);
     defer allocator.free(app_js);
@@ -1829,29 +1829,29 @@ test "todomvc verification app emits multi-file app bundle" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "todomvc-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("examples/todomvc/App.weiv", out_dir, allocator);
+    try app_emit.emitApp("test/examples/todomvc/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/bundle.mjs", 1024 * 1024);
     defer allocator.free(app_js);
     const props_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/props.mjs", 1024 * 1024);
     defer allocator.free(props_js);
-    const expected_props_js = try readFixture(allocator, "tools/fixtures/expected/todomvc-app/props.mjs");
+    const expected_props_js = try readFixture(allocator, "test/fixtures/expected/todomvc-app/props.mjs");
     defer allocator.free(expected_props_js);
     const browser_entry_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/main.mjs", 1024 * 1024);
     defer allocator.free(browser_entry_js);
-    const expected_browser_entry_js = try readFixture(allocator, "tools/fixtures/expected/todomvc-app/main.mjs");
+    const expected_browser_entry_js = try readFixture(allocator, "test/fixtures/expected/todomvc-app/main.mjs");
     defer allocator.free(expected_browser_entry_js);
     const index_html = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/index.html", 1024 * 1024);
     defer allocator.free(index_html);
-    const expected_index_html = try readFixture(allocator, "tools/fixtures/expected/todomvc-app/index.html");
+    const expected_index_html = try readFixture(allocator, "test/fixtures/expected/todomvc-app/index.html");
     defer allocator.free(expected_index_html);
     const package_json = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/package.json", 1024 * 1024);
     defer allocator.free(package_json);
-    const expected_package_json = try readFixture(allocator, "tools/fixtures/expected/todomvc-app/package.json");
+    const expected_package_json = try readFixture(allocator, "test/fixtures/expected/todomvc-app/package.json");
     defer allocator.free(expected_package_json);
     const dev_server_ts = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/server.ts", 1024 * 1024);
     defer allocator.free(dev_server_ts);
-    const expected_dev_server_ts = try readFixture(allocator, "tools/fixtures/expected/todomvc-app/server.ts");
+    const expected_dev_server_ts = try readFixture(allocator, "test/fixtures/expected/todomvc-app/server.ts");
     defer allocator.free(expected_dev_server_ts);
     const root_module_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/App.mjs", 1024 * 1024);
     defer allocator.free(root_module_js);
@@ -1900,7 +1900,7 @@ test "basic counter app bundle emits inferred preview props" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "counter-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("examples/basic-counter.weiv", out_dir, allocator);
+    try app_emit.emitApp("test/examples/basic-counter.weiv", out_dir, allocator);
 
     const props_js = try tmp_dir.dir.readFileAlloc(allocator, "counter-bundle/props.mjs", 1024 * 1024);
     defer allocator.free(props_js);
@@ -1918,7 +1918,7 @@ test "imported helper app bundle copies runtime JS dependencies" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "imported-helper-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("examples/imported-helper/App.weiv", out_dir, allocator);
+    try app_emit.emitApp("test/examples/imported-helper/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-helper-bundle/App.mjs", 1024 * 1024);
     defer allocator.free(app_js);
@@ -1947,7 +1947,7 @@ test "imported TS helper app bundle transpiles and copies TS dependencies" {
     const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "imported-ts-helper-bundle" });
     defer allocator.free(out_dir);
 
-    try app_emit.emitApp("examples/imported-ts-helper/App.weiv", out_dir, allocator);
+    try app_emit.emitApp("test/examples/imported-ts-helper/App.weiv", out_dir, allocator);
 
     const app_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-ts-helper-bundle/App.mjs", 1024 * 1024);
     defer allocator.free(app_js);
@@ -1978,7 +1978,7 @@ test "emit app rejects unsupported bare runtime imports" {
 
     try std.testing.expectError(
         error.UnsupportedRuntimeImport,
-        app_emit.emitApp("examples/unsupported-import/App.weiv", out_dir, allocator),
+        app_emit.emitApp("test/examples/unsupported-import/App.weiv", out_dir, allocator),
     );
 }
 
@@ -2023,7 +2023,7 @@ test "user-defined emit binding reports framework conflict diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/framework-emit-conflict.weiv", allocator);
+    var model = try component.build(source, "test/examples/framework-emit-conflict.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
@@ -2051,7 +2051,7 @@ test "template helper with external reads reports conservative diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/helper-external-state-diagnostic.weiv", allocator);
+    var model = try component.build(source, "test/examples/helper-external-state-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
@@ -2082,7 +2082,7 @@ test "template helper with side effects reports conservative diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/helper-side-effects-diagnostic.weiv", allocator);
+    var model = try component.build(source, "test/examples/helper-side-effects-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
@@ -2113,7 +2113,7 @@ test "expression-position mutation reports conservative diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/expression-position-mutation-diagnostic.weiv", allocator);
+    var model = try component.build(source, "test/examples/expression-position-mutation-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
@@ -2143,7 +2143,7 @@ test "unowned callback mutation reports conservative diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/unowned-callback-mutation-diagnostic.weiv", allocator);
+    var model = try component.build(source, "test/examples/unowned-callback-mutation-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
@@ -2172,7 +2172,7 @@ test "alias mutation reports conservative diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/alias-mutation-diagnostic.weiv", allocator);
+    var model = try component.build(source, "test/examples/alias-mutation-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
@@ -2195,7 +2195,7 @@ test "component analysis report includes structured script diagnostics" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/missing-props-diagnostic.weiv", allocator);
+    var model = try component.build(source, "test/examples/missing-props-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expect(model.script.ok);
@@ -2224,7 +2224,7 @@ test "component analysis report includes tracked root and escape warning summary
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/analysis-tracked-root-escape.weiv", allocator);
+    var model = try component.build(source, "test/examples/analysis-tracked-root-escape.weiv", allocator);
     defer model.deinit(allocator);
 
     const report = try cli.formatComponentAnalysisReport(model, allocator);
@@ -2263,7 +2263,7 @@ test "component analysis report summarizes mixed tracked roots and escape warnin
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/analysis-mixed-tracked-roots.weiv", allocator);
+    var model = try component.build(source, "test/examples/analysis-mixed-tracked-roots.weiv", allocator);
     defer model.deinit(allocator);
 
     const report = try cli.formatComponentAnalysisReport(model, allocator);
@@ -2300,7 +2300,7 @@ test "direct browser module emits mixed tracked root graph" {
         \\</script>
     ;
 
-    var model = try component.build(source, "examples/direct-browser-mixed-tracked-roots.weiv", allocator);
+    var model = try component.build(source, "test/examples/direct-browser-mixed-tracked-roots.weiv", allocator);
     defer model.deinit(allocator);
 
     const js = try emit_direct_js.emitModule(&model, allocator);
@@ -2323,9 +2323,9 @@ test "Panel.weiv lowers to a single default slot outlet" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/slots/Panel.weiv");
+    const source = try readFixture(allocator, "test/examples/slots/Panel.weiv");
     defer allocator.free(source);
-    var model = try component.build(source, "examples/slots/Panel.weiv", allocator);
+    var model = try component.build(source, "test/examples/slots/Panel.weiv", allocator);
     defer model.deinit(allocator);
 
     // Top-level: <section><slot><p>...</p></slot></section>
@@ -2352,9 +2352,9 @@ test "Card.weiv lowers to header named slot and default slot with fallbacks" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/slots/Card.weiv");
+    const source = try readFixture(allocator, "test/examples/slots/Card.weiv");
     defer allocator.free(source);
-    var model = try component.build(source, "examples/slots/Card.weiv", allocator);
+    var model = try component.build(source, "test/examples/slots/Card.weiv", allocator);
     defer model.deinit(allocator);
 
     // Top-level: <section><header><slot name="header">...</slot></header><div><slot>...</slot></div></section>
@@ -2433,9 +2433,9 @@ test "EmptyState.weiv lowers with named message slot and default slot, both with
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const source = try readFixture(allocator, "examples/slots/EmptyState.weiv");
+    const source = try readFixture(allocator, "test/examples/slots/EmptyState.weiv");
     defer allocator.free(source);
-    var model = try component.build(source, "examples/slots/EmptyState.weiv", allocator);
+    var model = try component.build(source, "test/examples/slots/EmptyState.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
@@ -2555,7 +2555,7 @@ test "slot:foo with no matching child outlet emits slot.unknown_name" {
         \\</script>
         \\<style></style>
     ;
-    var model = try component.build(source, "examples/slots/CardUsageInvalid.weiv", allocator);
+    var model = try component.build(source, "test/examples/slots/CardUsageInvalid.weiv", allocator);
     defer model.deinit(allocator);
 
     var found = false;
@@ -2615,9 +2615,9 @@ test "browser plan formatter exposes inspectable direct DOM plan" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    const source = try readFixture(allocator, "examples/slots/CardUsage.weiv");
+    const source = try readFixture(allocator, "test/examples/slots/CardUsage.weiv");
     defer allocator.free(source);
-    var model = try component.build(source, "examples/slots/CardUsage.weiv", allocator);
+    var model = try component.build(source, "test/examples/slots/CardUsage.weiv", allocator);
     defer model.deinit(allocator);
     var plan = try browser_plan.lower(&model.ir_document, allocator);
     defer plan.deinit(allocator);
@@ -2632,9 +2632,9 @@ test "conditional direct browser modules destroy outgoing branch before replacem
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    const source = try readFixture(allocator, "examples/conditional-toggle.weiv");
+    const source = try readFixture(allocator, "test/examples/conditional-toggle.weiv");
     defer allocator.free(source);
-    var model = try component.build(source, "examples/conditional-toggle.weiv", allocator);
+    var model = try component.build(source, "test/examples/conditional-toggle.weiv", allocator);
     defer model.deinit(allocator);
     const js = try emit_direct_js.emitModule(&model, allocator);
     defer allocator.free(js);
@@ -2666,9 +2666,9 @@ test "direct browser modules emit specialized bound attribute patch code duplica
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    const counter_source = try readFixture(allocator, "examples/basic-counter.weiv");
+    const counter_source = try readFixture(allocator, "test/examples/basic-counter.weiv");
     defer allocator.free(counter_source);
-    var counter_model = try component.build(counter_source, "examples/basic-counter.weiv", allocator);
+    var counter_model = try component.build(counter_source, "test/examples/basic-counter.weiv", allocator);
     defer counter_model.deinit(allocator);
     const counter_js = try emit_direct_js.emitModule(&counter_model, allocator);
     defer allocator.free(counter_js);
@@ -2679,9 +2679,9 @@ test "direct browser modules emit specialized bound attribute patch code duplica
     try std.testing.expect(std.mem.indexOf(u8, counter_js, ".hasAttribute(\"disabled\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, counter_js, ".disabled = __next_") != null);
     try std.testing.expect(std.mem.indexOf(u8, counter_js, ".setAttribute(\"disabled\", \"\")") != null);
-    const todo_item_source = try readFixture(allocator, "examples/todomvc/TodoItem.weiv");
+    const todo_item_source = try readFixture(allocator, "test/examples/todomvc/TodoItem.weiv");
     defer allocator.free(todo_item_source);
-    var todo_item_model = try component.build(todo_item_source, "examples/todomvc/TodoItem.weiv", allocator);
+    var todo_item_model = try component.build(todo_item_source, "test/examples/todomvc/TodoItem.weiv", allocator);
     defer todo_item_model.deinit(allocator);
     const todo_item_js = try emit_direct_js.emitModule(&todo_item_model, allocator);
     defer allocator.free(todo_item_js);
@@ -2690,9 +2690,9 @@ test "direct browser modules emit specialized bound attribute patch code duplica
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "hasAttribute(\"checked\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, ".checked = __next_") != null);
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, ".setAttribute(\"checked\", \"\")") != null);
-    const text_input_source = try readFixture(allocator, "examples/todomvc/TodoTextInput.weiv");
+    const text_input_source = try readFixture(allocator, "test/examples/todomvc/TodoTextInput.weiv");
     defer allocator.free(text_input_source);
-    var text_input_model = try component.build(text_input_source, "examples/todomvc/TodoTextInput.weiv", allocator);
+    var text_input_model = try component.build(text_input_source, "test/examples/todomvc/TodoTextInput.weiv", allocator);
     defer text_input_model.deinit(allocator);
     const text_input_js = try emit_direct_js.emitModule(&text_input_model, allocator);
     defer allocator.free(text_input_js);
@@ -2727,9 +2727,9 @@ test "direct browser modules specialize child component update paths duplicate c
     try std.testing.expect(std.mem.indexOf(u8, static_js, "refs[2].setEventHandlers(") == null);
     try std.testing.expect(std.mem.indexOf(u8, static_js, "refs[2].setSlots(") == null);
     try std.testing.expect(std.mem.indexOf(u8, static_js, "refs[2].update();") == null);
-    const panel_usage_source = try readFixture(allocator, "examples/slots/PanelUsage.weiv");
+    const panel_usage_source = try readFixture(allocator, "test/examples/slots/PanelUsage.weiv");
     defer allocator.free(panel_usage_source);
-    var panel_usage_model = try component.build(panel_usage_source, "examples/slots/PanelUsage.weiv", allocator);
+    var panel_usage_model = try component.build(panel_usage_source, "test/examples/slots/PanelUsage.weiv", allocator);
     defer panel_usage_model.deinit(allocator);
     const panel_usage_js = try emit_direct_js.emitModule(&panel_usage_model, allocator);
     defer allocator.free(panel_usage_js);

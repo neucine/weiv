@@ -73,23 +73,23 @@ zig build render-test
 Preview TodoMVC:
 
 ```bash
-zig build run -- dev examples/todomvc/App.weiv
+zig build run -- dev test/examples/todomvc/App.weiv
 ```
 
 Useful compiler commands:
 
 ```bash
-zig build run -- compile analyze component examples/todomvc/App.weiv
-zig build run -- inspect ir examples/todomvc/App.weiv
-zig build run -- compile emit js examples/todomvc/App.weiv
-zig build run -- compile examples/todomvc/App.weiv .zig-cache/todomvc-out
+zig build run -- compile analyze component test/examples/todomvc/App.weiv
+zig build run -- inspect ir test/examples/todomvc/App.weiv
+zig build run -- compile emit js test/examples/todomvc/App.weiv
+zig build run -- compile test/examples/todomvc/App.weiv .zig-cache/todomvc-out
 ```
 
 ## Repository Layout
 
 ```text
 docs/      architecture, planning, and design notes
-examples/  verification fixtures and example apps
+test/examples/  verification fixtures and example apps
 libs/      Rust parser backend
 spec/      framework spec
 src/       Zig compiler, CLI, tests, and FFI layer

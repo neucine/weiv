@@ -19,7 +19,7 @@ Add a larger flagship verification app above TodoMVC.
 
 Working name:
 
-- `examples/workspace-app`
+- `test/examples/workspace-app`
 
 The goal is not to choose the perfect product domain. The goal is to create a
 verification app that is meaningfully broader than TodoMVC and exposes more of
@@ -109,20 +109,20 @@ The app should intentionally exercise:
 
 Recommended first-pass structure:
 
-- `examples/workspace-app/App.weiv`
-- `examples/workspace-app/README.md`
-- `examples/workspace-app/WorkspaceShell.weiv`
-- `examples/workspace-app/WorkspaceHeader.weiv`
-- `examples/workspace-app/WorkspaceSidebar.weiv`
-- `examples/workspace-app/DashboardSection.weiv`
-- `examples/workspace-app/MetricGrid.weiv`
-- `examples/workspace-app/MetricCard.weiv`
-- `examples/workspace-app/ActivityFeed.weiv`
-- `examples/workspace-app/ActivityItem.weiv`
-- `examples/workspace-app/DetailPanel.weiv`
-- `examples/workspace-app/DetailSection.weiv`
-- `examples/workspace-app/EmptyState.weiv`
-- `examples/workspace-app/Panel.weiv`
+- `test/examples/workspace-app/App.weiv`
+- `test/examples/workspace-app/README.md`
+- `test/examples/workspace-app/WorkspaceShell.weiv`
+- `test/examples/workspace-app/WorkspaceHeader.weiv`
+- `test/examples/workspace-app/WorkspaceSidebar.weiv`
+- `test/examples/workspace-app/DashboardSection.weiv`
+- `test/examples/workspace-app/MetricGrid.weiv`
+- `test/examples/workspace-app/MetricCard.weiv`
+- `test/examples/workspace-app/ActivityFeed.weiv`
+- `test/examples/workspace-app/ActivityItem.weiv`
+- `test/examples/workspace-app/DetailPanel.weiv`
+- `test/examples/workspace-app/DetailSection.weiv`
+- `test/examples/workspace-app/EmptyState.weiv`
+- `test/examples/workspace-app/Panel.weiv`
 
 The exact names can change, but the shape matters:
 
@@ -290,7 +290,7 @@ The app should be:
 
 This work is successful when:
 
-- `examples/workspace-app` exists and is readable as an app
+- `test/examples/workspace-app` exists and is readable as an app
 - it is clearly larger and broader than TodoMVC
 - it participates in both `zig build test` and `zig build render-test`
 - it reveals useful compiler/runtime behavior beyond the current small fixtures
