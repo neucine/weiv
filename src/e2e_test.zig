@@ -1,5 +1,6 @@
 const std = @import("std");
 const app_emit = @import("compiler/emit/browser/app_bundle.zig");
+const compiler_diagnostics = @import("compiler/diagnostics.zig");
 const component = @import("compiler/pipeline/index.zig");
 const browser_plan = @import("compiler/lower/browser_plan/index.zig");
 const invalidation_graph = @import("compiler/lower/invalidation_graph/index.zig");
@@ -2246,6 +2247,245 @@ test "validate app can format machine-readable json diagnostics" {
     try std.testing.expect(std.mem.indexOf(u8, json, "\"fatal\": true") != null);
 }
 
+test "validate app reports invalid scoped style diagnostics" {
+    const allocator = std.testing.allocator;
+    var temp_dir = std.testing.tmpDir(.{});
+    defer temp_dir.cleanup();
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "App.weiv",
+        .data =
+        \\<template>
+        \\  <p>{{ props.title }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props { title: string }
+        \\  export let props: Props;
+        \\</script>
+        \\
+        \\<style>
+        \\  .broken {
+        \\    color: red;
+        \\</style>
+        ,
+    });
+
+    const root = try std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", temp_dir.sub_path[0..], "App.weiv" });
+    defer allocator.free(root);
+
+    var report = try app_emit.validateApp(root, allocator);
+    defer report.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), report.diagnostics.len);
+    const diagnostic = report.diagnostics[0];
+    try std.testing.expectEqualStrings("style.unterminated_rule", diagnostic.code);
+    try std.testing.expectEqual(.emit, diagnostic.stage);
+    try std.testing.expect(diagnostic.fatal);
+
+    const formatted = try cli.formatAppValidationDiagnostics(root, report.diagnostics, allocator);
+    defer allocator.free(formatted);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "style.unterminated_rule [emit]") != null);
+}
+
+test "validate app reports component build diagnostics for malformed child components" {
+    const allocator = std.testing.allocator;
+    var temp_dir = std.testing.tmpDir(.{});
+    defer temp_dir.cleanup();
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "App.weiv",
+        .data =
+        \\<template>
+        \\  <Child />
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import Child from "./Child.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        ,
+    });
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "Child.weiv",
+        .data =
+        \\<template>
+        \\  <div else>bad</div>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        ,
+    });
+
+    const root = try std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", temp_dir.sub_path[0..], "App.weiv" });
+    defer allocator.free(root);
+
+    var report = try app_emit.validateApp(root, allocator);
+    defer report.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), report.diagnostics.len);
+    const diagnostic = report.diagnostics[0];
+    try std.testing.expectEqualStrings("template.unexpected_else", diagnostic.code);
+    try std.testing.expectEqual(.template_normalize, diagnostic.stage);
+    try std.testing.expect(diagnostic.fatal);
+    try std.testing.expect(std.mem.endsWith(u8, diagnostic.source_path, "Child.weiv"));
+
+    const json = try cli.formatAppValidationDiagnosticsJson(root, report.diagnostics, allocator);
+    defer allocator.free(json);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"code\": \"template.unexpected_else\"") != null);
+}
+
+test "validate app reports component tag conflicts as structured diagnostics" {
+    const allocator = std.testing.allocator;
+    var temp_dir = std.testing.tmpDir(.{});
+    defer temp_dir.cleanup();
+
+    try temp_dir.dir.makePath("first");
+    try temp_dir.dir.makePath("second");
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "App.weiv",
+        .data =
+        \\<template>
+        \\  <SectionA />
+        \\  <SectionB />
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import SectionA from "./SectionA.weiv";
+        \\  import SectionB from "./SectionB.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        ,
+    });
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "SectionA.weiv",
+        .data =
+        \\<template><Panel /></template>
+        \\<script lang="ts">
+        \\  import Panel from "./first/Panel.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        ,
+    });
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "SectionB.weiv",
+        .data =
+        \\<template><Panel /></template>
+        \\<script lang="ts">
+        \\  import Panel from "./second/Panel.weiv";
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        ,
+    });
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "first/Panel.weiv",
+        .data =
+        \\<template><p>First</p></template>
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        ,
+    });
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "second/Panel.weiv",
+        .data =
+        \\<template><p>Second</p></template>
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+        ,
+    });
+
+    const root = try std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", temp_dir.sub_path[0..], "App.weiv" });
+    defer allocator.free(root);
+
+    var report = try app_emit.validateApp(root, allocator);
+    defer report.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), report.diagnostics.len);
+    try std.testing.expectEqualStrings("bundle.component_tag_conflict", report.diagnostics[0].code);
+    try std.testing.expectEqual(.bundle, report.diagnostics[0].stage);
+    try std.testing.expect(report.diagnostics[0].fatal);
+
+    const json = try cli.formatAppValidationDiagnosticsJson(root, report.diagnostics, allocator);
+    defer allocator.free(json);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"code\": \"bundle.component_tag_conflict\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"stage\": \"bundle\"") != null);
+}
+
+test "component build report preserves invalid directive diagnostics" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <button on:click>bad</button>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+    ;
+
+    var report = try component.buildReport(source, "test/examples/invalid-directive-analysis.weiv", allocator);
+    defer report.deinit(allocator);
+
+    try std.testing.expect(report.halted_after != null);
+    try std.testing.expectEqual(@as(usize, 1), report.diagnostics.len);
+    try std.testing.expectEqualStrings("template.invalid_directive", report.diagnostics[0].code);
+    try std.testing.expectEqual(.template_parse, report.diagnostics[0].stage);
+    try std.testing.expect(report.diagnostics[0].fatal);
+
+    const formatted = try cli.formatComponentBuildReport(report, allocator);
+    defer allocator.free(formatted);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "template.invalid_directive [template_parse]") != null);
+}
+
+test "component style emit diagnostics report invalid scoped css" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <p>{{ props.title }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props { title: string }
+        \\  export let props: Props;
+        \\</script>
+        \\
+        \\<style>
+        \\  .broken {
+        \\    color: red;
+        \\</style>
+    ;
+
+    var model = try component.build(source, "test/examples/invalid-style-diagnostic.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var bag = compiler_diagnostics.DiagnosticBag.init();
+    defer bag.deinit(allocator);
+    try style.appendEmitDiagnostics(&bag, &model, source, allocator);
+
+    try std.testing.expect(bag.hasFatal());
+    try std.testing.expectEqual(@as(usize, 1), bag.diagnostics.items.len);
+    try std.testing.expectEqualStrings("style.unterminated_rule", bag.diagnostics.items[0].code);
+    try std.testing.expectEqual(.emit, bag.diagnostics.items[0].stage);
+}
+
 fn expectComponentBuild(
     allocator: std.mem.Allocator,
     source: []const u8,
@@ -2527,6 +2767,30 @@ test "component build report can format machine-readable json diagnostics" {
     try std.testing.expect(std.mem.indexOf(u8, json, "\"code\": \"template.unexpected_else\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, json, "\"severity\": \"error\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, json, "\"stage\": \"template_normalize\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"fatal\": true") != null);
+}
+
+test "component build report json includes invalid directive diagnostics" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <button on:click>bad</button>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+    ;
+
+    var report = try component.buildReport(source, "test/examples/invalid-directive-analysis-json.weiv", allocator);
+    defer report.deinit(allocator);
+
+    const json = try cli.formatComponentBuildReportJson(report, allocator);
+    defer allocator.free(json);
+
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"code\": \"template.invalid_directive\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"stage\": \"template_parse\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, json, "\"fatal\": true") != null);
 }
 

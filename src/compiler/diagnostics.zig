@@ -88,16 +88,20 @@ pub const DiagnosticBag = struct {
     }
 
     pub fn hasFatal(self: *const DiagnosticBag) bool {
-        for (self.diagnostics.items) |diagnostic| {
-            if (diagnostic.fatal) return true;
-        }
-        return false;
+        return hasFatalDiagnostics(self.diagnostics.items);
     }
 
     pub fn toOwnedSlice(self: *DiagnosticBag, allocator: std.mem.Allocator) ![]Diagnostic {
         return self.diagnostics.toOwnedSlice(allocator);
     }
 };
+
+pub fn hasFatalDiagnostics(diagnostics: []const Diagnostic) bool {
+    for (diagnostics) |diagnostic| {
+        if (diagnostic.fatal) return true;
+    }
+    return false;
+}
 
 pub fn severityFromString(value: []const u8) Severity {
     if (std.mem.eql(u8, value, "warning")) return .warning;
@@ -143,4 +147,60 @@ pub fn computeLocation(source: []const u8, span: Span) SourceLocation {
         .line = line,
         .column = column,
     };
+}
+
+pub fn writeTextDiagnostics(
+    writer: anytype,
+    diagnostics: []const Diagnostic,
+    line_prefix: []const u8,
+) !void {
+    for (diagnostics) |diagnostic| {
+        try writer.print("{s}{s} {s} [{s}]", .{
+            line_prefix,
+            severityLabel(diagnostic.severity),
+            diagnostic.code,
+            stageLabel(diagnostic.stage),
+        });
+        if (diagnostic.location) |location| {
+            try writer.print(" [{d}:{d}]", .{ location.line, location.column });
+        }
+        if (diagnostic.span) |span| {
+            try writer.print(" [{d}..{d}]", .{ span.start, span.end });
+        }
+        if (diagnostic.fatal) {
+            try writer.writeAll(" fatal");
+        }
+        try writer.print(": {s}\n", .{diagnostic.message});
+    }
+}
+
+pub fn writeJsonDiagnostics(
+    writer: anytype,
+    diagnostics: []const Diagnostic,
+    item_indent: []const u8,
+) !void {
+    for (diagnostics, 0..) |diagnostic, index| {
+        try writer.print("{s}{{\n", .{item_indent});
+        try writer.print("{s}  \"code\": {f},\n", .{ item_indent, std.json.fmt(diagnostic.code, .{}) });
+        try writer.print("{s}  \"severity\": {f},\n", .{ item_indent, std.json.fmt(severityLabel(diagnostic.severity), .{}) });
+        try writer.print("{s}  \"stage\": {f},\n", .{ item_indent, std.json.fmt(stageLabel(diagnostic.stage), .{}) });
+        try writer.print("{s}  \"message\": {f},\n", .{ item_indent, std.json.fmt(diagnostic.message, .{}) });
+        try writer.print("{s}  \"sourcePath\": {f},\n", .{ item_indent, std.json.fmt(diagnostic.source_path, .{}) });
+        if (diagnostic.span) |span| {
+            try writer.print("{s}  \"span\": {{ \"start\": {d}, \"end\": {d} }},\n", .{ item_indent, span.start, span.end });
+        } else {
+            try writer.print("{s}  \"span\": null,\n", .{item_indent});
+        }
+        if (diagnostic.location) |location| {
+            try writer.print("{s}  \"location\": {{ \"line\": {d}, \"column\": {d} }},\n", .{ item_indent, location.line, location.column });
+        } else {
+            try writer.print("{s}  \"location\": null,\n", .{item_indent});
+        }
+        try writer.print("{s}  \"fatal\": {any}\n", .{ item_indent, diagnostic.fatal });
+        if (index + 1 < diagnostics.len) {
+            try writer.print("{s}}},\n", .{item_indent});
+        } else {
+            try writer.print("{s}}}\n", .{item_indent});
+        }
+    }
 }

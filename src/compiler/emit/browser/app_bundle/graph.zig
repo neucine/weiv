@@ -13,6 +13,7 @@ pub const Graph = struct {
     allocator: std.mem.Allocator,
     nodes: std.ArrayList(Node),
     index_by_abs_path: std.StringHashMap(usize),
+    validation_seen_paths: std.StringHashMap(void),
     component_registry: std.StringHashMap(usize),
     copied_runtime_paths: std.StringHashMap(void),
     bare_imports: std.StringHashMap(void),
@@ -23,6 +24,7 @@ pub const Graph = struct {
             .allocator = allocator,
             .nodes = std.ArrayList(Node){},
             .index_by_abs_path = std.StringHashMap(usize).init(allocator),
+            .validation_seen_paths = std.StringHashMap(void).init(allocator),
             .component_registry = std.StringHashMap(usize).init(allocator),
             .copied_runtime_paths = std.StringHashMap(void).init(allocator),
             .bare_imports = std.StringHashMap(void).init(allocator),
@@ -33,6 +35,11 @@ pub const Graph = struct {
         for (self.nodes.items) |*node| node.deinit(self.allocator);
         self.nodes.deinit(self.allocator);
         self.index_by_abs_path.deinit();
+        var validation_iter = self.validation_seen_paths.iterator();
+        while (validation_iter.next()) |entry| {
+            self.allocator.free(entry.key_ptr.*);
+        }
+        self.validation_seen_paths.deinit();
         var component_iter = self.component_registry.iterator();
         while (component_iter.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
@@ -89,6 +96,68 @@ pub const Graph = struct {
         return node_index;
     }
 
+    pub fn collectValidated(
+        self: *Graph,
+        abs_path: []const u8,
+        bag: *compiler_diagnostics.DiagnosticBag,
+    ) !void {
+        if (self.index_by_abs_path.get(abs_path) != null) return;
+        if (self.validation_seen_paths.contains(abs_path)) return;
+        try self.validation_seen_paths.put(try self.allocator.dupe(u8, abs_path), {});
+
+        const source = try std.fs.cwd().readFileAlloc(self.allocator, abs_path, 1024 * 1024);
+        errdefer self.allocator.free(source);
+
+        var report = try component.buildReport(source, abs_path, self.allocator);
+        defer report.deinit(self.allocator);
+
+        try appendDiagnosticsFromSlice(bag, report.diagnostics, self.allocator);
+        if (compiler_diagnostics.hasFatalDiagnostics(report.diagnostics)) {
+            self.allocator.free(source);
+            return;
+        }
+
+        const rel_source_path = try std.fs.path.relative(self.allocator, self.root_dir, abs_path);
+        errdefer self.allocator.free(rel_source_path);
+        const module_rel_path = try replaceExtension(rel_source_path, ".mjs", self.allocator);
+        errdefer self.allocator.free(module_rel_path);
+
+        var model = try report.intoComponentModel();
+        errdefer model.deinit(self.allocator);
+        consumeComponentBuildReport(&report);
+
+        const node_index = self.nodes.items.len;
+        try self.nodes.append(self.allocator, .{
+            .abs_path = try self.allocator.dupe(u8, abs_path),
+            .source = source,
+            .rel_source_path = rel_source_path,
+            .module_rel_path = module_rel_path,
+            .model = model,
+        });
+        try self.index_by_abs_path.put(self.nodes.items[node_index].abs_path, node_index);
+
+        const component_dir = std.fs.path.dirname(abs_path) orelse return error.InvalidComponentPath;
+        for (self.nodes.items[node_index].model.script.imports) |import_record| {
+            if (!std.mem.endsWith(u8, import_record.source, ".weiv")) continue;
+            if (import_record.local_name.len == 0) continue;
+
+            const joined = try std.fs.path.resolve(self.allocator, &.{ component_dir, import_record.source });
+            defer self.allocator.free(joined);
+
+            try self.collectValidated(joined, bag);
+            if (self.index_by_abs_path.get(joined)) |child_index| {
+                try self.registerComponentValidated(
+                    bag,
+                    &self.nodes.items[node_index],
+                    import_record.local_name,
+                    import_record.span_start,
+                    import_record.span_end,
+                    child_index,
+                );
+            }
+        }
+    }
+
     pub fn emitStylesheet(self: *Graph, allocator: std.mem.Allocator) ![]u8 {
         var out = std.ArrayList(u8){};
         defer out.deinit(allocator);
@@ -133,7 +202,7 @@ pub const Graph = struct {
         }
     }
 
-    pub fn collectRuntimeImportDiagnostics(self: *Graph, allocator: std.mem.Allocator) ![]compiler_diagnostics.Diagnostic {
+    pub fn collectValidationDiagnostics(self: *Graph, allocator: std.mem.Allocator) ![]compiler_diagnostics.Diagnostic {
         var bag = compiler_diagnostics.DiagnosticBag.init();
         defer bag.deinit(allocator);
 
@@ -159,6 +228,8 @@ pub const Graph = struct {
                     true,
                 );
             }
+
+            try style.appendEmitDiagnostics(&bag, &node.model, node.source, allocator);
         }
 
         return bag.toOwnedSlice(allocator);
@@ -374,6 +445,48 @@ pub const Graph = struct {
         try self.component_registry.put(owned_tag_name, node_index);
     }
 
+    fn registerComponentValidated(
+        self: *Graph,
+        bag: *compiler_diagnostics.DiagnosticBag,
+        importer_node: *const Node,
+        tag_name: []const u8,
+        span_start: usize,
+        span_end: usize,
+        node_index: usize,
+    ) !void {
+        if (self.component_registry.get(tag_name)) |existing| {
+            if (existing == node_index) return;
+
+            const span = compiler_diagnostics.Span{
+                .start = importer_node.model.sfc_document.script.content_span.start + span_start,
+                .end = importer_node.model.sfc_document.script.content_span.start + span_end,
+            };
+            const message = try std.fmt.allocPrint(
+                self.allocator,
+                "Component tag `{s}` resolves to multiple .weiv files in the same app bundle",
+                .{tag_name},
+            );
+            defer self.allocator.free(message);
+
+            try bag.appendOwned(
+                self.allocator,
+                "bundle.component_tag_conflict",
+                .@"error",
+                message,
+                .bundle,
+                importer_node.abs_path,
+                span,
+                compiler_diagnostics.computeLocation(importer_node.source, span),
+                true,
+            );
+            return;
+        }
+
+        const owned_tag_name = try self.allocator.dupe(u8, tag_name);
+        errdefer self.allocator.free(owned_tag_name);
+        try self.component_registry.put(owned_tag_name, node_index);
+    }
+
     fn copyRuntimeImport(
         self: *Graph,
         out_dir: std.fs.Dir,
@@ -519,6 +632,38 @@ const ComponentImport = struct {
 
 fn compareComponentImport(_: void, a: ComponentImport, b: ComponentImport) bool {
     return std.mem.lessThan(u8, a.tag_name, b.tag_name);
+}
+
+fn appendDiagnosticsFromSlice(
+    bag: *compiler_diagnostics.DiagnosticBag,
+    diagnostics: []const compiler_diagnostics.Diagnostic,
+    allocator: std.mem.Allocator,
+) !void {
+    for (diagnostics) |diagnostic| {
+        try bag.appendOwned(
+            allocator,
+            diagnostic.code,
+            diagnostic.severity,
+            diagnostic.message,
+            diagnostic.stage,
+            diagnostic.source_path,
+            diagnostic.span,
+            diagnostic.location,
+            diagnostic.fatal,
+        );
+    }
+}
+
+fn consumeComponentBuildReport(report: *component.ComponentBuildReport) void {
+    report.diagnostics = &.{};
+    report.source_path = &.{};
+    report.sfc_document = null;
+    report.template_document = null;
+    report.normalized_template = null;
+    report.script = null;
+    report.binding_result = null;
+    report.ir_document = null;
+    report.halted_after = null;
 }
 
 fn replaceExtension(path: []const u8, new_extension: []const u8, allocator: std.mem.Allocator) ![]u8 {

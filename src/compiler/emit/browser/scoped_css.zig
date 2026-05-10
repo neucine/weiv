@@ -1,5 +1,6 @@
 const std = @import("std");
 const component = @import("../../pipeline/index.zig");
+const compiler_diagnostics = @import("../../diagnostics.zig");
 
 pub fn emitScopedCss(model: *const component.ComponentModel, allocator: std.mem.Allocator) ![]u8 {
     const style_section = model.sfc_document.style orelse return allocator.dupe(u8, "");
@@ -10,6 +11,43 @@ pub fn emitScopedCss(model: *const component.ComponentModel, allocator: std.mem.
     defer allocator.free(scope_selector);
 
     return try rewriteStylesheet(style_section.content, scope_selector, allocator);
+}
+
+pub fn appendEmitDiagnostics(
+    bag: *compiler_diagnostics.DiagnosticBag,
+    model: *const component.ComponentModel,
+    source: []const u8,
+    allocator: std.mem.Allocator,
+) !void {
+    const style_section = model.sfc_document.style orelse return;
+    const css = emitScopedCss(model, allocator) catch |err| {
+        switch (err) {
+            error.UnterminatedRule => {
+                const span_end = if (style_section.content_span.end > style_section.content_span.start)
+                    style_section.content_span.end
+                else
+                    @min(source.len, style_section.content_span.start + 1);
+                const span = compiler_diagnostics.Span{
+                    .start = style_section.content_span.start,
+                    .end = span_end,
+                };
+                try bag.appendOwned(
+                    allocator,
+                    "style.unterminated_rule",
+                    .@"error",
+                    "Unterminated scoped style rule",
+                    .emit,
+                    model.source_path,
+                    span,
+                    compiler_diagnostics.computeLocation(source, span),
+                    true,
+                );
+                return;
+            },
+            else => return err,
+        }
+    };
+    allocator.free(css);
 }
 
 pub fn scopeIdForPath(source_path: []const u8, allocator: std.mem.Allocator) ![]u8 {

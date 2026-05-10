@@ -6,8 +6,6 @@ const emit_direct_js = @import("compiler/emit/browser/direct_component_js.zig");
 const style = @import("compiler/emit/browser/scoped_css.zig");
 const browser_plan = @import("compiler/lower/browser_plan/index.zig");
 const invalidation_graph = @import("compiler/lower/invalidation_graph/index.zig");
-const sfc = @import("compiler/parse/sfc.zig");
-const template = @import("compiler/parse/template/index.zig");
 const parser_backend = @import("ffi/parser_backend.zig");
 
 const LoadedComponent = struct {
@@ -278,13 +276,13 @@ pub fn run(allocator: std.mem.Allocator) !void {
 
 fn loadComponent(path: []const u8, allocator: std.mem.Allocator) !LoadedComponent {
     const source = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch |err| {
-        try printCommandError("read component", path, err, null, allocator);
+        try printCommandError("read component", path, err);
         return error.Reported;
     };
     errdefer allocator.free(source);
 
     var report = component.buildReport(source, path, allocator) catch |err| {
-        try printCommandError("build component", path, err, source, allocator);
+        try printCommandError("build component", path, err);
         return error.Reported;
     };
     defer report.deinit(allocator);
@@ -295,7 +293,7 @@ fn loadComponent(path: []const u8, allocator: std.mem.Allocator) !LoadedComponen
     }
 
     var model = report.intoComponentModel() catch |err| {
-        try printCommandError("build component", path, err, source, allocator);
+        try printCommandError("build component", path, err);
         return error.Reported;
     };
     errdefer model.deinit(allocator);
@@ -331,13 +329,13 @@ fn runAnalyzeScript(path: []const u8, allocator: std.mem.Allocator) !void {
 
 fn runAnalyzeComponent(path: []const u8, allocator: std.mem.Allocator, json: bool) !void {
     const source = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch |err| {
-        try printCommandError("read component", path, err, null, allocator);
+        try printCommandError("read component", path, err);
         return error.Reported;
     };
     defer allocator.free(source);
 
     var report = component.buildReport(source, path, allocator) catch |err| {
-        try printCommandError("analyze component", path, err, source, allocator);
+        try printCommandError("analyze component", path, err);
         return error.Reported;
     };
     defer report.deinit(allocator);
@@ -382,6 +380,10 @@ fn runEmitJs(path: []const u8, allocator: std.mem.Allocator) !void {
     var loaded = try loadComponent(path, allocator);
     defer loaded.deinit(allocator);
 
+    if (try printStyleEmitDiagnostics("emit js", path, &loaded, allocator)) {
+        return error.Reported;
+    }
+
     const js = try emit_direct_js.emitModule(&loaded.model, allocator);
     defer allocator.free(js);
     try std.fs.File.stdout().writeAll(js);
@@ -391,6 +393,10 @@ fn runEmitCss(path: []const u8, allocator: std.mem.Allocator) !void {
     var loaded = try loadComponent(path, allocator);
     defer loaded.deinit(allocator);
 
+    if (try printStyleEmitDiagnostics("emit css", path, &loaded, allocator)) {
+        return error.Reported;
+    }
+
     const css = try style.emitScopedCss(&loaded.model, allocator);
     defer allocator.free(css);
     try std.fs.File.stdout().writeAll(css);
@@ -398,7 +404,7 @@ fn runEmitCss(path: []const u8, allocator: std.mem.Allocator) !void {
 
 fn runEmitApp(root_path: []const u8, out_dir: []const u8, allocator: std.mem.Allocator) !void {
     var validation = app_emit.validateApp(root_path, allocator) catch |err| {
-        try printCommandError("validate app", root_path, err, null, allocator);
+        try printCommandError("validate app", root_path, err);
         return error.Reported;
     };
     defer validation.deinit(allocator);
@@ -409,14 +415,14 @@ fn runEmitApp(root_path: []const u8, out_dir: []const u8, allocator: std.mem.All
     }
 
     app_emit.emitApp(root_path, out_dir, allocator) catch |err| {
-        try printCommandError("emit app", root_path, err, null, allocator);
+        try printCommandError("emit app", root_path, err);
         return error.Reported;
     };
 }
 
 fn runValidateApp(root_path: []const u8, allocator: std.mem.Allocator, json: bool) !void {
     var validation = app_emit.validateApp(root_path, allocator) catch |err| {
-        try printCommandError("validate app", root_path, err, null, allocator);
+        try printCommandError("validate app", root_path, err);
         return error.Reported;
     };
     defer validation.deinit(allocator);
@@ -468,139 +474,19 @@ fn printUsage() !void {
     );
 }
 
-fn printCommandError(
-    action: []const u8,
-    path: []const u8,
-    err: anyerror,
-    source: ?[]const u8,
-    allocator: std.mem.Allocator,
-) !void {
+fn printCommandError(action: []const u8, path: []const u8, err: anyerror) !void {
     var stderr = std.fs.File.stderr();
-    var buffer: [2048]u8 = undefined;
+    var buffer: [512]u8 = undefined;
     var writer = stderr.writer(&buffer);
 
     try writer.interface.print("weiv {s} failed for {s}\n", .{ action, path });
     try writer.interface.print("  error: {s}\n", .{friendlyErrorName(err)});
-
-    if (source) |source_text| {
-        if (try printSourceLocatedCompilerError(err, source_text, &writer, allocator)) {
-            try writer.interface.flush();
-            return;
-        }
-    }
-
-    if (std.mem.eql(u8, friendlyErrorName(err), "InvalidSlotPlacement")) {
-        try writer.interface.writeAll("  hint: `slot:name` may only be used on direct children of a component usage.\n");
-    } else if (std.mem.eql(u8, friendlyErrorName(err), "InvalidSlotTemplatePlacement")) {
-        try writer.interface.writeAll("  hint: `<template>` grouping is only valid inside a component usage when paired with `slot:name`.\n");
-    } else if (std.mem.eql(u8, friendlyErrorName(err), "UnexpectedElse")) {
-        try writer.interface.writeAll("  hint: `else` must immediately follow a sibling element with `if`.\n");
-    } else if (std.mem.eql(u8, friendlyErrorName(err), "InvalidSlotOutlet")) {
-        try writer.interface.writeAll("  hint: `<slot>` only supports an optional `name=\"...\"` attribute and no directives.\n");
-    } else if (std.mem.eql(u8, friendlyErrorName(err), "UnexpectedCloseTag")) {
-        try writer.interface.writeAll("  hint: a closing tag appeared without a matching open tag in the current template scope.\n");
-    } else if (std.mem.eql(u8, friendlyErrorName(err), "MismatchedCloseTag")) {
-        try writer.interface.writeAll("  hint: a closing tag did not match the currently open element.\n");
-    } else if (std.mem.eql(u8, friendlyErrorName(err), "UnsupportedRuntimeImport")) {
-        try writer.interface.writeAll("  hint: bare package imports are supported in app bundles through import maps, but absolute imports and unsupported relative runtime import types are still rejected.\n");
-    }
 
     try writer.interface.flush();
 }
 
 fn friendlyErrorName(err: anyerror) []const u8 {
     return @errorName(err);
-}
-
-const SourceLocation = struct {
-    line_number: usize,
-    column_number: usize,
-    line_slice: []const u8,
-    highlight_len: usize,
-};
-
-fn printSourceLocatedCompilerError(
-    err: anyerror,
-    source: []const u8,
-    writer: anytype,
-    allocator: std.mem.Allocator,
-) !bool {
-    const location = try findCompilerErrorLocation(source, err, allocator) orelse return false;
-
-    try writer.interface.print("  location: {d}:{d}\n", .{ location.line_number, location.column_number });
-    try writer.interface.print("  source:   {s}\n", .{location.line_slice});
-
-    var caret_buffer = std.ArrayList(u8){};
-    defer caret_buffer.deinit(allocator);
-    for (0..location.column_number - 1) |_| {
-        try caret_buffer.append(allocator, ' ');
-    }
-    for (0..location.highlight_len) |_| {
-        try caret_buffer.append(allocator, '^');
-    }
-    try writer.interface.print("            {s}\n", .{caret_buffer.items});
-
-    if (err == error.InvalidSlotPlacement) {
-        try writer.interface.writeAll("  hint: `slot:name` may only be used on direct children of a component usage.\n");
-    } else if (err == error.InvalidSlotTemplatePlacement) {
-        try writer.interface.writeAll("  hint: `<template>` grouping is only valid inside a component usage when paired with `slot:name`.\n");
-    } else if (err == error.UnexpectedElse) {
-        try writer.interface.writeAll("  hint: `else` must immediately follow a sibling element with `if`.\n");
-    }
-
-    return true;
-}
-
-fn findCompilerErrorLocation(
-    source: []const u8,
-    err: anyerror,
-    allocator: std.mem.Allocator,
-) !?SourceLocation {
-    if (err != error.InvalidSlotPlacement and err != error.InvalidSlotTemplatePlacement and err != error.UnexpectedElse) {
-        return null;
-    }
-
-    const sfc_document = sfc.parse(source) catch return null;
-    var template_document = template.parse(sfc_document.template.content, allocator) catch return null;
-    defer template_document.deinit(allocator);
-
-    const relative_span = if (err == error.UnexpectedElse)
-        template.debug.findFirstInvalidNormalizeSpan(template_document.nodes, err) orelse return null
-    else blk: {
-        var normalized_document = template.normalize(&template_document, allocator) catch return null;
-        defer normalized_document.deinit(allocator);
-        break :blk template.debug.findFirstInvalidLoweringSpan(normalized_document.nodes, err) orelse return null;
-    };
-    const absolute_span = sfc.Span{
-        .start = sfc_document.template.content_span.start + relative_span.start,
-        .end = sfc_document.template.content_span.start + relative_span.end,
-    };
-    return computeSourceLocation(source, absolute_span);
-}
-
-fn computeSourceLocation(source: []const u8, span: sfc.Span) SourceLocation {
-    var line_number: usize = 1;
-    var line_start: usize = 0;
-    var idx: usize = 0;
-    while (idx < span.start and idx < source.len) : (idx += 1) {
-        if (source[idx] == '\n') {
-            line_number += 1;
-            line_start = idx + 1;
-        }
-    }
-
-    const line_end = std.mem.indexOfScalarPos(u8, source, line_start, '\n') orelse source.len;
-    const line_slice = std.mem.trimRight(u8, source[line_start..line_end], "\r");
-    const column_number = span.start - line_start + 1;
-    const highlight_end = @min(span.end, line_end);
-    const highlight_len = @max(@as(usize, 1), highlight_end - span.start);
-
-    return .{
-        .line_number = line_number,
-        .column_number = column_number,
-        .line_slice = line_slice,
-        .highlight_len = highlight_len,
-    };
 }
 
 pub fn printUnhandledError(err: anyerror) !void {
@@ -622,11 +508,47 @@ fn printComponentBuildFailure(action: []const u8, path: []const u8, report: comp
     try stderr.writeAll(formatted);
 }
 
-fn hasFatalDiagnostics(diagnostics: []const compiler_diagnostics.Diagnostic) bool {
-    for (diagnostics) |diagnostic| {
-        if (diagnostic.fatal) return true;
+fn printComponentDiagnosticsFailure(
+    action: []const u8,
+    path: []const u8,
+    diagnostics: []const compiler_diagnostics.Diagnostic,
+) !void {
+    var stderr = std.fs.File.stderr();
+    var buffer: [1024]u8 = undefined;
+    var writer = stderr.writer(&buffer);
+    try writer.interface.print("weiv {s} failed for {s}\n", .{ action, path });
+    try writer.interface.flush();
+
+    var out = std.ArrayList(u8){};
+    defer out.deinit(std.heap.page_allocator);
+    const out_writer = out.writer(std.heap.page_allocator);
+    try compiler_diagnostics.writeTextDiagnostics(out_writer, diagnostics, "  ");
+    const formatted = try out.toOwnedSlice(std.heap.page_allocator);
+    defer std.heap.page_allocator.free(formatted);
+    try stderr.writeAll(formatted);
+}
+
+fn printStyleEmitDiagnostics(
+    action: []const u8,
+    path: []const u8,
+    loaded: *const LoadedComponent,
+    allocator: std.mem.Allocator,
+) !bool {
+    var bag = compiler_diagnostics.DiagnosticBag.init();
+    defer bag.deinit(allocator);
+    try style.appendEmitDiagnostics(&bag, &loaded.model, loaded.source, allocator);
+    if (!bag.hasFatal()) return false;
+    const diagnostics = try bag.toOwnedSlice(allocator);
+    defer {
+        for (diagnostics) |*diagnostic| diagnostic.deinit(allocator);
+        allocator.free(diagnostics);
     }
-    return false;
+    try printComponentDiagnosticsFailure(action, path, diagnostics);
+    return true;
+}
+
+fn hasFatalDiagnostics(diagnostics: []const compiler_diagnostics.Diagnostic) bool {
+    return compiler_diagnostics.hasFatalDiagnostics(diagnostics);
 }
 
 pub fn formatAppValidationDiagnostics(
@@ -639,23 +561,7 @@ pub fn formatAppValidationDiagnostics(
     const writer = out.writer(allocator);
 
     try writer.print("weiv validate app failed for {s}\n", .{root_path});
-    for (diagnostics) |diagnostic| {
-        try writer.print(
-            "  {s} {s} [{s}]",
-            .{
-                compiler_diagnostics.severityLabel(diagnostic.severity),
-                diagnostic.code,
-                compiler_diagnostics.stageLabel(diagnostic.stage),
-            },
-        );
-        if (diagnostic.location) |location| {
-            try writer.print(" [{d}:{d}]", .{ location.line, location.column });
-        }
-        if (diagnostic.span) |span| {
-            try writer.print(" [{d}..{d}]", .{ span.start, span.end });
-        }
-        try writer.print(": {s}\n", .{diagnostic.message});
-    }
+    try compiler_diagnostics.writeTextDiagnostics(writer, diagnostics, "  ");
 
     return out.toOwnedSlice(allocator);
 }
@@ -673,30 +579,7 @@ pub fn formatAppValidationDiagnosticsJson(
     try writer.print("  \"rootPath\": {f},\n", .{std.json.fmt(root_path, .{})});
     try writer.print("  \"ok\": {any},\n", .{!hasFatalDiagnostics(diagnostics)});
     try writer.writeAll("  \"diagnostics\": [\n");
-    for (diagnostics, 0..) |diagnostic, index| {
-        try writer.writeAll("    {\n");
-        try writer.print("      \"code\": {f},\n", .{std.json.fmt(diagnostic.code, .{})});
-        try writer.print("      \"severity\": {f},\n", .{std.json.fmt(compiler_diagnostics.severityLabel(diagnostic.severity), .{})});
-        try writer.print("      \"stage\": {f},\n", .{std.json.fmt(compiler_diagnostics.stageLabel(diagnostic.stage), .{})});
-        try writer.print("      \"message\": {f},\n", .{std.json.fmt(diagnostic.message, .{})});
-        try writer.print("      \"sourcePath\": {f},\n", .{std.json.fmt(diagnostic.source_path, .{})});
-        if (diagnostic.span) |span| {
-            try writer.print("      \"span\": {{ \"start\": {d}, \"end\": {d} }},\n", .{ span.start, span.end });
-        } else {
-            try writer.writeAll("      \"span\": null,\n");
-        }
-        if (diagnostic.location) |location| {
-            try writer.print("      \"location\": {{ \"line\": {d}, \"column\": {d} }},\n", .{ location.line, location.column });
-        } else {
-            try writer.writeAll("      \"location\": null,\n");
-        }
-        try writer.print("      \"fatal\": {any}\n", .{diagnostic.fatal});
-        if (index + 1 < diagnostics.len) {
-            try writer.writeAll("    },\n");
-        } else {
-            try writer.writeAll("    }\n");
-        }
-    }
+    try compiler_diagnostics.writeJsonDiagnostics(writer, diagnostics, "    ");
     try writer.writeAll("  ]\n");
     try writer.writeAll("}\n");
     return out.toOwnedSlice(allocator);
@@ -838,15 +721,17 @@ fn devWatchLoop(context: *DevWatcherContext) void {
         std.debug.print("  rebuilding...\n", .{});
         runEmitApp(context.root_path, context.out_dir, allocator) catch |err| {
             if (err == error.Reported) {
-                std.debug.print("  rebuild failed with diagnostics\n", .{});
+                std.debug.print("  rebuild blocked by diagnostics\n", .{});
             } else {
                 std.debug.print("  rebuild failed\n  error: {s}\n", .{@errorName(err)});
             }
+            std.debug.print("  watching for the next change...\n", .{});
             last_handled_fingerprint = next_fingerprint;
             pending_fingerprint = null;
             continue;
         };
         std.debug.print("  rebuild complete\n", .{});
+        std.debug.print("  watching for the next change...\n", .{});
         last_handled_fingerprint = next_fingerprint;
         pending_fingerprint = null;
     }
@@ -1046,23 +931,7 @@ pub fn formatComponentBuildReport(report: component.ComponentBuildReport, alloca
     }
 
     try writer.print("Compiler diagnostics\n  total: {d}\n", .{report.diagnostics.len});
-    for (report.diagnostics) |diagnostic| {
-        try writer.print("    - {s} {s} [{s}]", .{
-            compiler_diagnostics.severityLabel(diagnostic.severity),
-            diagnostic.code,
-            compiler_diagnostics.stageLabel(diagnostic.stage),
-        });
-        if (diagnostic.location) |location| {
-            try writer.print(" [{d}:{d}]", .{ location.line, location.column });
-        }
-        if (diagnostic.span) |span| {
-            try writer.print(" [{d}..{d}]", .{ span.start, span.end });
-        }
-        if (diagnostic.fatal) {
-            try writer.print(" fatal", .{});
-        }
-        try writer.print(": {s}\n", .{diagnostic.message});
-    }
+    try compiler_diagnostics.writeTextDiagnostics(writer, report.diagnostics, "    - ");
 
     if (report.ir_document != null and report.binding_result != null) {
         const success_model = component.ComponentModel{
@@ -1209,30 +1078,7 @@ pub fn formatComponentBuildReportJson(report: component.ComponentBuildReport, al
     try writer.print("    \"ir\": {any}\n", .{report.ir_document != null});
     try writer.writeAll("  },\n");
     try writer.writeAll("  \"diagnostics\": [\n");
-    for (report.diagnostics, 0..) |diagnostic, index| {
-        try writer.writeAll("    {\n");
-        try writer.print("      \"code\": {f},\n", .{std.json.fmt(diagnostic.code, .{})});
-        try writer.print("      \"severity\": {f},\n", .{std.json.fmt(compiler_diagnostics.severityLabel(diagnostic.severity), .{})});
-        try writer.print("      \"stage\": {f},\n", .{std.json.fmt(compiler_diagnostics.stageLabel(diagnostic.stage), .{})});
-        try writer.print("      \"message\": {f},\n", .{std.json.fmt(diagnostic.message, .{})});
-        try writer.print("      \"sourcePath\": {f},\n", .{std.json.fmt(diagnostic.source_path, .{})});
-        if (diagnostic.span) |span| {
-            try writer.print("      \"span\": {{ \"start\": {d}, \"end\": {d} }},\n", .{ span.start, span.end });
-        } else {
-            try writer.writeAll("      \"span\": null,\n");
-        }
-        if (diagnostic.location) |location| {
-            try writer.print("      \"location\": {{ \"line\": {d}, \"column\": {d} }},\n", .{ location.line, location.column });
-        } else {
-            try writer.writeAll("      \"location\": null,\n");
-        }
-        try writer.print("      \"fatal\": {any}\n", .{diagnostic.fatal});
-        if (index + 1 < report.diagnostics.len) {
-            try writer.writeAll("    },\n");
-        } else {
-            try writer.writeAll("    }\n");
-        }
-    }
+    try compiler_diagnostics.writeJsonDiagnostics(writer, report.diagnostics, "    ");
     try writer.writeAll("  ]\n");
     try writer.writeAll("}\n");
     return out.toOwnedSlice(allocator);

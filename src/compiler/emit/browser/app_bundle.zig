@@ -67,8 +67,32 @@ pub fn validateApp(root_component_path: []const u8, allocator: std.mem.Allocator
     var graph = bundle_graph.Graph.init(root_dir, allocator);
     defer graph.deinit();
 
-    _ = try graph.collect(root_abs_path);
-    const diagnostics = try graph.collectRuntimeImportDiagnostics(allocator);
+    var bag = compiler_diagnostics.DiagnosticBag.init();
+    defer bag.deinit(allocator);
+
+    try graph.collectValidated(root_abs_path, &bag);
+    if (!bag.hasFatal()) {
+        const graph_diagnostics = try graph.collectValidationDiagnostics(allocator);
+        defer {
+            for (graph_diagnostics) |*diagnostic| diagnostic.deinit(allocator);
+            allocator.free(graph_diagnostics);
+        }
+        for (graph_diagnostics) |diagnostic| {
+            try bag.appendOwned(
+                allocator,
+                diagnostic.code,
+                diagnostic.severity,
+                diagnostic.message,
+                diagnostic.stage,
+                diagnostic.source_path,
+                diagnostic.span,
+                diagnostic.location,
+                diagnostic.fatal,
+            );
+        }
+    }
+
+    const diagnostics = try bag.toOwnedSlice(allocator);
     return .{
         .diagnostics = diagnostics,
     };

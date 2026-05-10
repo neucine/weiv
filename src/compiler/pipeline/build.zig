@@ -154,6 +154,7 @@ fn appendTemplateParseDiagnostic(
         error.UnexpectedCloseTag => .{ "template.unexpected_close_tag", "Closing tag appeared without a matching open tag" },
         error.MismatchedCloseTag => .{ "template.mismatched_close_tag", "Closing tag does not match the currently open element" },
         error.InvalidSlotOutlet => .{ "template.invalid_slot_outlet", "<slot> only supports an optional name attribute and no directives" },
+        error.InvalidDirective => .{ "template.invalid_directive", "Invalid template directive usage" },
         error.UnterminatedInterpolation => .{ "template.unterminated_interpolation", "Unterminated interpolation" },
         else => return err,
     };

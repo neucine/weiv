@@ -450,6 +450,16 @@ Suggested eventual JSON shape:
 
 ```json
 {
+  "sourcePath": "src/App.weiv",
+  "haltedAfter": "template_normalize",
+  "stages": {
+    "sfc": true,
+    "template": true,
+    "normalizedTemplate": false,
+    "script": false,
+    "binding": false,
+    "ir": false
+  },
   "diagnostics": [
     {
       "code": "template.unexpected_else",
@@ -458,10 +468,8 @@ Suggested eventual JSON shape:
       "message": "`else` must immediately follow a sibling element with `if`",
       "sourcePath": "src/App.weiv",
       "span": { "start": 118, "end": 122 },
-      "location": { "line": 12, "column": 3, "endLine": 12, "endColumn": 7 },
-      "fatal": true,
-      "notes": [],
-      "related": []
+      "location": { "line": 12, "column": 3 },
+      "fatal": true
     }
   ]
 }
@@ -604,3 +612,29 @@ This is the right foundation for:
 - future VS Code extension work
 - future language server work
 
+## Remaining Task List
+
+Completed:
+
+- [x] canonical compiler diagnostic type and bag
+- [x] partial component build report
+- [x] structured fatal diagnostics for SFC parse, template parse, template normalize, and selected lowering failures
+- [x] structured app validation diagnostics for component build failures, bundle import validation, and scoped style emission failures
+- [x] CLI text output for component analysis and app validation
+- [x] CLI JSON output for component analysis and app validation
+- [x] component CLI load path rewired to use structured build reports before materializing a full model
+- [x] shared diagnostic rendering helpers reused by component and app validation surfaces
+- [x] legacy CLI author-error hint reconstruction reduced so `printCommandError(...)` is mostly infrastructure-oriented
+
+Still remaining:
+
+- [ ] route more author-facing emit and lowering failures through structured diagnostics instead of one-off CLI error handling
+- [ ] polish `weiv dev` rebuild output so repeated diagnostic failures stay readable during active editing
+- [ ] add more CLI-facing regression coverage for formatted text and JSON command output
+- [ ] define the stable editor-facing contract for future VS Code and language-server mapping
+
+Suggested next batch order:
+
+1. finish migrating the last odd author-error emit/lowering paths
+2. broaden CLI regression coverage for formatted diagnostic output
+3. tighten and publish the stable IDE / LSP contract once the CLI surface stops moving
