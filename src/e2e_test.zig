@@ -2104,20 +2104,25 @@ test "imported TS helper app bundle transpiles and copies TS dependencies" {
     try std.testing.expect(std.mem.indexOf(u8, props_js, "count: 0") != null);
 }
 
-test "emit app rejects unsupported bare runtime imports" {
+test "emit app generates import map for bare imports" {
     const allocator = std.testing.allocator;
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
 
     const tmp_root = try std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", tmp_dir.sub_path[0..] });
     defer allocator.free(tmp_root);
-    const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "unsupported-import-bundle" });
+    const out_dir = try std.fs.path.join(allocator, &.{ tmp_root, "bare-import-bundle" });
     defer allocator.free(out_dir);
 
-    try std.testing.expectError(
-        error.UnsupportedRuntimeImport,
-        app_emit.emitApp("test/examples/unsupported-import/App.weiv", out_dir, allocator),
-    );
+    try app_emit.emitApp("test/examples/bare-import/App.weiv", out_dir, allocator);
+
+    const dir = try std.fs.cwd().openDir(out_dir, .{});
+    const html = try dir.readFileAlloc(allocator, "index.html", 64 * 1024);
+    defer allocator.free(html);
+
+    try std.testing.expect(std.mem.indexOf(u8, html, "importmap") != null);
+    try std.testing.expect(std.mem.indexOf(u8, html, "\"lodash-es\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, html, "./node_modules/lodash-es") != null);
 }
 
 fn expectComponentBuild(

@@ -14,6 +14,7 @@ pub const Graph = struct {
     index_by_abs_path: std.StringHashMap(usize),
     component_registry: std.StringHashMap(usize),
     copied_runtime_paths: std.StringHashMap(void),
+    bare_imports: std.StringHashMap(void),
 
     pub fn init(root_dir: []const u8, allocator: std.mem.Allocator) Graph {
         return .{
@@ -23,6 +24,7 @@ pub const Graph = struct {
             .index_by_abs_path = std.StringHashMap(usize).init(allocator),
             .component_registry = std.StringHashMap(usize).init(allocator),
             .copied_runtime_paths = std.StringHashMap(void).init(allocator),
+            .bare_imports = std.StringHashMap(void).init(allocator),
         };
     }
 
@@ -40,6 +42,11 @@ pub const Graph = struct {
             self.allocator.free(entry.key_ptr.*);
         }
         self.copied_runtime_paths.deinit();
+        var bare_iter = self.bare_imports.iterator();
+        while (bare_iter.next()) |entry| {
+            self.allocator.free(entry.key_ptr.*);
+        }
+        self.bare_imports.deinit();
     }
 
     pub fn collect(self: *Graph, abs_path: []const u8) !usize {
@@ -120,7 +127,7 @@ pub const Graph = struct {
         for (self.nodes.items) |*node| {
             for (node.model.script.imports) |import_record| {
                 if (!shouldPreserveRuntimeImport(import_record, &node.model.script)) continue;
-                try validateRuntimeImportSpecifier(node.abs_path, import_record.source);
+                try validateRuntimeImportSpecifier(self, node.abs_path, import_record.source);
             }
         }
     }
@@ -220,22 +227,66 @@ pub const Graph = struct {
         else
             root_basename;
 
-        return try std.fmt.allocPrint(allocator,
-            \\<!doctype html>
-            \\<html lang="en">
-            \\  <head>
-            \\    <meta charset="utf-8" />
-            \\    <meta name="viewport" content="width=device-width, initial-scale=1" />
-            \\    <title>{s}</title>
-            \\    <link rel="stylesheet" href="./styles.css" />
-            \\  </head>
-            \\  <body>
-            \\    <div id="app"></div>
-            \\    <script type="module" src="./main.mjs"></script>
-            \\  </body>
-            \\</html>
-            \\
-        , .{page_title});
+        const import_map = try self.emitImportMap(allocator);
+        defer allocator.free(import_map);
+
+        var out = std.ArrayList(u8){};
+        defer out.deinit(allocator);
+
+        try out.appendSlice(allocator, "<!doctype html>\n<html lang=\"en\">\n  <head>\n");
+        try out.appendSlice(allocator, "    <meta charset=\"utf-8\" />\n");
+        try out.appendSlice(allocator, "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n");
+        try out.writer(allocator).print("    <title>{s}</title>\n", .{page_title});
+        try out.appendSlice(allocator, "    <link rel=\"stylesheet\" href=\"./styles.css\" />\n");
+        if (import_map.len > 0) {
+            try out.appendSlice(allocator, import_map);
+        }
+        try out.appendSlice(allocator, "  </head>\n  <body>\n");
+        try out.appendSlice(allocator, "    <div id=\"app\"></div>\n");
+        try out.appendSlice(allocator, "    <script type=\"module\" src=\"./main.mjs\"></script>\n");
+        try out.appendSlice(allocator, "  </body>\n</html>\n");
+
+        return try out.toOwnedSlice(allocator);
+    }
+
+    fn emitImportMap(self: *Graph, allocator: std.mem.Allocator) ![]u8 {
+        if (self.bare_imports.count() == 0) return try allocator.dupe(u8, "");
+
+        var specifiers = std.ArrayList([]const u8){};
+        defer specifiers.deinit(allocator);
+
+        var iter = self.bare_imports.keyIterator();
+        while (iter.next()) |key| {
+            try specifiers.append(allocator, key.*);
+        }
+
+        std.mem.sort([]const u8, specifiers.items, {}, struct {
+            fn lessThan(_: void, a: []const u8, b: []const u8) bool {
+                return std.mem.order(u8, a, b) == .lt;
+            }
+        }.lessThan);
+
+        var out = std.ArrayList(u8){};
+        defer out.deinit(allocator);
+
+        try out.appendSlice(allocator, "    <script type=\"importmap\">\n");
+        try out.appendSlice(allocator, "    {\n      \"imports\": {\n");
+
+        for (specifiers.items, 0..) |specifier, i| {
+            try out.appendSlice(allocator, "        \"");
+            try out.appendSlice(allocator, specifier);
+            try out.appendSlice(allocator, "\": \"./node_modules/");
+            try out.appendSlice(allocator, specifier);
+            try out.appendSlice(allocator, "\"");
+            if (i + 1 < specifiers.items.len) {
+                try out.appendSlice(allocator, ",");
+            }
+            try out.appendSlice(allocator, "\n");
+        }
+
+        try out.appendSlice(allocator, "      }\n    }\n    </script>\n");
+
+        return try out.toOwnedSlice(allocator);
     }
 
     pub fn emitPackageJson(self: *Graph, allocator: std.mem.Allocator) ![]u8 {
@@ -610,7 +661,7 @@ fn parseJsModuleImports(source: []const u8, allocator: std.mem.Allocator) ![][]u
     return try imports.toOwnedSlice(allocator);
 }
 
-fn validateRuntimeImportSpecifier(importer_path: []const u8, source_specifier: []const u8) !void {
+fn validateRuntimeImportSpecifier(graph: *Graph, importer_path: []const u8, source_specifier: []const u8) !void {
     if (std.fs.path.isAbsolute(source_specifier)) {
         std.debug.print("error: unsupported absolute runtime import in {s}: {s}\n", .{ importer_path, source_specifier });
         return error.UnsupportedRuntimeImport;
@@ -623,8 +674,11 @@ fn validateRuntimeImportSpecifier(importer_path: []const u8, source_specifier: [
     const is_relative = std.mem.startsWith(u8, source_specifier, "./") or
         std.mem.startsWith(u8, source_specifier, "../");
     if (!is_relative) {
-        std.debug.print("error: unsupported bare runtime import in {s}: {s}\n", .{ importer_path, source_specifier });
-        return error.UnsupportedRuntimeImport;
+        if (!graph.bare_imports.contains(source_specifier)) {
+            const duped = try graph.allocator.dupe(u8, source_specifier);
+            try graph.bare_imports.put(duped, {});
+        }
+        return;
     }
 
     if (!isBrowserLoadableImport(source_specifier) and !isTranspilableTypeScriptModule(source_specifier)) {

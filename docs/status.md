@@ -125,14 +125,9 @@ zig build runtime-test
 
 All pass at the latest checkpoint.
 
-`zig build test` still prints the expected unsupported-import negative-fixture
-stderr:
-
-```text
-error: unsupported bare runtime import in .../test/examples/unsupported-import/App.weiv: lodash-es
-```
-
-That stderr is expected and does not indicate test failure.
+Bare package imports (e.g. `lodash-es`) are now supported through import map
+generation in the emitted `index.html`. The browser resolves bare specifiers
+via the import map to `./node_modules/<package>` paths.
 
 ## Verification Shape
 
