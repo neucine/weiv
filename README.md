@@ -24,7 +24,7 @@ Try the included examples first:
 
 ```bash
 weiv dev test/examples/todomvc/App.weiv
-weiv dev test/examples/workspace-app/App.weiv
+weiv dev test/examples/kanib/App.weiv
 ```
 
 Then point it at your own root component:

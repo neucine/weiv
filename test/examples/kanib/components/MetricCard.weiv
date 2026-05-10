@@ -7,7 +7,7 @@
 </template>
 
 <script lang="ts">
-  import { metricToneClass } from "./metric_tone.js";
+  import { metricToneClass } from "../utils/metric_tone.js";
 
   export interface Props {
     label: string;

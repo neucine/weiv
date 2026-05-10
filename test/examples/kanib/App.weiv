@@ -1,0 +1,257 @@
+<template>
+  <WorkspaceShell bind:collapsed="shellState.collapsed">
+    <template slot:header>
+      <WorkspaceHeader
+        bind:collapsed="shellState.collapsed"
+        bind:notifications="workspaceShared.notifications"
+        bind:sectionLabel="currentSectionLabel()"
+        bind:subtitle="headerSubtitle()"
+        bind:title="headerTitle()"
+        on:clear-notifications="clearHeaderNotifications"
+        on:queue-refresh="queueRefresh"
+        on:toggle-sidebar="toggleSidebar"
+      />
+    </template>
+
+    <template slot:sidebar>
+      <WorkspaceSidebar
+        bind:collapsed="shellState.collapsed"
+        bind:currentPath="workspaceShared.currentPath"
+        bind:currentWorkspaceId="workspaceShared.currentWorkspaceId"
+        bind:statusMessage="shellState.statusMessage"
+        on:navigate="handleNavigate"
+        on:switch-workspace="switchWorkspace"
+      />
+    </template>
+
+    <div class="kanib-app__route-root">
+      <div id="workspace-route-root">{{ ensureRouter() }}</div>
+    </div>
+
+    <template slot:detail>
+      <DetailPanel
+        bind:externalTicks="externalTicks"
+        bind:item="selectedIssue()"
+        bind:workspaceId="workspaceShared.currentWorkspaceId"
+        on:advance-issue="advanceSelectedIssue"
+        on:open-issue="openSelectedIssue"
+        on:register-external-watch="registerExternalWatch"
+        on:trigger-external-pulse="triggerExternalPulse"
+      />
+    </template>
+  </WorkspaceShell>
+</template>
+
+<script lang="ts">
+  import { createRouter } from "@weiv/runtime";
+  import IssueListPage from "./views/IssueListPage.weiv";
+  import OverviewPage from "./views/OverviewPage.weiv";
+  import DetailPanel from "./components/DetailPanel.weiv";
+  import IssueBoardPage from "./views/IssueBoardPage.weiv";
+  import IssueDetailPage from "./views/IssueDetailPage.weiv";
+  import MembersPage from "./views/MembersPage.weiv";
+  import SettingsPage from "./views/SettingsPage.weiv";
+  import WorkspaceHeader from "./components/WorkspaceHeader.weiv";
+  import WorkspaceShell from "./components/WorkspaceShell.weiv";
+  import WorkspaceSidebar from "./components/WorkspaceSidebar.weiv";
+  import {
+    boardRoute,
+    bumpNotifications,
+    clearNotifications,
+    cycleIssueStatus,
+    emitExternalSavePulse,
+    findIssue,
+    findWorkspace,
+    issueRoute,
+    listIssues,
+    navigateTo,
+    registerExternalSaveListener,
+    setWorkspaceRouter,
+    syncRouteState,
+    workspaceRoute,
+    workspaceShared
+  } from "./state/workspace.ts";
+
+  export interface Props {}
+
+  export let props: Props;
+
+  let routerReady = false;
+  let externalTicks = 0;
+  let externalWatchRegistered = false;
+  let shellState = {
+    collapsed: false,
+    statusMessage: "Track issues, board movement, and team updates from one workspace."
+  };
+
+  function headerTitle() {
+    const workspace = findWorkspace(workspaceShared.currentWorkspaceId);
+    return workspace ? workspace.name : "Workspace";
+  }
+
+  function headerSubtitle() {
+    const workspace = findWorkspace(workspaceShared.currentWorkspaceId);
+    if (!workspace) {
+      return shellState.statusMessage;
+    }
+    return `${workspace.openCount} open issues · ${workspace.issueCount} total · ${shellState.statusMessage}`;
+  }
+
+  function currentSectionLabel() {
+    const path = workspaceShared.currentPath;
+    if (path.indexOf("/issues/") !== -1) return "Issue detail";
+    if (path.endsWith("/issues")) return "Issue list";
+    if (path.endsWith("/board")) return "Board";
+    if (path.endsWith("/members")) return "Members";
+    if (path.endsWith("/settings")) return "Settings";
+    return "Overview";
+  }
+
+  function selectedIssue() {
+    return findIssue(workspaceShared.selectedIssueId);
+  }
+
+  function toggleSidebar() {
+    shellState.collapsed = !shellState.collapsed;
+    shellState.statusMessage = shellState.collapsed
+      ? "Compact navigation enabled."
+      : "Navigation expanded.";
+  }
+
+  function clearHeaderNotifications() {
+    clearNotifications();
+    shellState.statusMessage = "Notification badge cleared.";
+  }
+
+  function queueRefresh() {
+    shellState.statusMessage = "Refreshing workspace signals.";
+    queueMicrotask(() => {
+      bumpNotifications();
+      shellState.statusMessage = "Workspace signals refreshed.";
+    });
+  }
+
+  function handleNavigate(path: string) {
+    navigateTo(path);
+  }
+
+  function switchWorkspace(workspaceId: string) {
+    navigateTo(workspaceRoute(workspaceId));
+  }
+
+  function openSelectedIssue() {
+    const issue = selectedIssue();
+    if (!issue) {
+      return;
+    }
+    navigateTo(issueRoute(issue.workspaceId, issue.id));
+  }
+
+  function advanceSelectedIssue(issueId: string) {
+    cycleIssueStatus(issueId);
+    shellState.statusMessage = "Issue status advanced.";
+  }
+
+  function registerExternalWatch() {
+    if (externalWatchRegistered) {
+      shellState.statusMessage = "External save listener already connected.";
+      return;
+    }
+    externalWatchRegistered = true;
+    registerExternalSaveListener(() => {
+      externalTicks += 1;
+      shellState.statusMessage = "External save signal received.";
+    });
+    shellState.statusMessage = "External save listener connected.";
+  }
+
+  function triggerExternalPulse() {
+    emitExternalSavePulse();
+  }
+
+  function routeStatusMessage(path: string) {
+    if (path.indexOf("/issues/") !== -1) return "Review the issue details and move status forward.";
+    if (path.endsWith("/issues")) return "Filter the issue list and open the next item.";
+    if (path.endsWith("/board")) return "Watch work move between backlog, progress, review, and done.";
+    if (path.endsWith("/members")) return "Keep team roles and ownership visible.";
+    if (path.endsWith("/settings")) return "Change workspace behavior without leaving the app shell.";
+    return "Overview keeps the workspace signal clear.";
+  }
+
+  function ensureRouter() {
+    if (routerReady || typeof document === "undefined") {
+      return "";
+    }
+
+    const routeTarget = document.getElementById("workspace-route-root");
+    if (!routeTarget) {
+      return "";
+    }
+
+    const router = createRouter({
+      mode: "history",
+      routes: [
+        {
+          path: "/",
+          component: () => OverviewPage,
+          props: () => ({ workspaceId: workspaceShared.currentWorkspaceId })
+        },
+        {
+          path: "/workspaces/:workspaceId",
+          component: () => OverviewPage,
+          props: (route) => ({ workspaceId: route.params.workspaceId })
+        },
+        {
+          path: "/workspaces/:workspaceId/issues",
+          component: () => IssueListPage,
+          props: (route) => ({ workspaceId: route.params.workspaceId })
+        },
+        {
+          path: "/workspaces/:workspaceId/board",
+          component: () => IssueBoardPage,
+          props: (route) => ({ workspaceId: route.params.workspaceId })
+        },
+        {
+          path: "/workspaces/:workspaceId/issues/:issueId",
+          component: () => IssueDetailPage,
+          props: (route) => ({
+            workspaceId: route.params.workspaceId,
+            issueId: route.params.issueId
+          })
+        },
+        {
+          path: "/workspaces/:workspaceId/members",
+          component: () => MembersPage,
+          props: (route) => ({ workspaceId: route.params.workspaceId })
+        },
+        {
+          path: "/workspaces/:workspaceId/settings",
+          component: () => SettingsPage,
+          props: (route) => ({ workspaceId: route.params.workspaceId })
+        }
+      ],
+      target: routeTarget
+    });
+
+    setWorkspaceRouter(router);
+    router.afterEach(({ to }) => {
+      syncRouteState(to.path, to.params.workspaceId, to.params.issueId);
+      shellState.statusMessage = routeStatusMessage(to.path);
+    });
+
+    routerReady = true;
+
+    const issue = selectedIssue();
+    if (!issue && listIssues(workspaceShared.currentWorkspaceId).length > 0) {
+      const firstIssue = listIssues(workspaceShared.currentWorkspaceId)[0];
+      syncRouteState(workspaceShared.currentPath, workspaceShared.currentWorkspaceId, firstIssue.id);
+    }
+    return "";
+  }
+</script>
+
+<style>
+  .kanib-app__route-root {
+    min-height: 100%;
+  }
+</style>

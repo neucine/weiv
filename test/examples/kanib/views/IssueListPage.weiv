@@ -1,0 +1,116 @@
+<template>
+  <Panel>
+    <template slot:header>
+      <div>
+        <h2>Issue list</h2>
+        <p class="activity-feed__subhead">{{ props.workspaceId }} · {{ visibleIssues().length }} visible issues</p>
+      </div>
+    </template>
+
+    <template slot:actions>
+      <button bind:class="filterClass('all')" on:click="showAll">All</button>
+      <button bind:class="filterClass('active')" on:click="showActive">Active</button>
+      <button bind:class="filterClass('review')" on:click="showReview">Review</button>
+    </template>
+
+    <EmptyState if="visibleIssues().length === 0">
+      <template slot:message>
+        <p>No issues match the current filter.</p>
+      </template>
+      <p>Switch filters or move work back into the active queue.</p>
+    </EmptyState>
+
+    <ul else class="activity-feed__list">
+      <ActivityItem
+        for="issue in visibleIssues()"
+        bind:id="issue.id"
+        bind:owner="issue.owner"
+        bind:priority="issue.priority"
+        bind:selected="workspaceShared.selectedIssueId === issue.id"
+        bind:status="issue.status"
+        bind:summary="issue.summary"
+        bind:title="issue.title"
+        on:open-issue="openIssue"
+      />
+    </ul>
+  </Panel>
+</template>
+
+<script lang="ts">
+  import ActivityItem from "../components/ActivityItem.weiv";
+  import EmptyState from "../components/EmptyState.weiv";
+  import Panel from "../components/Panel.weiv";
+  import { issueRoute, issues, navigateTo, workspaceShared } from "../state/workspace.ts";
+
+  export type IssueFilter = "all" | "active" | "review";
+
+  export interface Props {
+    workspaceId: string;
+  }
+
+  export let props: Props;
+  let filter: IssueFilter = "all";
+
+  function allIssues() {
+    workspaceShared.saveTick;
+    return issues.filter((issue) => issue.workspaceId === props.workspaceId);
+  }
+
+  function visibleIssues() {
+    if (filter === "active") {
+      return allIssues().filter((issue) => issue.status !== "done");
+    }
+    if (filter === "review") {
+      return allIssues().filter((issue) => issue.status === "review");
+    }
+    return allIssues();
+  }
+
+  function filterClass(nextFilter: IssueFilter) {
+    return filter === nextFilter ? "activity-feed__filter activity-feed__filter--active" : "activity-feed__filter";
+  }
+
+  function showAll() {
+    filter = "all";
+  }
+
+  function showActive() {
+    filter = "active";
+  }
+
+  function showReview() {
+    filter = "review";
+  }
+
+  function openIssue(issueId: string) {
+    navigateTo(issueRoute(props.workspaceId, issueId));
+  }
+</script>
+
+<style>
+  .activity-feed__subhead {
+    color: #68798e;
+  }
+
+  .activity-feed__filter {
+    margin-left: 0.4rem;
+    border: 1px solid #dbe4ec;
+    border-radius: 999px;
+    padding: 0.5rem 0.75rem;
+    background: #fff;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .activity-feed__filter--active {
+    border-color: #182c42;
+    background: #182c42;
+    color: #fff;
+  }
+
+  .activity-feed__list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+</style>

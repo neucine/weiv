@@ -1,0 +1,126 @@
+<template>
+  <section class="dashboard-section">
+    <Panel>
+      <template slot:header>
+        <div>
+          <h2>{{ workspaceName() }} overview</h2>
+          <p class="dashboard-section__subhead">Health, issue flow, and recent movement.</p>
+        </div>
+      </template>
+
+      <template slot:actions>
+        <button class="dashboard-section__action" on:click="openIssues">Open issues</button>
+        <button class="dashboard-section__action" on:click="openBoard">View board</button>
+      </template>
+
+      <MetricGrid bind:metrics="workspaceMetrics()" />
+    </Panel>
+
+    <Panel>
+      <template slot:header>
+        <div>
+          <h2>Recent issue movement</h2>
+          <p class="dashboard-section__subhead">{{ recentSummary() }}</p>
+        </div>
+      </template>
+
+      <ul class="dashboard-section__facts">
+        <li for="issue in recentIssues()">
+          <strong>{{ issue.title }}</strong>
+          <span>{{ issue.status }} · {{ issue.watchers }} watchers</span>
+        </li>
+      </ul>
+    </Panel>
+  </section>
+</template>
+
+<script lang="ts">
+  import MetricGrid from "../components/MetricGrid.weiv";
+  import Panel from "../components/Panel.weiv";
+  import {
+    boardRoute,
+    findWorkspace,
+    issues,
+    issuesRoute,
+    listMetrics,
+    navigateTo,
+    workspaceShared
+  } from "../state/workspace.ts";
+
+  export interface Props {
+    workspaceId: string;
+  }
+
+  export let props: Props;
+
+  function workspaceName() {
+    const workspace = findWorkspace(props.workspaceId);
+    return workspace ? workspace.name : "Workspace";
+  }
+
+  function workspaceMetrics() {
+    return listMetrics(props.workspaceId);
+  }
+
+  function recentIssues() {
+    workspaceShared.saveTick;
+    return issues
+      .filter((issue) => issue.workspaceId === props.workspaceId)
+      .slice(0, 3);
+  }
+
+  function recentSummary() {
+    return `${recentIssues().length} issues are visible in the latest review slice.`;
+  }
+
+  function openIssues() {
+    navigateTo(issuesRoute(props.workspaceId));
+  }
+
+  function openBoard() {
+    navigateTo(boardRoute(props.workspaceId));
+  }
+</script>
+
+<style>
+  .dashboard-section {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .dashboard-section__subhead {
+    color: #647389;
+  }
+
+  .dashboard-section__action {
+    margin-left: 0.5rem;
+    border: 1px solid #dbe4ec;
+    border-radius: 999px;
+    padding: 0.55rem 0.85rem;
+    background: #fff;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .dashboard-section__facts {
+    display: grid;
+    gap: 0.75rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    color: #42556c;
+  }
+
+  .dashboard-section__facts li {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #edf2f6;
+  }
+
+  .dashboard-section__facts li:first-child {
+    padding-top: 0;
+    border-top: none;
+  }
+</style>

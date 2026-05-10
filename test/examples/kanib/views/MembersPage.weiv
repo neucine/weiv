@@ -1,0 +1,67 @@
+<template>
+  <Panel>
+    <template slot:header>
+      <div>
+        <h2>Members</h2>
+        <p class="members-page__subhead">Team context for the current workspace.</p>
+      </div>
+    </template>
+
+    <EmptyState if="workspaceMembers().length === 0">
+      <template slot:message>
+        <p>No members are assigned to this workspace.</p>
+      </template>
+      <p>Invite teammates once the workspace is ready.</p>
+    </EmptyState>
+
+    <ul else class="members-page__list">
+      <li for="member in workspaceMembers()" class="members-page__row">
+        <strong>{{ member.name }}</strong>
+        <span>{{ member.role }}</span>
+        <small>{{ member.focus }}</small>
+      </li>
+    </ul>
+  </Panel>
+</template>
+
+<script lang="ts">
+  import EmptyState from "../components/EmptyState.weiv";
+  import Panel from "../components/Panel.weiv";
+  import { listMembers } from "../state/workspace.ts";
+
+  export interface Props {
+    workspaceId: string;
+  }
+
+  export let props: Props;
+
+  function workspaceMembers() {
+    return listMembers(props.workspaceId);
+  }
+</script>
+
+<style>
+  .members-page__subhead {
+    color: #68798e;
+  }
+
+  .members-page__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .members-page__row {
+    display: grid;
+    gap: 0.25rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #edf2f6;
+  }
+
+  .members-page__row:first-child {
+    padding-top: 0;
+    border-top: none;
+  }
+</style>

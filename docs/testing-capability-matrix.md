@@ -50,6 +50,14 @@ The flagship app should exercise all of these categories.
 - nested update regions
 - dynamic text and attribute updates
 
+### Routing
+
+- runtime router usage
+- route params
+- nested routes with preserved shared shell
+- route-driven view switching
+- link interception and navigation behavior
+
 ### Projection
 
 - default slot projection
@@ -194,7 +202,6 @@ The first version of the flagship app is successful if:
 Do not let the flagship app become:
 
 - a product mockup optimized for domain realism instead of framework coverage
-- a router or multi-page system
 - a fake backend integration harness
 - a shared-state-first architecture rewrite
 - a drag-and-drop or animation-heavy stress test before the core browser path needs it

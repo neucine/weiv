@@ -1,0 +1,213 @@
+<template>
+  <section class="issue-detail-page">
+    <Panel>
+      <template slot:header>
+        <div>
+          <h2>{{ issueTitle() }}</h2>
+          <p class="issue-detail-page__subhead">Issue detail route with async save and shared state updates.</p>
+        </div>
+      </template>
+
+      <template slot:actions>
+        <button class="issue-detail-page__ghost" on:click="backToIssues">Back to issues</button>
+      </template>
+
+      <EmptyState if="!issue()">
+        <template slot:message>
+          <p>The requested issue was not found.</p>
+        </template>
+        <p>Return to the issue list and select another item.</p>
+      </EmptyState>
+
+      <section else class="issue-detail-page__content">
+        <DetailSection bind:body="issue().summary" bind:title="'Summary'" />
+        <DetailSection bind:body="issue().detail" bind:title="'Implementation notes'" />
+
+        <div class="issue-detail-page__composer">
+          <label>Route note</label>
+          <input
+            id="detail-note"
+            bind:value="noteDraft"
+            class="issue-detail-page__input"
+            placeholder="Leave a note for the next reviewer"
+            type="text"
+          />
+        </div>
+      </section>
+
+      <template slot:footer>
+        <div if="issue()" class="issue-detail-page__footer">
+          <small>{{ saving ? "Saving issue update..." : statusLine() }}</small>
+          <button class="issue-detail-page__primary" on:click="saveIssue">Advance status and save</button>
+        </div>
+      </template>
+    </Panel>
+
+    <div class="issue-detail-page__secondary">
+      <Panel>
+        <template slot:header>
+          <div>
+            <h2>Metadata</h2>
+            <p class="issue-detail-page__subhead">Shared route-aware selection</p>
+          </div>
+        </template>
+
+        <ul if="issue()" class="issue-detail-page__meta">
+          <li>Status: {{ issue().status }}</li>
+          <li>Priority: {{ issue().priority }}</li>
+          <li>Owner: {{ issue().owner }}</li>
+          <li>Watchers: {{ issue().watchers }}</li>
+        </ul>
+      </Panel>
+
+      <Panel>
+        <template slot:header>
+          <div>
+            <h2>Recent activity</h2>
+            <p class="issue-detail-page__subhead">Simple mocked activity stream</p>
+          </div>
+        </template>
+
+        <ul if="issue()" class="issue-detail-page__activity">
+          <li>{{ issue().owner }} updated this issue {{ issue().updatedMinutesAgo }} minutes ago.</li>
+          <li>Route-level save flow is wired through `setTimeout` and shared observable updates.</li>
+          <li if="noteDraft">Draft note: {{ noteDraft }}</li>
+        </ul>
+      </Panel>
+    </div>
+  </section>
+</template>
+
+<script lang="ts">
+  import DetailSection from "../components/DetailSection.weiv";
+  import EmptyState from "../components/EmptyState.weiv";
+  import Panel from "../components/Panel.weiv";
+  import {
+    bumpNotifications,
+    cycleIssueStatus,
+    findIssue,
+    issuesRoute,
+    navigateTo,
+    workspaceShared
+  } from "../state/workspace.ts";
+
+  export interface Props {
+    workspaceId: string;
+    issueId: string;
+  }
+
+  export let props: Props;
+  let saving = false;
+  let noteDraft = "";
+
+  function issue() {
+    workspaceShared.saveTick;
+    return findIssue(props.issueId);
+  }
+
+  function issueTitle() {
+    const current = issue();
+    return current ? current.title : "Issue detail";
+  }
+
+  function statusLine() {
+    const current = issue();
+    if (!current) {
+      return "No issue selected.";
+    }
+    return `${current.status} · ${current.watchers} watchers`;
+  }
+
+  function backToIssues() {
+    navigateTo(issuesRoute(props.workspaceId));
+  }
+
+  function saveIssue() {
+    if (!issue()) {
+      return;
+    }
+    saving = true;
+    setTimeout(() => {
+      cycleIssueStatus(props.issueId);
+      bumpNotifications();
+      saving = false;
+    }, 0);
+  }
+</script>
+
+<style>
+  .issue-detail-page {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .issue-detail-page__secondary {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .issue-detail-page__subhead {
+    color: #68798e;
+  }
+
+  .issue-detail-page__content,
+  .issue-detail-page__meta,
+  .issue-detail-page__activity {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .issue-detail-page__meta,
+  .issue-detail-page__activity {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .issue-detail-page__composer {
+    display: grid;
+    gap: 0.45rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #edf2f6;
+  }
+
+  .issue-detail-page__input {
+    border: 1px solid #cad4df;
+    border-radius: 12px;
+    padding: 0.75rem 0.85rem;
+    font: inherit;
+  }
+
+  .issue-detail-page__ghost,
+  .issue-detail-page__primary {
+    border-radius: 999px;
+    padding: 0.55rem 0.85rem;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .issue-detail-page__ghost {
+    border: 1px solid #dbe4ec;
+    background: #fff;
+  }
+
+  .issue-detail-page__primary {
+    border: none;
+    background: #182c42;
+    color: #fff;
+  }
+
+  .issue-detail-page__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  @media (max-width: 900px) {
+    .issue-detail-page__secondary {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

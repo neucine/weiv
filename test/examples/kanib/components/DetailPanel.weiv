@@ -2,30 +2,38 @@
   <Panel>
     <template slot:header>
       <div>
-        <h2>Work item detail</h2>
-        <p class="detail-panel__subhead">{{ props.lastSavedLabel }}</p>
+        <h2>Selected issue</h2>
+        <p class="detail-panel__subhead">Quick actions stay visible across routes.</p>
       </div>
     </template>
 
     <template slot:actions>
-      <button class="detail-panel__ghost" on:click="registerWatch">Connect alert feed</button>
-      <button class="detail-panel__ghost" on:click="triggerExternalPulse">Check external status</button>
+      <button class="detail-panel__ghost" on:click="registerWatch">Connect save listener</button>
+      <button class="detail-panel__ghost" on:click="triggerExternalPulse">Trigger external save</button>
     </template>
 
-    <EmptyState if="!props.item"></EmptyState>
+    <EmptyState if="!props.item">
+      <template slot:message>
+        <p>No issue is selected yet.</p>
+      </template>
+      <p>Open any issue from the list or board to keep the side panel in sync.</p>
+    </EmptyState>
 
     <section else class="detail-panel__content">
       <header class="detail-panel__headline">
         <strong>{{ props.item.title }}</strong>
-        <span>{{ props.pending ? "Saving..." : props.item.state }}</span>
+        <span>{{ props.item.status }}</span>
       </header>
 
       <DetailSection bind:body="props.item.summary" bind:title="'Summary'" />
       <DetailSection bind:body="props.item.detail" bind:title="'Detail'" />
 
       <footer class="detail-panel__footer">
-        <p class="detail-panel__ticks">External updates received: {{ props.externalTicks }}</p>
-        <button class="detail-panel__primary" on:click="saveItem">Save release decision</button>
+        <p class="detail-panel__ticks">External save pulses: {{ props.externalTicks }}</p>
+        <div class="detail-panel__actions">
+          <button class="detail-panel__ghost" on:click="openIssue">Open detail</button>
+          <button class="detail-panel__primary" on:click="advanceIssue">Advance status</button>
+        </div>
       </footer>
     </section>
   </Panel>
@@ -41,23 +49,29 @@
     title: string;
     summary: string;
     detail: string;
-    state: string;
+    status: string;
   }
 
   export interface Props {
     item: DetailItem | null;
-    pending: boolean;
-    lastSavedLabel: string;
+    workspaceId: string;
     externalTicks: number;
   }
 
   export let props: Props;
 
-  function saveItem() {
+  function openIssue() {
     if (!props.item) {
       return;
     }
-    emit("save-item", props.item.id);
+    emit("open-issue", props.item.id);
+  }
+
+  function advanceIssue() {
+    if (!props.item) {
+      return;
+    }
+    emit("advance-issue", props.item.id);
   }
 
   function registerWatch() {
@@ -86,6 +100,11 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
+  }
+
+  .detail-panel__actions {
+    display: flex;
+    gap: 0.6rem;
   }
 
   .detail-panel__ghost,

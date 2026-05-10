@@ -1,19 +1,19 @@
 <template>
   <div class="workspace-header">
     <div>
-      <p class="workspace-header__eyebrow">Release readiness workspace</p>
+      <p class="workspace-header__eyebrow">Kaneo-inspired verification app</p>
       <h1>{{ props.title }}</h1>
       <p class="workspace-header__subtitle">{{ props.subtitle }}</p>
     </div>
 
     <div class="workspace-header__actions">
-      <span class="workspace-header__badge">{{ props.pendingSaves }} decisions pending</span>
-      <button class="workspace-header__ghost" on:click="handleQueueRefresh">Refresh status</button>
-      <button class="workspace-header__ghost" on:click="handleClearNotifications">Clear alerts</button>
+      <span class="workspace-header__section">{{ props.sectionLabel }}</span>
+      <button class="workspace-header__ghost" on:click="handleQueueRefresh">Refresh signals</button>
+      <button class="workspace-header__ghost" on:click="handleClearNotifications">Clear inbox</button>
       <button class="workspace-header__primary" on:click="handleToggleSidebar">
         {{ props.collapsed ? "Expand sidebar" : "Collapse sidebar" }}
       </button>
-      <span class="workspace-header__notification">{{ props.notifications }} release alerts</span>
+      <span class="workspace-header__notification">{{ props.notifications }} workspace alerts</span>
     </div>
   </div>
 </template>
@@ -22,8 +22,8 @@
   export interface Props {
     title: string;
     subtitle: string;
+    sectionLabel: string;
     notifications: number;
-    pendingSaves: number;
     collapsed: boolean;
   }
 
@@ -51,16 +51,20 @@
     padding: 1.25rem 1.5rem;
     border: 1px solid #d7e0e8;
     border-radius: 24px;
-    background: rgba(255, 255, 255, 0.84);
+    background: rgba(255, 255, 255, 0.86);
     backdrop-filter: blur(12px);
     box-shadow: 0 20px 50px rgba(24, 44, 66, 0.08);
   }
 
   .workspace-header__eyebrow,
   .workspace-header__subtitle,
-  .workspace-header__badge,
+  .workspace-header__section,
   .workspace-header__notification {
     color: #607086;
+  }
+
+  .workspace-header__section {
+    font-weight: 600;
   }
 
   .workspace-header__actions {

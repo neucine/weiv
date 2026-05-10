@@ -21,7 +21,7 @@ Keep expanding the larger flagship verification app above TodoMVC.
 
 Working name:
 
-- `test/examples/workspace-app`
+- `test/examples/kanib`
 
 The goal is to keep one verification app that is meaningfully broader than
 TodoMVC and exposes more of `weiv`'s real strengths and gaps.
@@ -47,12 +47,12 @@ The larger verification app should deliberately cover those missing areas.
 
 ## Proposed Shape
 
-The first version should be a single larger app, not a router or multi-page
-system.
+The replacement should become a routed, Kaneo-inspired workspace / issue
+management app.
 
 It should still fit within one emitted app bundle and one component-test target.
 
-Recommended sections:
+Recommended routed sections:
 
 1. Workspace shell
 - app header
@@ -60,27 +60,37 @@ Recommended sections:
 - content area
 - one or two secondary panels
 
-2. Dashboard overview
+2. Workspace overview route
 - several cards/widgets
 - independent summary regions
 - small filtered lists
 
-3. Activity/feed section
+3. Issues route
 - list rendering
+- filters/search
 - per-item actions
 - conditional empty states
-- at least one delayed or queued UI update
 
-4. Detail panel
+4. Board route
+- grouped issue columns
+- richer repeated subtrees
+- denser conditional rendering
+
+5. Issue detail route
 - selected-item summary
 - nested child components
 - conditional subsections
 - one async transition such as save/pending/complete state
 
-5. Reusable projected surfaces
+6. Members/settings routes
+- form and management surfaces
+- settings toggles
+- member list state
+
+7. Reusable projected surfaces
 - cards, panels, empty states, or drawer-like sections using slots/projection
 
-6. Boundary stress area
+8. Boundary stress area
 - one local owned callback path such as `setTimeout`, `queueMicrotask`, or
   `requestAnimationFrame`
 - one async event handler path
@@ -96,6 +106,8 @@ The app should intentionally exercise:
 - local mutable state in multiple sibling regions
 - helper-derived display values
 - parent/child event flows
+- runtime router behavior
+- route params and nested route preservation
 - async event-driven state transitions
 - owned callback wrappers such as timers or microtasks
 - at least one unowned callback boundary that should diagnose conservatively
@@ -113,26 +125,33 @@ coverage list now lives in [Testing Capability Matrix](./testing-capability-matr
 
 Recommended first-pass structure:
 
-- `test/examples/workspace-app/App.weiv`
-- `test/examples/workspace-app/README.md`
-- `test/examples/workspace-app/WorkspaceShell.weiv`
-- `test/examples/workspace-app/WorkspaceHeader.weiv`
-- `test/examples/workspace-app/WorkspaceSidebar.weiv`
-- `test/examples/workspace-app/DashboardSection.weiv`
-- `test/examples/workspace-app/MetricGrid.weiv`
-- `test/examples/workspace-app/MetricCard.weiv`
-- `test/examples/workspace-app/ActivityFeed.weiv`
-- `test/examples/workspace-app/ActivityItem.weiv`
-- `test/examples/workspace-app/DetailPanel.weiv`
-- `test/examples/workspace-app/DetailSection.weiv`
-- `test/examples/workspace-app/EmptyState.weiv`
-- `test/examples/workspace-app/Panel.weiv`
+- `test/examples/kanib/App.weiv`
+- `test/examples/kanib/README.md`
+- `test/examples/kanib/components/WorkspaceShell.weiv`
+- `test/examples/kanib/components/WorkspaceHeader.weiv`
+- `test/examples/kanib/components/WorkspaceSidebar.weiv`
+- `test/examples/kanib/components/Panel.weiv`
+- `test/examples/kanib/components/EmptyState.weiv`
+- `test/examples/kanib/components/MetricGrid.weiv`
+- `test/examples/kanib/components/MetricCard.weiv`
+- `test/examples/kanib/components/DetailPanel.weiv`
+- `test/examples/kanib/components/DetailSection.weiv`
+- `test/examples/kanib/components/ActivityItem.weiv`
+- `test/examples/kanib/views/OverviewPage.weiv`
+- `test/examples/kanib/views/IssueListPage.weiv`
+- `test/examples/kanib/views/IssueBoardPage.weiv`
+- `test/examples/kanib/views/IssueDetailPage.weiv`
+- `test/examples/kanib/views/MembersPage.weiv`
+- `test/examples/kanib/views/SettingsPage.weiv`
+- `test/examples/kanib/state/workspace.ts`
+- `test/examples/kanib/utils/format.ts`
+- `test/examples/kanib/utils/metric_tone.js`
 
 The exact names can change, but the shape matters:
 
+- routed pages
 - shell components
-- dense overview components
-- list/detail components
+- issue/board/detail components
 - reusable composition/projection components
 
 ## Data Model Guidance
@@ -142,7 +161,6 @@ Keep the data static and mostly local.
 Do not introduce:
 
 - server fetching
-- router state
 - persistence
 
 The first version should focus on compiler/runtime verification, not product
@@ -161,8 +179,8 @@ That area should be:
 
 Recommended state:
 
-- selected item id
-- active tab/section
+- current workspace id
+- selected issue id
 - sidebar collapse toggle
 - item filter/search text
 - one or two local editing states
@@ -202,7 +220,7 @@ Recommended usage style:
 
 Add `zig build test` checks that:
 
-- all workspace-app components build through the current pipeline
+- all kanib components build through the current pipeline
 - the root app resolves expected component imports
 - binding diagnostics stay at zero for the valid app
 
@@ -289,7 +307,7 @@ The app should be:
 
 This work is successful when:
 
-- `test/examples/workspace-app` exists and is readable as an app
+- `test/examples/kanib` exists and is readable as an app
 - it is clearly larger and broader than TodoMVC
 - it participates in both `zig build test` and `zig build component-test`
 - it reveals useful compiler/runtime behavior beyond the current small fixtures

@@ -22,13 +22,14 @@ Good small examples to read first:
 
 Multi-component verification examples:
 
-- [Workspace App](./workspace-app/README.md)
+- [Kanib](./kanib/README.md)
 - [Classic Todo App](./classic-todo/README.md)
 - [TodoMVC Verification App](./todomvc/README.md)
 
 Current role:
 
-- `test/examples/workspace-app` is the larger flagship verification app scaffold
+- `test/examples/kanib` is the larger flagship verification app,
+  structured as a routed Kaneo-inspired workspace/issues app
 - `test/examples/todomvc` is the main smaller app-scale verification example
 - `test/examples/classic-todo` is still useful as a simpler multi-component app
 

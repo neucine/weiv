@@ -179,7 +179,14 @@ pub const Graph = struct {
         for (self.nodes.items) |*node| {
             const js = try emit_direct_js.emitModule(&node.model, allocator);
             defer allocator.free(js);
-            try out_dir.writeFile(.{ .sub_path = node.module_rel_path, .data = js });
+            const rewritten_js = try rewriteRuntimeImportSpecifiers(js, node.module_rel_path, allocator);
+            defer allocator.free(rewritten_js);
+            if (std.fs.path.dirname(node.module_rel_path)) |output_dirname| {
+                if (!std.mem.eql(u8, output_dirname, ".") and output_dirname.len > 0) {
+                    try out_dir.makePath(output_dirname);
+                }
+            }
+            try out_dir.writeFile(.{ .sub_path = node.module_rel_path, .data = rewritten_js });
         }
     }
 

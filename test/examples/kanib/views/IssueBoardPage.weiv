@@ -1,0 +1,96 @@
+<template>
+  <section class="issue-board">
+    <Panel for="column in columns()">
+      <template slot:header>
+        <div>
+          <h2>{{ column.label }}</h2>
+          <p class="issue-board__subhead">{{ column.items.length }} issues</p>
+        </div>
+      </template>
+
+      <EmptyState if="column.items.length === 0">
+        <template slot:message>
+          <p>{{ column.label }} is clear.</p>
+        </template>
+        <p>Work will appear here as issue status changes.</p>
+      </EmptyState>
+
+      <div else class="issue-board__cards">
+        <button
+          for="issue in column.items"
+          class="issue-board__card"
+          on:click="openIssue(issue.id)"
+        >
+          <strong>{{ issue.title }}</strong>
+          <p>{{ issue.summary }}</p>
+          <small>{{ issue.owner }} · {{ issue.priority }}</small>
+        </button>
+      </div>
+    </Panel>
+  </section>
+</template>
+
+<script lang="ts">
+  import EmptyState from "../components/EmptyState.weiv";
+  import Panel from "../components/Panel.weiv";
+  import { issueRoute, issues, navigateTo, workspaceShared } from "../state/workspace.ts";
+
+  export interface Props {
+    workspaceId: string;
+  }
+
+  export let props: Props;
+
+  function boardItems(status: string) {
+    workspaceShared.saveTick;
+    return issues.filter((issue) => issue.workspaceId === props.workspaceId && issue.status === status);
+  }
+
+  function columns() {
+    return [
+      { id: "backlog", label: "Backlog", items: boardItems("backlog") },
+      { id: "in-progress", label: "In progress", items: boardItems("in-progress") },
+      { id: "review", label: "Review", items: boardItems("review") },
+      { id: "done", label: "Done", items: boardItems("done") }
+    ];
+  }
+
+  function openIssue(issueId: string) {
+    navigateTo(issueRoute(props.workspaceId, issueId));
+  }
+</script>
+
+<style>
+  .issue-board {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .issue-board__subhead {
+    color: #68798e;
+  }
+
+  .issue-board__cards {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .issue-board__card {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.95rem;
+    border: 1px solid #dde5ed;
+    border-radius: 16px;
+    background: #f8fbff;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  @media (max-width: 900px) {
+    .issue-board {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

@@ -1,15 +1,21 @@
 <template>
   <section class="empty-state">
+    <div class="empty-state__icon">
+      <slot name="icon"></slot>
+    </div>
     <header class="empty-state__header">
       <slot name="message">
-        <p class="empty-state__fallback-message">No work item is selected yet.</p>
+        <p class="empty-state__fallback-message">Nothing is selected yet.</p>
       </slot>
     </header>
     <div class="empty-state__body">
       <slot>
-        <p class="empty-state__fallback-body">Pick something from the release queue to inspect the decision details.</p>
+        <p class="empty-state__fallback-body">Choose a route or record to keep the workspace moving.</p>
       </slot>
     </div>
+    <footer class="empty-state__actions">
+      <slot name="actions"></slot>
+    </footer>
   </section>
 </template>
 
@@ -25,6 +31,15 @@
     border-radius: 16px;
     padding: 1rem;
     background: #f8fbff;
+  }
+
+  .empty-state__icon:empty,
+  .empty-state__actions:empty {
+    display: none;
+  }
+
+  .empty-state__actions {
+    margin-top: 0.85rem;
   }
 
   .empty-state__fallback-message,

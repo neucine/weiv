@@ -138,7 +138,7 @@ The current verification shape is still uneven:
 - many narrow compiler/runtime fixtures
 - TodoMVC as the main app-like verification example in practice
 
-The first `test/examples/workspace-app` scaffold is now present, but it still
+The first `test/examples/kanib` scaffold is now present, but it still
 needs fuller component-test and inspect coverage before it replaces TodoMVC as the
 broader app-scale anchor.
 
@@ -189,6 +189,6 @@ The project is in a good checkpoint state:
 - shared observable state is now a real runtime/compiler behavior, not only a
   design note
 - direct render verification is green
-- TodoMVC remains a useful forcing-function example, while workspace-app is the
+- TodoMVC remains a useful forcing-function example, while kanib is the
   larger verification track now in active use
 - stale-risk state patterns are becoming inspectable instead of magical

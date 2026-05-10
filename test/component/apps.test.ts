@@ -16,6 +16,7 @@ import {
   findElements,
   importModule,
   installDocument,
+  installRouterWindow,
   keydown,
   loadModules,
 } from "./support";
@@ -439,26 +440,30 @@ test("TodoMVC direct modules and app bundle behave correctly", async () => {
   }
 }, 120_000);
 
-test("workspace app bundle mounts without import initialization regressions", async () => {
-  const workspaceBundleDir = mkdtempSync(join(tmpdir(), "weiv-workspace-bundle-"));
+test("kanib app bundle mounts and navigates through routed product flows", async () => {
+  const kanibBundleDir = mkdtempSync(join(tmpdir(), "weiv-kanib-bundle-"));
   try {
-    emitAppBundle("test/examples/workspace-app/App.weiv", workspaceBundleDir);
-    const workspaceBundle = await importModule(join(workspaceBundleDir, "bundle.mjs"));
-    const sharedModule = readFileSync(join(workspaceBundleDir, "workspace_shared.js"), "utf8");
-    const observableModule = readFileSync(join(workspaceBundleDir, "__weiv_runtime", "index.js"), "utf8");
+    emitAppBundle("test/examples/kanib/App.weiv", kanibBundleDir);
+    const kanibBundle = await importModule(join(kanibBundleDir, "bundle.mjs"));
+    const sharedModule = readFileSync(join(kanibBundleDir, "state", "workspace.js"), "utf8");
+    const observableModule = readFileSync(join(kanibBundleDir, "__weiv_runtime", "index.js"), "utf8");
+    const runtimeIndex = readFileSync(join(kanibBundleDir, "__weiv_runtime", "index.js"), "utf8");
 
-    if (!sharedModule.includes('import { observable } from "./__weiv_runtime/index.js";')) {
-      throw new Error("Workspace app bundle did not preserve observable helper import");
+    if (!sharedModule.includes('import { observable } from "../__weiv_runtime/index.js";')) {
+      throw new Error("Kanib bundle did not preserve observable helper import");
     }
     if (!sharedModule.includes("export const workspaceShared = observable({")) {
-      throw new Error("Workspace app bundle did not create shared state through observable()");
+      throw new Error("Kanib bundle did not create shared state through observable()");
     }
     if (!observableModule.includes('export { observable } from "./observable.js";')) {
-      throw new Error("Workspace app bundle did not include the observable runtime entry module");
+      throw new Error("Kanib bundle did not include the observable runtime entry module");
     }
-    const observableLeafModule = readFileSync(join(workspaceBundleDir, "__weiv_runtime", "observable.js"), "utf8");
+    if (!runtimeIndex.includes('export { createRouter } from "./router.js";')) {
+      throw new Error("Kanib bundle did not include the router runtime entry");
+    }
+    const observableLeafModule = readFileSync(join(kanibBundleDir, "__weiv_runtime", "observable.js"), "utf8");
     if (!observableLeafModule.includes('const WEIV_OBSERVABLE = Symbol.for("weiv.observable");')) {
-      throw new Error("Workspace app bundle did not include the observable runtime module");
+      throw new Error("Kanib bundle did not include the observable runtime module");
     }
 
     const fakeDocument = new FakeDocument();
@@ -466,36 +471,71 @@ test("workspace app bundle mounts without import initialization regressions", as
     appTarget.setAttribute("id", "app");
     fakeDocument.body.append(appTarget);
     installDocument(fakeDocument);
+    installRouterWindow("/");
 
-    workspaceBundle.mount(appTarget, {
-      workspaceName: "Compiler Lab",
-      initialSection: "overview",
-    });
-
-    if (appTarget.replaceChildrenCalls !== 1) {
-      throw new Error(`Workspace app mount expected 1 root replaceChildren call, found ${appTarget.replaceChildrenCalls}`);
-    }
-    if (!appTarget.textContent.includes("Compiler Lab")) {
-      throw new Error("Workspace app bundle did not render header content");
-    }
-    if (!appTarget.textContent.includes("Review blockers before the Friday release cut.")) {
-      throw new Error("Workspace app bundle did not render initial shared status content");
-    }
-    if (!appTarget.textContent.includes("3 release alerts")) {
-      throw new Error("Workspace app bundle did not render initial alert count");
-    }
-
-    const clearAlertsButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
-      element.textContent.trim() === "Clear alerts"
-    );
-    if (!clearAlertsButton) throw new Error("Workspace app bundle missing clear alerts button");
-    click(clearAlertsButton);
+    kanibBundle.mount(appTarget, {});
     await new Promise((resolve) => queueMicrotask(resolve));
 
-    if (!appTarget.textContent.includes("0 release alerts")) {
-      throw new Error("Workspace app clear alerts flow did not patch the shared alert count");
+    if (appTarget.replaceChildrenCalls !== 1) {
+      throw new Error(`Kanib mount expected 1 root replaceChildren call, found ${appTarget.replaceChildrenCalls}`);
+    }
+    if (!appTarget.textContent.includes("Compiler Lab")) {
+      throw new Error("Kanib did not render header content");
+    }
+    if (!appTarget.textContent.includes("Compiler Lab overview")) {
+      throw new Error("Kanib did not render the overview route on first mount");
+    }
+    if (!appTarget.textContent.includes("4 workspace alerts")) {
+      throw new Error("Kanib did not render initial alert count");
+    }
+
+    const issuesButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
+      element.textContent.includes("Issues")
+    );
+    if (!issuesButton) throw new Error("Kanib is missing issues navigation");
+    click(issuesButton);
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    if (!appTarget.textContent.includes("Issue list")) {
+      throw new Error("Kanib did not navigate to the issue list route");
+    }
+
+    const openButtons = findElements(fakeDocument.body, byTag("button")).filter((element) =>
+      element.textContent.trim() === "Open"
+    );
+    if (openButtons.length === 0) {
+      throw new Error("Kanib issue list is missing open buttons");
+    }
+    click(openButtons[0]);
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    if (!appTarget.textContent.includes("Implementation notes")) {
+      throw new Error("Kanib did not navigate into issue detail");
+    }
+
+    const saveButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
+      element.textContent.trim() === "Advance status and save"
+    );
+    if (!saveButton) throw new Error("Kanib detail route is missing the save action");
+    click(saveButton);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    if (!appTarget.textContent.includes("5 workspace alerts")) {
+      throw new Error("Kanib detail save did not update shared notification count");
+    }
+
+    const clearInboxButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
+      element.textContent.includes("Clear inbox")
+    );
+    if (!clearInboxButton) throw new Error("Kanib is missing the clear inbox button");
+    click(clearInboxButton);
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    if (!appTarget.textContent.includes("0 workspace alerts")) {
+      throw new Error("Kanib clear inbox did not patch the shared alert count");
     }
   } finally {
-    rmSync(workspaceBundleDir, { recursive: true, force: true });
+    rmSync(kanibBundleDir, { recursive: true, force: true });
   }
 }, 120_000);

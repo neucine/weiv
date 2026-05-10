@@ -51,6 +51,11 @@ export class FakeDocumentFragment extends FakeNode {
     appendChild(this, node);
   }
 
+  appendChild(node: FakeNode) {
+    appendChild(this, node);
+    return node;
+  }
+
   insertBefore(node: FakeNode, reference: FakeNode | null) {
     insertBeforeNode(this, node, reference);
   }
@@ -83,6 +88,11 @@ export class FakeElement extends FakeNode {
 
   append(node: FakeNode) {
     appendChild(this, node);
+  }
+
+  appendChild(node: FakeNode) {
+    appendChild(this, node);
+    return node;
   }
 
   insertBefore(node: FakeNode, reference: FakeNode | null) {
@@ -144,6 +154,7 @@ export class FakeElement extends FakeNode {
 
 export class FakeDocument extends FakeNode {
   body: FakeElement;
+  listeners = new Map<string, Array<(event: any) => void>>();
 
   constructor() {
     super();
@@ -169,6 +180,27 @@ export class FakeDocument extends FakeNode {
 
   getElementById(id: string): FakeElement | null {
     return findElement(this.body, (element) => element.id === id);
+  }
+
+  addEventListener(name: string, handler: (event: any) => void) {
+    const handlers = this.listeners.get(name) ?? [];
+    handlers.push(handler);
+    this.listeners.set(name, handlers);
+  }
+
+  removeEventListener(name: string, handler: (event: any) => void) {
+    const handlers = this.listeners.get(name) ?? [];
+    this.listeners.set(
+      name,
+      handlers.filter((candidate) => candidate !== handler),
+    );
+  }
+
+  dispatchEvent(event: any) {
+    const handlers = this.listeners.get(event.type) ?? [];
+    for (const handler of handlers) {
+      handler(event);
+    }
   }
 }
 
@@ -379,6 +411,70 @@ export function scopeAttr(scopeId: string): string {
 
 export function installDocument(document: FakeDocument) {
   (globalThis as any).document = document;
+}
+
+export function installRouterWindow(pathname: string = "/") {
+  const listeners = new Map<string, Array<(event: any) => void>>();
+  const location = {
+    pathname,
+    search: "",
+    hash: "",
+    origin: "http://localhost",
+    href: `http://localhost${pathname}`,
+  };
+
+  function setPath(nextPath: string) {
+    location.pathname = nextPath;
+    location.href = `http://localhost${nextPath}${location.search}${location.hash}`;
+  }
+
+  const history = {
+    state: { __weiv_key: "0" },
+    pushState(state: any, _unused: string, url: string) {
+      history.state = state;
+      setPath(url);
+    },
+    replaceState(state: any, _unused: string, url: string) {
+      history.state = state;
+      setPath(url);
+    },
+    back() {},
+    forward() {},
+  };
+
+  const windowObject = {
+    location,
+    history,
+    scrollX: 0,
+    scrollY: 0,
+    pageXOffset: 0,
+    pageYOffset: 0,
+    addEventListener(name: string, handler: (event: any) => void) {
+      const handlers = listeners.get(name) ?? [];
+      handlers.push(handler);
+      listeners.set(name, handlers);
+    },
+    removeEventListener(name: string, handler: (event: any) => void) {
+      const handlers = listeners.get(name) ?? [];
+      listeners.set(
+        name,
+        handlers.filter((candidate) => candidate !== handler),
+      );
+    },
+    dispatchEvent(event: any) {
+      const handlers = listeners.get(event.type) ?? [];
+      for (const handler of handlers) {
+        handler(event);
+      }
+    },
+    scrollTo() {},
+  };
+
+  (globalThis as any).window = windowObject;
+  (globalThis as any).history = history;
+  (globalThis as any).location = location;
+
+  return windowObject;
 }
 
 export function installJsdom(): { document: Document; window: any } {

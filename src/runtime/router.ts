@@ -1,4 +1,4 @@
-import { observable } from "./observable";
+import { observable } from "./observable.ts";
 
 type RouteParams = Record<string, string>;
 type QueryParams = Record<string, string>;

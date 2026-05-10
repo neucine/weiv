@@ -119,7 +119,7 @@ Recommended shape:
 
 Working name:
 
-- `test/examples/workspace-app`
+- `test/examples/kanib`
 
 The app now exists and is part of normal verification. What remains is deeper
 inspect coverage and broader interaction verification.

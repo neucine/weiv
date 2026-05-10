@@ -1,0 +1,215 @@
+<template>
+  <nav bind:class="sidebarClass()">
+    <section class="workspace-sidebar__section">
+      <p class="workspace-sidebar__label">Workspaces</p>
+      <button
+        for="workspace in workspaces()"
+        bind:class="workspaceClass(workspace.id)"
+        on:click="selectWorkspace(workspace.id)"
+      >
+        <span>{{ workspace.key }}</span>
+        <small>{{ workspace.name }}</small>
+      </button>
+    </section>
+
+    <section class="workspace-sidebar__section">
+      <p class="workspace-sidebar__label">Views</p>
+      <button bind:class="itemClass(overviewPath())" on:click="showOverview">
+        <span>Overview</span>
+        <small>metrics, recent movement</small>
+      </button>
+      <button bind:class="itemClass(issuesPath())" on:click="showIssues">
+        <span>Issues</span>
+        <small>list, filters, selection</small>
+      </button>
+      <button bind:class="itemClass(boardPath())" on:click="showBoard">
+        <span>Board</span>
+        <small>status grouped work</small>
+      </button>
+      <button bind:class="itemClass(membersPath())" on:click="showMembers">
+        <span>Members</span>
+        <small>roles and focus</small>
+      </button>
+      <button bind:class="itemClass(settingsPath())" on:click="showSettings">
+        <span>Settings</span>
+        <small>preferences and rules</small>
+      </button>
+    </section>
+
+    <p class="workspace-sidebar__status">{{ props.statusMessage }}</p>
+  </nav>
+</template>
+
+<script lang="ts">
+  import {
+    boardRoute,
+    issuesRoute,
+    listWorkspaces,
+    membersRoute,
+    settingsRoute,
+    workspaceRoute
+  } from "../state/workspace.ts";
+
+  export interface Props {
+    currentWorkspaceId: string;
+    currentPath: string;
+    collapsed: boolean;
+    statusMessage: string;
+  }
+
+  export let props: Props;
+
+  function sidebarClass() {
+    return props.collapsed ? "workspace-sidebar workspace-sidebar--collapsed" : "workspace-sidebar";
+  }
+
+  function workspaces() {
+    return listWorkspaces();
+  }
+
+  function overviewPath() {
+    return workspaceRoute(props.currentWorkspaceId);
+  }
+
+  function issuesPath() {
+    return issuesRoute(props.currentWorkspaceId);
+  }
+
+  function boardPath() {
+    return boardRoute(props.currentWorkspaceId);
+  }
+
+  function membersPath() {
+    return membersRoute(props.currentWorkspaceId);
+  }
+
+  function settingsPath() {
+    return settingsRoute(props.currentWorkspaceId);
+  }
+
+  function itemClass(path: string) {
+    return props.currentPath === path
+      ? "workspace-sidebar__item workspace-sidebar__item--active"
+      : "workspace-sidebar__item";
+  }
+
+  function workspaceClass(workspaceId: string) {
+    return props.currentWorkspaceId === workspaceId
+      ? "workspace-sidebar__workspace workspace-sidebar__workspace--active"
+      : "workspace-sidebar__workspace";
+  }
+
+  function showOverview() {
+    emit("navigate", overviewPath());
+  }
+
+  function showIssues() {
+    emit("navigate", issuesPath());
+  }
+
+  function showBoard() {
+    emit("navigate", boardPath());
+  }
+
+  function showMembers() {
+    emit("navigate", membersPath());
+  }
+
+  function showSettings() {
+    emit("navigate", settingsPath());
+  }
+
+  function selectWorkspace(workspaceId: string) {
+    emit("switch-workspace", workspaceId);
+  }
+</script>
+
+<style>
+  .workspace-sidebar {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid #d7e0e8;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.92);
+  }
+
+  .workspace-sidebar__section {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .workspace-sidebar__label,
+  .workspace-sidebar__status {
+    color: #6d7b8d;
+  }
+
+  .workspace-sidebar__workspace,
+  .workspace-sidebar__item {
+    display: grid;
+    gap: 0.2rem;
+    width: 100%;
+    padding: 0.8rem 0.9rem;
+    border-radius: 16px;
+    background: #fff;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .workspace-sidebar__workspace {
+    border: 1px solid #dde5ed;
+    color: #42556c;
+  }
+
+  .workspace-sidebar__workspace--active {
+    border-color: #2f7f73;
+    box-shadow: inset 0 0 0 1px rgba(47, 127, 115, 0.16);
+    color: #173f46;
+  }
+
+  .workspace-sidebar__item {
+    border: 1px solid #dde5ed;
+    color: #182c42;
+  }
+
+  .workspace-sidebar__item--active {
+    border-color: #182c42;
+    background: #182c42;
+    color: #fff;
+  }
+
+  .workspace-sidebar__item small,
+  .workspace-sidebar__workspace small {
+    opacity: 0.78;
+  }
+
+  .workspace-sidebar--collapsed {
+    padding: 0.75rem;
+  }
+
+  .workspace-sidebar--collapsed .workspace-sidebar__label,
+  .workspace-sidebar--collapsed .workspace-sidebar__status,
+  .workspace-sidebar--collapsed .workspace-sidebar__workspace small,
+  .workspace-sidebar--collapsed .workspace-sidebar__item small {
+    display: none;
+  }
+
+  .workspace-sidebar--collapsed .workspace-sidebar__workspace,
+  .workspace-sidebar--collapsed .workspace-sidebar__item {
+    min-height: 4.5rem;
+    justify-items: center;
+    align-content: center;
+    padding: 0.7rem 0.45rem;
+    text-align: center;
+  }
+
+  .workspace-sidebar--collapsed .workspace-sidebar__workspace span,
+  .workspace-sidebar--collapsed .workspace-sidebar__item span {
+    display: block;
+    max-width: 100%;
+    font-size: 0.82rem;
+    line-height: 1.15;
+    word-break: break-word;
+  }
+</style>

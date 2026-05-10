@@ -112,12 +112,12 @@ Current state:
 
 - the suite has many focused compiler/runtime fixtures
 - TodoMVC is still the main app-like verification example
-- `test/examples/workspace-app` is now the flagship medium-scale verification app
+- `test/examples/kanib` is now the flagship medium-scale verification app
 
 Next work:
 
 - keep TodoMVC as a smaller app-scale example, not the whole strategy
-- broaden workspace-app into fuller inspect and regression coverage
+- broaden kanib into fuller inspect and regression coverage
 - use the larger app to expose:
   - direct strengths
   - conservative update sites

@@ -1,0 +1,104 @@
+<template>
+  <Panel>
+    <template slot:header>
+      <div>
+        <h2>Settings</h2>
+        <p class="settings-page__subhead">Small local-state form behavior inside a routed page.</p>
+      </div>
+    </template>
+
+    <div class="settings-page__group">
+      <button bind:class="toggleClass(autopinEnabled)" on:click="toggleAutopin">
+        {{ autopinEnabled ? "Autopin enabled" : "Autopin disabled" }}
+      </button>
+      <button bind:class="toggleClass(compactCards)" on:click="toggleCompactCards">
+        {{ compactCards ? "Compact board cards" : "Comfortable board cards" }}
+      </button>
+    </div>
+
+    <template slot:footer>
+      <div class="settings-page__footer">
+        <small>{{ savedMessage() }}</small>
+        <button class="settings-page__primary" on:click="saveSettings">Save workspace settings</button>
+      </div>
+    </template>
+  </Panel>
+</template>
+
+<script lang="ts">
+  import Panel from "../components/Panel.weiv";
+
+  export interface Props {
+    workspaceId: string;
+  }
+
+  export let props: Props;
+  let autopinEnabled = true;
+  let compactCards = false;
+  let saveCount = 0;
+
+  function toggleClass(active: boolean) {
+    return active ? "settings-page__toggle settings-page__toggle--active" : "settings-page__toggle";
+  }
+
+  function toggleAutopin() {
+    autopinEnabled = !autopinEnabled;
+  }
+
+  function toggleCompactCards() {
+    compactCards = !compactCards;
+  }
+
+  function saveSettings() {
+    saveCount += 1;
+  }
+
+  function savedMessage() {
+    return saveCount === 0
+      ? `Editing settings for ${props.workspaceId}.`
+      : `Saved ${saveCount} time${saveCount === 1 ? "" : "s"}.`;
+  }
+</script>
+
+<style>
+  .settings-page__subhead {
+    color: #68798e;
+  }
+
+  .settings-page__group {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .settings-page__toggle,
+  .settings-page__primary {
+    border-radius: 16px;
+    padding: 0.85rem 1rem;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .settings-page__toggle {
+    border: 1px solid #dde5ed;
+    background: #fff;
+    text-align: left;
+  }
+
+  .settings-page__toggle--active {
+    border-color: #2f7f73;
+    background: #edf8f5;
+  }
+
+  .settings-page__primary {
+    border: none;
+    background: #182c42;
+    color: #fff;
+  }
+
+  .settings-page__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+</style>

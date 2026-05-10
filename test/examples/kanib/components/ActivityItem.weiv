@@ -1,13 +1,11 @@
 <template>
   <li bind:class="itemClass()">
-    <button class="activity-item__content" on:click="selectItem">
+    <button class="activity-item__content" on:click="openIssue">
       <strong>{{ props.title }}</strong>
       <p>{{ props.summary }}</p>
-      <small>{{ props.owner }}</small>
+      <small>{{ props.owner }} · {{ props.status }} · {{ props.priority }}</small>
     </button>
-    <button class="activity-item__pin" on:click="togglePin">
-      {{ props.pinned ? "Unpin" : "Pin" }}
-    </button>
+    <button class="activity-item__action" on:click="openIssue">Open</button>
   </li>
 </template>
 
@@ -17,8 +15,9 @@
     title: string;
     summary: string;
     owner: string;
+    status: string;
+    priority: string;
     selected: boolean;
-    pinned: boolean;
   }
 
   export let props: Props;
@@ -30,13 +29,8 @@
     return "activity-item";
   }
 
-  function selectItem() {
-    emit("select-item", props.id);
-  }
-
-  function togglePin(event: Event) {
-    event.preventDefault();
-    emit("toggle-pin", props.id);
+  function openIssue() {
+    emit("open-issue", props.id);
   }
 </script>
 
@@ -58,7 +52,7 @@
   }
 
   .activity-item__content,
-  .activity-item__pin {
+  .activity-item__action {
     font: inherit;
   }
 
@@ -70,7 +64,7 @@
     cursor: pointer;
   }
 
-  .activity-item__pin {
+  .activity-item__action {
     align-self: start;
     border: 1px solid #dbe4ec;
     border-radius: 999px;
