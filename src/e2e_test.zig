@@ -2125,6 +2125,127 @@ test "emit app generates import map for bare imports" {
     try std.testing.expect(std.mem.indexOf(u8, html, "./node_modules/lodash-es") != null);
 }
 
+test "validate app reports unsupported absolute runtime import with source location" {
+    const allocator = std.testing.allocator;
+    var temp_dir = std.testing.tmpDir(.{});
+    defer temp_dir.cleanup();
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "App.weiv",
+        .data =
+        \\<template>
+        \\  <p>{{ props.title }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import { value } from "/tmp/nope.js";
+        \\  export interface Props { title: string }
+        \\  export let props: Props;
+        \\</script>
+        ,
+    });
+
+    const root = try std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", temp_dir.sub_path[0..], "App.weiv" });
+    defer allocator.free(root);
+
+    var report = try app_emit.validateApp(root, allocator);
+    defer report.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), report.diagnostics.len);
+    const diagnostic = report.diagnostics[0];
+    try std.testing.expectEqualStrings("import.unsupported_absolute_runtime_import", diagnostic.code);
+    try std.testing.expect(diagnostic.fatal);
+    try std.testing.expect(diagnostic.location != null);
+
+    const formatted = try cli.formatAppValidationDiagnostics(root, report.diagnostics, allocator);
+    defer allocator.free(formatted);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "weiv validate app failed for") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "error import.unsupported_absolute_runtime_import [bundle]") != null);
+}
+
+test "validate app reports unsupported relative runtime import type with source location" {
+    const allocator = std.testing.allocator;
+    var temp_dir = std.testing.tmpDir(.{});
+    defer temp_dir.cleanup();
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "App.weiv",
+        .data =
+        \\<template>
+        \\  <p>{{ props.title }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import data from "./data.txt";
+        \\  export interface Props { title: string }
+        \\  export let props: Props;
+        \\</script>
+        ,
+    });
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "data.txt",
+        .data = "hello",
+    });
+
+    const root = try std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", temp_dir.sub_path[0..], "App.weiv" });
+    defer allocator.free(root);
+
+    var report = try app_emit.validateApp(root, allocator);
+    defer report.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), report.diagnostics.len);
+    const diagnostic = report.diagnostics[0];
+    try std.testing.expectEqualStrings("import.unsupported_runtime_import_type", diagnostic.code);
+    try std.testing.expect(diagnostic.fatal);
+    try std.testing.expect(diagnostic.location != null);
+
+    const formatted = try cli.formatAppValidationDiagnostics(root, report.diagnostics, allocator);
+    defer allocator.free(formatted);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "error import.unsupported_runtime_import_type [bundle]") != null);
+}
+
+test "validate app can format machine-readable json diagnostics" {
+    const allocator = std.testing.allocator;
+    var temp_dir = std.testing.tmpDir(.{});
+    defer temp_dir.cleanup();
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "App.weiv",
+        .data =
+        \\<template>
+        \\  <p>{{ props.title }}</p>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  import data from "./data.txt";
+        \\  export interface Props { title: string }
+        \\  export let props: Props;
+        \\</script>
+        ,
+    });
+
+    try temp_dir.dir.writeFile(.{
+        .sub_path = "data.txt",
+        .data = "hello",
+    });
+
+    const root = try std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", temp_dir.sub_path[0..], "App.weiv" });
+    defer allocator.free(root);
+
+    var report = try app_emit.validateApp(root, allocator);
+    defer report.deinit(allocator);
+
+    const json = try cli.formatAppValidationDiagnosticsJson(root, report.diagnostics, allocator);
+    defer allocator.free(json);
+
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"rootPath\":") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"ok\": false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"code\": \"import.unsupported_runtime_import_type\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"stage\": \"bundle\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"fatal\": true") != null);
+}
+
 fn expectComponentBuild(
     allocator: std.mem.Allocator,
     source: []const u8,
@@ -2351,6 +2472,62 @@ test "component analysis report includes structured script diagnostics" {
     try std.testing.expect(std.mem.indexOf(u8, report, "  diagnostics: 1\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, report, "    - error: Missing `export let props: Props` declaration [0:0] [0..0]\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, report, "Proxy state graph\n  tracked roots: 0\n  root kinds: imported=0 props=0 local=0\n  escape warnings: 0\n") != null);
+}
+
+test "component build report preserves fatal template diagnostics" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <div else>bad</div>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+    ;
+
+    var report = try component.buildReport(source, "test/examples/unexpected-else-analysis.weiv", allocator);
+    defer report.deinit(allocator);
+
+    try std.testing.expect(report.halted_after != null);
+    try std.testing.expectEqual(@as(usize, 1), report.diagnostics.len);
+    try std.testing.expectEqualStrings("template.unexpected_else", report.diagnostics[0].code);
+    try std.testing.expect(report.diagnostics[0].fatal);
+
+    const formatted = try cli.formatComponentBuildReport(report, allocator);
+    defer allocator.free(formatted);
+
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "Compiler diagnostics\n  total: 1\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "template.unexpected_else [template_normalize]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "Pipeline halt\n  halted after: template_normalize\n") != null);
+}
+
+test "component build report can format machine-readable json diagnostics" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <div else>bad</div>
+        \\</template>
+        \\
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\</script>
+    ;
+
+    var report = try component.buildReport(source, "test/examples/unexpected-else-analysis-json.weiv", allocator);
+    defer report.deinit(allocator);
+
+    const json = try cli.formatComponentBuildReportJson(report, allocator);
+    defer allocator.free(json);
+
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"sourcePath\": \"test/examples/unexpected-else-analysis-json.weiv\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"haltedAfter\": \"template_normalize\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"code\": \"template.unexpected_else\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"severity\": \"error\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"stage\": \"template_normalize\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"fatal\": true") != null);
 }
 
 test "component analysis report includes tracked root and escape warning summary" {

@@ -12,6 +12,8 @@ The current direction for the next script-side precision upgrade is documented
 in [AST Script Analysis Plan](./ast-script-analysis-plan.md).
 The current active next-direction for cross-component/shared state is
 documented in [Shared Observable State Design](./shared-observable-state-design.md).
+The next diagnostics collection direction is documented in
+[Compiler Diagnostics Architecture](./compiler-diagnostics-architecture.md).
 The current direct-browser timing flow is documented in
 [Runtime Scheduling](./runtime-scheduling.md).
 
@@ -174,6 +176,9 @@ context, but they are no longer the active top-level story.
   port unless `PORT` is set, and debounces rebuilds after file changes, but
   the loop is still polling-based and needs polish around long-running process
   ergonomics.
+- diagnostics are still structurally uneven across phases: script and binding
+  analysis already accumulate structured records, but several parse and emit
+  author errors still stop compilation through the first thrown error path.
 
 ## Current Health
 

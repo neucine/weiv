@@ -59,9 +59,9 @@ Useful entry points:
 - [Card](./slots/Card.weiv)
 - [Slot Showcase](./slots/SlotShowcase.weiv)
 
-## Negative Fixture
+## Import Fixture
 
-- `unsupported-import/`
+- [Bare Import](./bare-import/App.weiv)
 
-This is an intentional failure case used to verify unsupported bare runtime
-import diagnostics.
+This fixture verifies that bare package imports are preserved through app
+bundling and emitted into the browser import map.

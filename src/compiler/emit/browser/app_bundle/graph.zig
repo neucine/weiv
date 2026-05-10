@@ -1,4 +1,5 @@
 const std = @import("std");
+const compiler_diagnostics = @import("../../../diagnostics.zig");
 const component = @import("../../../pipeline/index.zig");
 const emit_direct_js = @import("../direct_component_js.zig");
 const parser_backend = @import("../../../../ffi/parser_backend.zig");
@@ -130,6 +131,37 @@ pub const Graph = struct {
                 try validateRuntimeImportSpecifier(self, node.abs_path, import_record.source);
             }
         }
+    }
+
+    pub fn collectRuntimeImportDiagnostics(self: *Graph, allocator: std.mem.Allocator) ![]compiler_diagnostics.Diagnostic {
+        var bag = compiler_diagnostics.DiagnosticBag.init();
+        defer bag.deinit(allocator);
+
+        for (self.nodes.items) |*node| {
+            for (node.model.script.imports) |import_record| {
+                if (!shouldPreserveRuntimeImport(import_record, &node.model.script)) continue;
+
+                const problem = classifyRuntimeImportProblem(import_record.source) orelse continue;
+                const span = compiler_diagnostics.Span{
+                    .start = node.model.sfc_document.script.content_span.start + import_record.span_start,
+                    .end = node.model.sfc_document.script.content_span.start + import_record.span_end,
+                };
+
+                try bag.appendOwned(
+                    allocator,
+                    problem.code,
+                    .@"error",
+                    problem.message,
+                    .bundle,
+                    node.abs_path,
+                    span,
+                    compiler_diagnostics.computeLocation(node.source, span),
+                    true,
+                );
+            }
+        }
+
+        return bag.toOwnedSlice(allocator);
     }
 
     pub fn emitBrowserEntry(self: *Graph, allocator: std.mem.Allocator) ![]u8 {
@@ -685,6 +717,39 @@ fn validateRuntimeImportSpecifier(graph: *Graph, importer_path: []const u8, sour
         std.debug.print("error: unsupported runtime import type in {s}: {s}\n", .{ importer_path, source_specifier });
         return error.UnsupportedRuntimeImport;
     }
+}
+
+const RuntimeImportProblem = struct {
+    code: []const u8,
+    message: []const u8,
+};
+
+fn classifyRuntimeImportProblem(source_specifier: []const u8) ?RuntimeImportProblem {
+    if (std.fs.path.isAbsolute(source_specifier)) {
+        return .{
+            .code = "import.unsupported_absolute_runtime_import",
+            .message = "Absolute runtime imports are not supported in app bundles",
+        };
+    }
+
+    if (std.mem.eql(u8, source_specifier, weiv_runtime_package_specifier)) {
+        return null;
+    }
+
+    const is_relative = std.mem.startsWith(u8, source_specifier, "./") or
+        std.mem.startsWith(u8, source_specifier, "../");
+    if (!is_relative) {
+        return null;
+    }
+
+    if (!isBrowserLoadableImport(source_specifier) and !isTranspilableTypeScriptModule(source_specifier)) {
+        return .{
+            .code = "import.unsupported_runtime_import_type",
+            .message = "Relative runtime imports must be browser-loadable modules or transpilable TypeScript modules",
+        };
+    }
+
+    return null;
 }
 
 fn emittedRuntimeImportPath(source: []const u8, allocator: std.mem.Allocator) ![]u8 {

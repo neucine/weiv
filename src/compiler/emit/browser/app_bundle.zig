@@ -1,5 +1,16 @@
 const std = @import("std");
+const compiler_diagnostics = @import("../../diagnostics.zig");
 const bundle_graph = @import("app_bundle/graph.zig");
+
+pub const AppValidationReport = struct {
+    diagnostics: []compiler_diagnostics.Diagnostic,
+
+    pub fn deinit(self: *AppValidationReport, allocator: std.mem.Allocator) void {
+        for (self.diagnostics) |*diagnostic| diagnostic.deinit(allocator);
+        allocator.free(self.diagnostics);
+        self.* = undefined;
+    }
+};
 
 pub fn emitApp(root_component_path: []const u8, out_dir_path: []const u8, allocator: std.mem.Allocator) !void {
     const root_abs_path = try std.fs.cwd().realpathAlloc(allocator, root_component_path);
@@ -46,4 +57,19 @@ pub fn emitApp(root_component_path: []const u8, out_dir_path: []const u8, alloca
     const dev_server = try graph.emitDevServer(allocator);
     defer allocator.free(dev_server);
     try out_dir.writeFile(.{ .sub_path = "server.ts", .data = dev_server });
+}
+
+pub fn validateApp(root_component_path: []const u8, allocator: std.mem.Allocator) !AppValidationReport {
+    const root_abs_path = try std.fs.cwd().realpathAlloc(allocator, root_component_path);
+    defer allocator.free(root_abs_path);
+
+    const root_dir = std.fs.path.dirname(root_abs_path) orelse return error.InvalidRootPath;
+    var graph = bundle_graph.Graph.init(root_dir, allocator);
+    defer graph.deinit();
+
+    _ = try graph.collect(root_abs_path);
+    const diagnostics = try graph.collectRuntimeImportDiagnostics(allocator);
+    return .{
+        .diagnostics = diagnostics,
+    };
 }

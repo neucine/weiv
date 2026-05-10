@@ -1,5 +1,6 @@
 const std = @import("std");
 const component = @import("compiler/pipeline/index.zig");
+const compiler_diagnostics = @import("compiler/diagnostics.zig");
 const app_emit = @import("compiler/emit/browser/app_bundle.zig");
 const emit_direct_js = @import("compiler/emit/browser/direct_component_js.zig");
 const style = @import("compiler/emit/browser/scoped_css.zig");
@@ -103,7 +104,26 @@ pub fn run(allocator: std.mem.Allocator) !void {
                     try printUsage();
                     return;
                 };
-                try runAnalyzeComponent(path, allocator);
+                const json_flag = args.next();
+                try runAnalyzeComponent(path, allocator, json_flag != null and std.mem.eql(u8, json_flag.?, "--json"));
+                return;
+            }
+            try printUsage();
+            return;
+        }
+
+        if (std.mem.eql(u8, maybe_subcommand, "validate")) {
+            const phase = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            if (std.mem.eql(u8, phase, "app")) {
+                const root_path = args.next() orelse {
+                    try printUsage();
+                    return;
+                };
+                const json_flag = args.next();
+                try runValidateApp(root_path, allocator, json_flag != null and std.mem.eql(u8, json_flag.?, "--json"));
                 return;
             }
             try printUsage();
@@ -140,7 +160,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
                     try printUsage();
                     return;
                 };
-                try app_emit.emitApp(root_path, out_dir, allocator);
+                try runEmitApp(root_path, out_dir, allocator);
                 return;
             }
             try printUsage();
@@ -149,7 +169,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
 
         const root_path = maybe_subcommand;
         const out_dir = args.next() orelse ".zig-cache/weiv-compile-out";
-        try app_emit.emitApp(root_path, out_dir, allocator);
+        try runEmitApp(root_path, out_dir, allocator);
         return;
     }
 
@@ -167,7 +187,8 @@ pub fn run(allocator: std.mem.Allocator) !void {
             try printUsage();
             return;
         };
-        try runAnalyzeComponent(path, allocator);
+        const json_flag = args.next();
+        try runAnalyzeComponent(path, allocator, json_flag != null and std.mem.eql(u8, json_flag.?, "--json"));
         return;
     }
 
@@ -227,7 +248,17 @@ pub fn run(allocator: std.mem.Allocator) !void {
             try printUsage();
             return;
         };
-        try app_emit.emitApp(root_path, out_dir, allocator);
+        try runEmitApp(root_path, out_dir, allocator);
+        return;
+    }
+
+    if (std.mem.eql(u8, command, "validate-app")) {
+        const root_path = args.next() orelse {
+            try printUsage();
+            return;
+        };
+        const json_flag = args.next();
+        try runValidateApp(root_path, allocator, json_flag != null and std.mem.eql(u8, json_flag.?, "--json"));
         return;
     }
 
@@ -237,7 +268,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
             return;
         };
         const out_dir = args.next() orelse ".zig-cache/weiv-dev-direct";
-        try app_emit.emitApp(root_path, out_dir, allocator);
+        try runEmitApp(root_path, out_dir, allocator);
         try runDevServer(root_path, out_dir, allocator);
         return;
     }
@@ -252,11 +283,34 @@ fn loadComponent(path: []const u8, allocator: std.mem.Allocator) !LoadedComponen
     };
     errdefer allocator.free(source);
 
-    var model = component.build(source, path, allocator) catch |err| {
+    var report = component.buildReport(source, path, allocator) catch |err| {
+        try printCommandError("build component", path, err, source, allocator);
+        return error.Reported;
+    };
+    defer report.deinit(allocator);
+
+    if (hasFatalDiagnostics(report.diagnostics)) {
+        try printComponentBuildFailure("build component", path, report);
+        return error.Reported;
+    }
+
+    var model = report.intoComponentModel() catch |err| {
         try printCommandError("build component", path, err, source, allocator);
         return error.Reported;
     };
     errdefer model.deinit(allocator);
+
+    for (report.diagnostics) |*diagnostic| diagnostic.deinit(allocator);
+    if (report.diagnostics.len != 0) allocator.free(report.diagnostics);
+    report.diagnostics = &.{};
+    report.source_path = &.{};
+    report.sfc_document = null;
+    report.template_document = null;
+    report.normalized_template = null;
+    report.script = null;
+    report.binding_result = null;
+    report.ir_document = null;
+    report.halted_after = null;
 
     return .{
         .source = source,
@@ -275,10 +329,23 @@ fn runAnalyzeScript(path: []const u8, allocator: std.mem.Allocator) !void {
     try std.fs.File.stdout().writeAll("\n");
 }
 
-fn runAnalyzeComponent(path: []const u8, allocator: std.mem.Allocator) !void {
-    var loaded = try loadComponent(path, allocator);
-    defer loaded.deinit(allocator);
-    try printComponentAnalysis(loaded.model);
+fn runAnalyzeComponent(path: []const u8, allocator: std.mem.Allocator, json: bool) !void {
+    const source = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch |err| {
+        try printCommandError("read component", path, err, null, allocator);
+        return error.Reported;
+    };
+    defer allocator.free(source);
+
+    var report = component.buildReport(source, path, allocator) catch |err| {
+        try printCommandError("analyze component", path, err, source, allocator);
+        return error.Reported;
+    };
+    defer report.deinit(allocator);
+    if (json) {
+        try printComponentAnalysisJson(report);
+    } else {
+        try printComponentAnalysisReport(report);
+    }
 }
 
 fn runInspectIr(path: []const u8, allocator: std.mem.Allocator) !void {
@@ -329,6 +396,46 @@ fn runEmitCss(path: []const u8, allocator: std.mem.Allocator) !void {
     try std.fs.File.stdout().writeAll(css);
 }
 
+fn runEmitApp(root_path: []const u8, out_dir: []const u8, allocator: std.mem.Allocator) !void {
+    var validation = app_emit.validateApp(root_path, allocator) catch |err| {
+        try printCommandError("validate app", root_path, err, null, allocator);
+        return error.Reported;
+    };
+    defer validation.deinit(allocator);
+
+    if (hasFatalDiagnostics(validation.diagnostics)) {
+        try printAppValidationDiagnostics(root_path, validation.diagnostics);
+        return error.Reported;
+    }
+
+    app_emit.emitApp(root_path, out_dir, allocator) catch |err| {
+        try printCommandError("emit app", root_path, err, null, allocator);
+        return error.Reported;
+    };
+}
+
+fn runValidateApp(root_path: []const u8, allocator: std.mem.Allocator, json: bool) !void {
+    var validation = app_emit.validateApp(root_path, allocator) catch |err| {
+        try printCommandError("validate app", root_path, err, null, allocator);
+        return error.Reported;
+    };
+    defer validation.deinit(allocator);
+
+    if (json) {
+        const formatted = try formatAppValidationDiagnosticsJson(root_path, validation.diagnostics, allocator);
+        defer allocator.free(formatted);
+        try std.fs.File.stdout().writeAll(formatted);
+    } else if (validation.diagnostics.len == 0) {
+        try std.fs.File.stdout().writeAll("app validation ok\n");
+    } else {
+        try printAppValidationDiagnostics(root_path, validation.diagnostics);
+    }
+
+    if (hasFatalDiagnostics(validation.diagnostics)) {
+        return error.Reported;
+    }
+}
+
 fn printUsage() !void {
     try std.fs.File.stderr().writeAll(
         \\Usage:
@@ -338,6 +445,7 @@ fn printUsage() !void {
         \\  weiv compile <root.weiv> [out-dir]
         \\  weiv compile analyze script <path>
         \\  weiv compile analyze component <path>
+        \\  weiv compile validate app <root.weiv> [--json]
         \\  weiv compile emit js <path>
         \\  weiv compile emit css <path>
         \\  weiv compile emit app <root.weiv> <out-dir>
@@ -352,6 +460,7 @@ fn printUsage() !void {
         \\  weiv emit-js <path>
         \\  weiv emit-css <path>
         \\  weiv emit-app <root.weiv> <out-dir>
+        \\  weiv validate-app <root.weiv> [--json]
         \\  weiv dump-ir <path>
         \\  weiv dump-browser-plan <path>
         \\  weiv dump-invalidation-graph <path>
@@ -393,7 +502,7 @@ fn printCommandError(
     } else if (std.mem.eql(u8, friendlyErrorName(err), "MismatchedCloseTag")) {
         try writer.interface.writeAll("  hint: a closing tag did not match the currently open element.\n");
     } else if (std.mem.eql(u8, friendlyErrorName(err), "UnsupportedRuntimeImport")) {
-        try writer.interface.writeAll("  hint: runtime imports must be relative/local modules, not unsupported bare package imports.\n");
+        try writer.interface.writeAll("  hint: bare package imports are supported in app bundles through import maps, but absolute imports and unsupported relative runtime import types are still rejected.\n");
     }
 
     try writer.interface.flush();
@@ -500,6 +609,104 @@ pub fn printUnhandledError(err: anyerror) !void {
     var writer = stderr.writer(&buffer);
     try writer.interface.print("weiv failed\n  error: {s}\n", .{@errorName(err)});
     try writer.interface.flush();
+}
+
+fn printComponentBuildFailure(action: []const u8, path: []const u8, report: component.ComponentBuildReport) !void {
+    var stderr = std.fs.File.stderr();
+    var buffer: [1024]u8 = undefined;
+    var writer = stderr.writer(&buffer);
+    const formatted = try formatComponentBuildReport(report, std.heap.page_allocator);
+    defer std.heap.page_allocator.free(formatted);
+    try writer.interface.print("weiv {s} failed for {s}\n", .{ action, path });
+    try writer.interface.flush();
+    try stderr.writeAll(formatted);
+}
+
+fn hasFatalDiagnostics(diagnostics: []const compiler_diagnostics.Diagnostic) bool {
+    for (diagnostics) |diagnostic| {
+        if (diagnostic.fatal) return true;
+    }
+    return false;
+}
+
+pub fn formatAppValidationDiagnostics(
+    root_path: []const u8,
+    diagnostics: []const compiler_diagnostics.Diagnostic,
+    allocator: std.mem.Allocator,
+) ![]u8 {
+    var out = std.ArrayList(u8){};
+    defer out.deinit(allocator);
+    const writer = out.writer(allocator);
+
+    try writer.print("weiv validate app failed for {s}\n", .{root_path});
+    for (diagnostics) |diagnostic| {
+        try writer.print(
+            "  {s} {s} [{s}]",
+            .{
+                compiler_diagnostics.severityLabel(diagnostic.severity),
+                diagnostic.code,
+                compiler_diagnostics.stageLabel(diagnostic.stage),
+            },
+        );
+        if (diagnostic.location) |location| {
+            try writer.print(" [{d}:{d}]", .{ location.line, location.column });
+        }
+        if (diagnostic.span) |span| {
+            try writer.print(" [{d}..{d}]", .{ span.start, span.end });
+        }
+        try writer.print(": {s}\n", .{diagnostic.message});
+    }
+
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn formatAppValidationDiagnosticsJson(
+    root_path: []const u8,
+    diagnostics: []const compiler_diagnostics.Diagnostic,
+    allocator: std.mem.Allocator,
+) ![]u8 {
+    var out = std.ArrayList(u8){};
+    defer out.deinit(allocator);
+    const writer = out.writer(allocator);
+
+    try writer.writeAll("{\n");
+    try writer.print("  \"rootPath\": {f},\n", .{std.json.fmt(root_path, .{})});
+    try writer.print("  \"ok\": {any},\n", .{!hasFatalDiagnostics(diagnostics)});
+    try writer.writeAll("  \"diagnostics\": [\n");
+    for (diagnostics, 0..) |diagnostic, index| {
+        try writer.writeAll("    {\n");
+        try writer.print("      \"code\": {f},\n", .{std.json.fmt(diagnostic.code, .{})});
+        try writer.print("      \"severity\": {f},\n", .{std.json.fmt(compiler_diagnostics.severityLabel(diagnostic.severity), .{})});
+        try writer.print("      \"stage\": {f},\n", .{std.json.fmt(compiler_diagnostics.stageLabel(diagnostic.stage), .{})});
+        try writer.print("      \"message\": {f},\n", .{std.json.fmt(diagnostic.message, .{})});
+        try writer.print("      \"sourcePath\": {f},\n", .{std.json.fmt(diagnostic.source_path, .{})});
+        if (diagnostic.span) |span| {
+            try writer.print("      \"span\": {{ \"start\": {d}, \"end\": {d} }},\n", .{ span.start, span.end });
+        } else {
+            try writer.writeAll("      \"span\": null,\n");
+        }
+        if (diagnostic.location) |location| {
+            try writer.print("      \"location\": {{ \"line\": {d}, \"column\": {d} }},\n", .{ location.line, location.column });
+        } else {
+            try writer.writeAll("      \"location\": null,\n");
+        }
+        try writer.print("      \"fatal\": {any}\n", .{diagnostic.fatal});
+        if (index + 1 < diagnostics.len) {
+            try writer.writeAll("    },\n");
+        } else {
+            try writer.writeAll("    }\n");
+        }
+    }
+    try writer.writeAll("  ]\n");
+    try writer.writeAll("}\n");
+    return out.toOwnedSlice(allocator);
+}
+
+fn printAppValidationDiagnostics(root_path: []const u8, diagnostics: []const compiler_diagnostics.Diagnostic) !void {
+    var stderr = std.fs.File.stderr();
+    const formatted = try formatAppValidationDiagnostics(root_path, diagnostics, std.heap.page_allocator);
+    defer std.heap.page_allocator.free(formatted);
+    try stderr.writeAll(formatted);
 }
 
 fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.Allocator) !void {
@@ -629,8 +836,12 @@ fn devWatchLoop(context: *DevWatcherContext) void {
         }
 
         std.debug.print("  rebuilding...\n", .{});
-        app_emit.emitApp(context.root_path, context.out_dir, allocator) catch |err| {
-            std.debug.print("  rebuild failed\n  error: {s}\n", .{@errorName(err)});
+        runEmitApp(context.root_path, context.out_dir, allocator) catch |err| {
+            if (err == error.Reported) {
+                std.debug.print("  rebuild failed with diagnostics\n", .{});
+            } else {
+                std.debug.print("  rebuild failed\n  error: {s}\n", .{@errorName(err)});
+            }
             last_handled_fingerprint = next_fingerprint;
             pending_fingerprint = null;
             continue;
@@ -753,6 +964,124 @@ pub fn formatComponentAnalysisReport(model: component.ComponentModel, allocator:
     return out.toOwnedSlice(allocator);
 }
 
+pub fn formatComponentBuildReport(report: component.ComponentBuildReport, allocator: std.mem.Allocator) ![]u8 {
+    var out = std.ArrayList(u8){};
+    defer out.deinit(allocator);
+    const writer = out.writer(allocator);
+
+    if (report.sfc_document) |sfc_document| {
+        try writer.print("SFC sections\n", .{});
+        try writer.print("  template: {d}..{d}\n", .{ sfc_document.template.content_span.start, sfc_document.template.content_span.end });
+        try writer.print("  script:   {d}..{d}\n", .{ sfc_document.script.content_span.start, sfc_document.script.content_span.end });
+        if (sfc_document.style) |style_section| {
+            try writer.print("  style:    {d}..{d}\n", .{ style_section.content_span.start, style_section.content_span.end });
+        } else {
+            try writer.writeAll("  style:    <none>\n");
+        }
+    }
+
+    if (report.template_document) |template_document| {
+        try writer.print("Template AST\n  root nodes: {d}\n", .{template_document.nodes.len});
+    }
+
+    if (report.normalized_template) |normalized_template| {
+        try writer.print("Normalized template\n", .{});
+        try printNormalizedNodes(normalized_template.nodes, 1, &writer);
+    }
+
+    if (report.script) |script| {
+        try writer.print("Script analysis\n  ok: {any}\n", .{script.ok});
+        if (script.props) |props| {
+            try writer.print("  props export: {any}\n", .{props.has_props_export});
+            if (props.props_type_name) |type_name| {
+                try writer.print("  props type: {s}\n", .{type_name});
+            }
+        }
+        try writer.print("  imports: {d}\n", .{script.imports.len});
+        try writer.print("  bindings: {d}\n", .{script.bindings.len});
+        for (script.bindings) |binding_record| {
+            try writer.print("    - {s} [{s}]\n", .{ binding_record.name, binding_record.kind });
+        }
+        try writer.print("  diagnostics: {d}\n", .{script.diagnostics.len});
+        for (script.diagnostics) |diagnostic| {
+            if (diagnostic.code) |code| {
+                try writer.print("    - {s} {s}: {s} [{d}:{d}] [{d}..{d}]\n", .{
+                    diagnostic.severity,
+                    code,
+                    diagnostic.message,
+                    diagnostic.line,
+                    diagnostic.column,
+                    diagnostic.span_start,
+                    diagnostic.span_end,
+                });
+            } else {
+                try writer.print("    - {s}: {s} [{d}:{d}] [{d}..{d}]\n", .{
+                    diagnostic.severity,
+                    diagnostic.message,
+                    diagnostic.line,
+                    diagnostic.column,
+                    diagnostic.span_start,
+                    diagnostic.span_end,
+                });
+            }
+        }
+    }
+
+    if (report.binding_result) |binding_result| {
+        try writer.print("Binding phase\n  component refs: {d}\n", .{binding_result.component_refs.len});
+        for (binding_result.component_refs) |component_ref| {
+            try writer.print("    - {s} resolved={any}\n", .{ component_ref.tag_name, component_ref.resolved });
+        }
+        try writer.print("  binding diagnostics: {d}\n", .{binding_result.diagnostics.len});
+        for (binding_result.diagnostics) |diagnostic| {
+            try writer.print("    - {s} {s}: {s} — {s} [{d}..{d}]\n", .{
+                diagnostic.severity,
+                diagnostic.kind,
+                diagnostic.name,
+                diagnostic.message,
+                diagnostic.span.start,
+                diagnostic.span.end,
+            });
+        }
+    }
+
+    try writer.print("Compiler diagnostics\n  total: {d}\n", .{report.diagnostics.len});
+    for (report.diagnostics) |diagnostic| {
+        try writer.print("    - {s} {s} [{s}]", .{
+            compiler_diagnostics.severityLabel(diagnostic.severity),
+            diagnostic.code,
+            compiler_diagnostics.stageLabel(diagnostic.stage),
+        });
+        if (diagnostic.location) |location| {
+            try writer.print(" [{d}:{d}]", .{ location.line, location.column });
+        }
+        if (diagnostic.span) |span| {
+            try writer.print(" [{d}..{d}]", .{ span.start, span.end });
+        }
+        if (diagnostic.fatal) {
+            try writer.print(" fatal", .{});
+        }
+        try writer.print(": {s}\n", .{diagnostic.message});
+    }
+
+    if (report.ir_document != null and report.binding_result != null) {
+        const success_model = component.ComponentModel{
+            .source_path = report.source_path,
+            .sfc_document = report.sfc_document.?,
+            .template_document = report.template_document.?,
+            .normalized_template = report.normalized_template.?,
+            .script = report.script.?,
+            .binding_result = report.binding_result.?,
+            .ir_document = report.ir_document.?,
+        };
+        try appendProxyStateSummary(&success_model, &writer, allocator);
+    } else if (report.halted_after) |halted_after| {
+        try writer.print("Pipeline halt\n  halted after: {s}\n", .{compiler_diagnostics.stageLabel(halted_after)});
+    }
+
+    return out.toOwnedSlice(allocator);
+}
+
 fn appendProxyStateSummary(
     model: *const component.ComponentModel,
     writer: anytype,
@@ -848,6 +1177,70 @@ fn escapeWarningGuidance(line: []const u8) []const u8 {
 fn printComponentAnalysis(model: component.ComponentModel) !void {
     var stdout = std.fs.File.stdout();
     const formatted = try formatComponentAnalysisReport(model, std.heap.page_allocator);
+    defer std.heap.page_allocator.free(formatted);
+    try stdout.writeAll(formatted);
+}
+
+fn printComponentAnalysisReport(report: component.ComponentBuildReport) !void {
+    var stdout = std.fs.File.stdout();
+    const formatted = try formatComponentBuildReport(report, std.heap.page_allocator);
+    defer std.heap.page_allocator.free(formatted);
+    try stdout.writeAll(formatted);
+}
+
+pub fn formatComponentBuildReportJson(report: component.ComponentBuildReport, allocator: std.mem.Allocator) ![]u8 {
+    var out = std.ArrayList(u8){};
+    defer out.deinit(allocator);
+    const writer = out.writer(allocator);
+
+    try writer.writeAll("{\n");
+    try writer.print("  \"sourcePath\": {f},\n", .{std.json.fmt(report.source_path, .{})});
+    if (report.halted_after) |stage| {
+        try writer.print("  \"haltedAfter\": {f},\n", .{std.json.fmt(compiler_diagnostics.stageLabel(stage), .{})});
+    } else {
+        try writer.writeAll("  \"haltedAfter\": null,\n");
+    }
+    try writer.writeAll("  \"stages\": {\n");
+    try writer.print("    \"sfc\": {any},\n", .{report.sfc_document != null});
+    try writer.print("    \"template\": {any},\n", .{report.template_document != null});
+    try writer.print("    \"normalizedTemplate\": {any},\n", .{report.normalized_template != null});
+    try writer.print("    \"script\": {any},\n", .{report.script != null});
+    try writer.print("    \"binding\": {any},\n", .{report.binding_result != null});
+    try writer.print("    \"ir\": {any}\n", .{report.ir_document != null});
+    try writer.writeAll("  },\n");
+    try writer.writeAll("  \"diagnostics\": [\n");
+    for (report.diagnostics, 0..) |diagnostic, index| {
+        try writer.writeAll("    {\n");
+        try writer.print("      \"code\": {f},\n", .{std.json.fmt(diagnostic.code, .{})});
+        try writer.print("      \"severity\": {f},\n", .{std.json.fmt(compiler_diagnostics.severityLabel(diagnostic.severity), .{})});
+        try writer.print("      \"stage\": {f},\n", .{std.json.fmt(compiler_diagnostics.stageLabel(diagnostic.stage), .{})});
+        try writer.print("      \"message\": {f},\n", .{std.json.fmt(diagnostic.message, .{})});
+        try writer.print("      \"sourcePath\": {f},\n", .{std.json.fmt(diagnostic.source_path, .{})});
+        if (diagnostic.span) |span| {
+            try writer.print("      \"span\": {{ \"start\": {d}, \"end\": {d} }},\n", .{ span.start, span.end });
+        } else {
+            try writer.writeAll("      \"span\": null,\n");
+        }
+        if (diagnostic.location) |location| {
+            try writer.print("      \"location\": {{ \"line\": {d}, \"column\": {d} }},\n", .{ location.line, location.column });
+        } else {
+            try writer.writeAll("      \"location\": null,\n");
+        }
+        try writer.print("      \"fatal\": {any}\n", .{diagnostic.fatal});
+        if (index + 1 < report.diagnostics.len) {
+            try writer.writeAll("    },\n");
+        } else {
+            try writer.writeAll("    }\n");
+        }
+    }
+    try writer.writeAll("  ]\n");
+    try writer.writeAll("}\n");
+    return out.toOwnedSlice(allocator);
+}
+
+fn printComponentAnalysisJson(report: component.ComponentBuildReport) !void {
+    var stdout = std.fs.File.stdout();
+    const formatted = try formatComponentBuildReportJson(report, std.heap.page_allocator);
     defer std.heap.page_allocator.free(formatted);
     try stdout.writeAll(formatted);
 }

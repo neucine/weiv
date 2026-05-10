@@ -12,6 +12,8 @@ Use [AST Script Analysis Plan](./ast-script-analysis-plan.md) as the current
 direction for the next script-side precision upgrade.
 Use [Shared Observable State Design](./shared-observable-state-design.md) for
 the active next-direction for cross-component/shared state.
+Use [Compiler Diagnostics Architecture](./compiler-diagnostics-architecture.md)
+for the planned diagnostics collection and IDE/LSP reuse model.
 Use [Testing Implementation Plan](./testing-implementation-plan.md) for the
 concrete rollout of the larger flagship verification app.
 
@@ -73,7 +75,23 @@ Next work:
 - add IDE virtual typing for the Weiv-provided `emit` binding from
   `export interface Emits`
 
-### 4. Improve `weiv dev`
+### 4. Unify Compiler Diagnostics Collection
+
+Current state:
+
+- script and binding phases already emit structured diagnostics
+- several parse and emit failures still stop on the first thrown author error
+- CLI still owns some special-case formatting for thrown compiler errors
+
+Next work:
+
+- introduce one canonical compiler diagnostic type and bag
+- return structured build reports with partial progress and fatal diagnostics
+- move parse/template author errors into structured diagnostics where practical
+- make CLI and future IDE tools consume the same diagnostic objects
+- keep thrown errors for infrastructure failures and internal invariants only
+
+### 5. Improve `weiv dev`
 
 Current state:
 
@@ -88,7 +106,7 @@ Next work:
 - preserve clear CLI diagnostics during rebuilds
 - keep generated artifacts easy to inspect
 
-### 5. Strengthen Verification Structure
+### 6. Strengthen Verification Structure
 
 Current state:
 
@@ -111,7 +129,7 @@ Next work:
   - render/bundle verification next
   - inspect assertions after that
 
-### 6. Clarify Shared-State / Runtime Direction
+### 7. Clarify Shared-State / Runtime Direction
 
 Current state:
 
