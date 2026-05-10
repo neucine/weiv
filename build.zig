@@ -78,4 +78,40 @@ pub fn build(b: *std.Build) void {
 
     const render_test_step = b.step("render-test", "Compatibility alias for component-test");
     render_test_step.dependOn(&component_check.step);
+
+    const runtime_check = b.addSystemCommand(&.{
+        "bun",
+        "test",
+        "test/runtime",
+    });
+    runtime_check.setCwd(b.path("."));
+    runtime_check.step.dependOn(&build_parser_backend.step);
+
+    const runtime_test_step = b.step("runtime-test", "Run observable runtime tests with Bun");
+    runtime_test_step.dependOn(&runtime_check.step);
+
+    const cypress_direct = b.addSystemCommand(&.{
+        "bun",
+        "test",
+        "test/cypress/run_direct.ts",
+    });
+    cypress_direct.setCwd(b.path("."));
+    cypress_direct.step.dependOn(&build_parser_backend.step);
+
+    const cypress_slots = b.addSystemCommand(&.{
+        "bun",
+        "test",
+        "test/cypress/run_slots.ts",
+    });
+    cypress_slots.setCwd(b.path("."));
+    cypress_slots.step.dependOn(&build_parser_backend.step);
+
+    const cypress_test_step = b.step("cypress-test", "Run Cypress E2E tests (starts dev server, requires browser)");
+    cypress_test_step.dependOn(&cypress_direct.step);
+    cypress_test_step.dependOn(&cypress_slots.step);
+
+    const test_all_step = b.step("test-all", "Run all tests except Cypress (e2e + component + runtime)");
+    test_all_step.dependOn(&run_tests.step);
+    test_all_step.dependOn(&component_check.step);
+    test_all_step.dependOn(&runtime_check.step);
 }

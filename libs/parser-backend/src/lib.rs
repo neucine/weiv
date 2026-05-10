@@ -198,7 +198,7 @@ pub extern "C" fn weiv_script_analyze(
                                     response.imports.push(ImportRecord {
                                         source: source_name.clone(),
                                         kind: if is_type_only {
-                                            "named".to_string()
+                                            "type_named".to_string()
                                         } else {
                                             "named".to_string()
                                         },

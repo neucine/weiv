@@ -6,7 +6,7 @@ const node_codegen = @import("node_codegen.zig");
 pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator, needs_evaluate: bool) !void {
     if (needs_evaluate) {
         try out.appendSlice(allocator,
-            \\function evaluate(expression, scope) {
+            \\function __weiv_evaluate(expression, scope) {
             \\  const entries = Object.entries(scope);
             \\  const names = entries.map(([name]) => name);
             \\  const values = entries.map(([, value]) => value);

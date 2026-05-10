@@ -1717,7 +1717,7 @@ pub fn emitResolvedExpression(
         return;
     }
 
-    try out.appendSlice(allocator, "evaluate(");
+    try out.appendSlice(allocator, "__weiv_evaluate(");
     try common.emitString(expression, out, allocator);
     try out.writer(allocator).print(", {s})", .{scope_expr});
 }

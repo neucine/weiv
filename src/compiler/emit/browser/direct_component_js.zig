@@ -97,7 +97,7 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
         \\
     );
 
-    const needs_evaluate = std.mem.indexOf(u8, body.items, "evaluate(") != null;
+    const needs_evaluate = std.mem.indexOf(u8, body.items, "__weiv_evaluate(") != null;
 
     var out = std.ArrayList(u8){};
     defer out.deinit(allocator);

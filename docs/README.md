@@ -10,6 +10,8 @@ Active docs:
 - [Runtime Scheduling](./runtime-scheduling.md): current mutation, flush, microtask, subscription, and update timing model.
 - [Terminology](./terminology.md): normalized vocabulary for Weiv's compiler-native UI model.
 - [Status](./status.md): what works now, verification state, and known caveats.
+  Includes the router feature summary.
+- [Runtime README](../src/runtime/README.md): observable and router API reference.
 - [Plan](./plan.md): next implementation work from the current architecture.
 - [Shared Observable State Design](./shared-observable-state-design.md): active
   next-direction for cross-component/shared state using explicit

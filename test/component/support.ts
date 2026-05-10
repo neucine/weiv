@@ -380,3 +380,10 @@ export function scopeAttr(scopeId: string): string {
 export function installDocument(document: FakeDocument) {
   (globalThis as any).document = document;
 }
+
+export function installJsdom(): { document: Document; window: any } {
+  const { JSDOM } = require("jsdom");
+  const dom = new JSDOM("<!doctype html><html><body></body></html>");
+  (globalThis as any).document = dom.window.document;
+  return { document: dom.window.document, window: dom.window };
+}

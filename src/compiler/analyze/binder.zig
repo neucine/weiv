@@ -396,9 +396,16 @@ fn bindExpression(
 
     var i: usize = 0;
     var in_quote: ?u8 = null;
+    var template_depth: usize = 0;
     while (i < expression.len) {
         if (in_quote) |quote| {
             if (expression[i] == '\\' and i + 1 < expression.len) {
+                i += 2;
+                continue;
+            }
+            if (quote == '`' and expression[i] == '$' and i + 1 < expression.len and expression[i + 1] == '{') {
+                template_depth += 1;
+                in_quote = null;
                 i += 2;
                 continue;
             }
@@ -409,7 +416,14 @@ fn bindExpression(
             continue;
         }
 
-        if (expression[i] == '"' or expression[i] == '\'') {
+        if (template_depth > 0 and expression[i] == '}') {
+            template_depth -= 1;
+            in_quote = '`';
+            i += 1;
+            continue;
+        }
+
+        if (expression[i] == '"' or expression[i] == '\'' or expression[i] == '`') {
             in_quote = expression[i];
             i += 1;
             continue;

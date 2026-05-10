@@ -90,9 +90,8 @@ fn parseSection(source: []const u8, index: *usize) ParseError!Section {
 
     const content_start = open_end;
     const close_start = findMatchingCloseTag(source, content_start, tag_name) orelse return error.UnterminatedCloseTag;
-    const close_tag = try std.fmt.allocPrint(std.heap.page_allocator, "</{s}>", .{tag_name});
-    defer std.heap.page_allocator.free(close_tag);
-    const close_end = close_start + close_tag.len;
+    // "</" + tag_name + ">"
+    const close_end = close_start + 2 + tag_name.len + 1;
 
     index.* = close_end;
 

@@ -153,15 +153,18 @@ The compiler should not depend on hidden framework folklore to be productive.
 - a build-tool integration layer
 - a TypeScript/editor integration story
 
+The ecosystem now includes:
+
+- a router (runtime-level, with guards, nested routes, scroll restoration)
+
 Over time, the ecosystem may also include:
 
-- a router
 - a forms package
 - a resource/data-loading package
 - testing helpers
 - SSR adapters
 
-But these are secondary to the core framework.
+These are secondary to the core framework.
 
 ## 6. What Weiv Will Not Be
 
@@ -387,11 +390,15 @@ These should be future phases, not day-one obligations.
 
 ## 13. Routing and Data
 
-Routing and data-fetching should not be required to prove the core framework.
+Data-fetching should not be required to prove the core framework.
 
-The first `weiv` milestone should succeed without:
+A runtime-level router now exists (`src/runtime/router.ts`) as a companion
+module. It integrates with the existing `mountIntoBoundary`/`destroy` component
+lifecycle and uses the observable runtime for reactive route state. It was
+implemented as a pure runtime module with no compiler changes required.
 
-- a built-in router
+The first `weiv` milestone should still succeed without:
+
 - a built-in cache layer
 - a framework-owned GraphQL client
 
@@ -416,11 +423,13 @@ The v1 MVP should include only the minimum viable framework foundation:
 The MVP should not include:
 
 - SSR
-- router
 - transitions system
 - complex forms package
 - resource cache system
 - custom animation DSL
+
+Note: a runtime-level router now exists as a companion module outside the MVP
+core.
 
 ## 15. Evolution Path
 
@@ -450,7 +459,7 @@ The intended maturity path should be:
 
 ### Phase 4: Ecosystem Foundations
 
-- router
+- ~~router~~ (done — runtime-level, `src/runtime/router.ts`)
 - testing utilities
 - async resource primitives if actually needed
 - form helpers

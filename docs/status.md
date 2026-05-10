@@ -32,6 +32,10 @@ The repo currently has:
 The repo also now has a standalone shared observable runtime plus the first
 imported-observable integration path for shared cross-boundary state.
 
+The runtime also includes a client-side router with route matching, nested
+routes, navigation guards, link interception, scroll restoration, and
+observable route state.
+
 ## Direct DOM Path
 
 The direct browser emitter now has:
@@ -89,6 +93,26 @@ Current slot behavior includes:
 - fallback/projected switching after mount
 - destroy behavior for projected slot handles
 
+## Router
+
+The runtime router (`src/runtime/router.ts`) provides:
+
+- route matching with static, `:param`, and `*` wildcard segments
+- nested routes with parent preservation and child swapping
+- navigation guards: global `beforeEach`, per-route `beforeEnter` and `beforeLeave`
+- `afterEach` post-navigation hooks
+- link interception for internal `<a>` clicks
+- scroll restoration via `scrollBehavior` callback
+- observable `route` state (`path`, `params`, `query`, `matched`)
+- lazy component loading (async `component` functions)
+- history and hash modes
+- `push`, `replace`, `back`, `forward` navigation
+- `ready` promise for initial mount
+- full cleanup via `destroy()`
+
+The router integrates directly with emitted component `mountIntoBoundary` /
+`destroy` lifecycle — no adapter needed.
+
 ## Verification
 
 Current required verification:
@@ -96,9 +120,10 @@ Current required verification:
 ```sh
 zig build test
 zig build component-test
+zig build runtime-test
 ```
 
-Both pass at the latest checkpoint.
+All pass at the latest checkpoint.
 
 `zig build test` still prints the expected unsupported-import negative-fixture
 stderr:

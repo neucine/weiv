@@ -226,6 +226,37 @@ That document is the source of truth for:
 - current ordering semantics
 - the exact guarantee around tracked captured references
 
+## Router
+
+The runtime includes a client-side router (`src/runtime/router.ts`) that
+integrates directly with emitted component modules through the existing
+`mountIntoBoundary(start, end, props)` / `destroy()` lifecycle contract.
+
+Key design choices:
+
+- **Pure runtime, no compiler changes**: the router is a standalone TypeScript
+  module that works with any component the compiler emits.
+- **Observable route state**: `router.route` is an observable object. Components
+  can subscribe to route changes through the same `subscribe()` mechanism used
+  for shared state.
+- **Nested routes with outlet management**: each nesting depth gets its own
+  boundary comment pair. Parent components stay mounted while children swap.
+  The reuse depth is calculated by matching the route chain, so only the
+  changed levels are destroyed and remounted.
+- **Navigation guards**: `beforeLeave` → `beforeEach` → `beforeEnter` execution
+  order. Guards can return `false` to block, a string to redirect, or void to
+  allow. All guards support async.
+- **Link interception**: a document-level click listener catches internal `<a>`
+  clicks and routes them through `push()`, with correct handling for external
+  links, modifier keys, `target="_blank"`, and `download` attributes.
+- **Scroll restoration**: per-history-entry scroll position saved before
+  navigation, restored on popstate via a user-provided `scrollBehavior`
+  callback.
+
+The router does not require any special template syntax or compiler support.
+A future phase could promote route concepts to compiler-level primitives (e.g.
+`<Route>` template tags) for more ergonomic template authoring.
+
 ## Inspectability Commands
 
 Useful commands:
