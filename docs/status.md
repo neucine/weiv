@@ -129,7 +129,7 @@ All pass at the latest checkpoint.
 
 Bare package imports (e.g. `lodash-es`) are now supported through import map
 generation in the emitted `index.html`. The browser resolves bare specifiers
-via the import map to `./node_modules/<package>` paths.
+via the import map to `/node_modules/<package>` paths.
 
 ## Verification Shape
 

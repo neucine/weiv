@@ -38,20 +38,22 @@ before it should be treated as production-ready.
 Try the included examples first:
 
 ```bash
-weiv dev test/examples/todomvc/App.weiv
-weiv dev test/examples/kanib/App.weiv
+zig build run -- dev test/examples/todomvc/App.weiv
+zig build run -- dev test/examples/kanib/App.weiv
 ```
 
 Then point it at your own root component:
 
 ```bash
-weiv dev path/to/App.weiv
+zig build run -- dev path/to/App.weiv
 ```
 
 If you want a static bundle instead of the dev server:
 
 ```bash
-weiv compile path/to/App.weiv ./dist
+zig build run -- compile emit app path/to/App.weiv ./dist
+cd ./dist
+bun server.ts
 ```
 
 ## Learn More
