@@ -1,0 +1,63 @@
+{
+  "name": "weiv-vscode",
+  "displayName": "Weiv",
+  "description": "Syntax highlighting and navigation for Weiv single-file components (.weiv)",
+  "version": "0.1.0",
+  "publisher": "weiv",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:weiv"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -watch -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "weiv",
+        "aliases": [
+          "Weiv",
+          "weiv"
+        ],
+        "extensions": [
+          ".weiv"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/weiv.png",
+          "dark": "./icons/weiv.png"
+        }
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "weiv-icons",
+        "label": "Weiv File Icons",
+        "path": "./icons/icon-theme.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "weiv",
+        "scopeName": "source.weiv",
+        "path": "./syntaxes/weiv.tmLanguage.json",
+        "embeddedLanguages": {
+          "text.html.basic": "html",
+          "source.ts": "typescript",
+          "source.css": "css"
+        }
+      }
+    ]
+  }
+}
