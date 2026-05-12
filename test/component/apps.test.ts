@@ -587,6 +587,21 @@ test("kanib app bundle mounts and navigates through routed product flows", async
       throw new Error("Kanib did not navigate into issue detail");
     }
 
+    const noteInput = findElement(fakeDocument.body, byTagAndClass("input", "issue-detail-page__input"));
+    if (!noteInput) throw new Error("Kanib detail route is missing the comment composer input");
+    noteInput.value = "Comment from routed test";
+    change(noteInput);
+    const postButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
+      element.textContent.trim() === "Post"
+    );
+    if (!postButton) throw new Error("Kanib detail route is missing comment post action");
+    click(postButton);
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    if (!appTarget.textContent.includes("You · 0m · Comment from routed test")) {
+      throw new Error("Kanib detail comment post did not append to recent activity");
+    }
+
     const saveButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
       element.textContent.trim() === "Advance status and save"
     );
@@ -595,7 +610,7 @@ test("kanib app bundle mounts and navigates through routed product flows", async
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => queueMicrotask(resolve));
 
-    if (!appTarget.textContent.includes("2 notifications")) {
+    if (!appTarget.textContent.includes("3 notifications")) {
       throw new Error("Kanib detail save did not update shared notification count");
     }
 

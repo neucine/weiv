@@ -30,6 +30,8 @@
               id="detail-note"
               bind:value="noteDraft"
               class="issue-detail-page__input"
+              on:change="handleDraftInput"
+              on:input="handleDraftInput"
               placeholder="Write a comment for your team"
               type="text"
             />
@@ -134,10 +136,20 @@
   }
 
   function submitComment() {
-    const body = noteDraft.trim();
+    const input = typeof document !== "undefined"
+      ? (document.getElementById("detail-note") as HTMLInputElement | null)
+      : null;
+    const body = String(input?.value ?? noteDraft).trim();
     if (!body) return;
     addComment(props.issueId, "You", body);
     noteDraft = "";
+    if (input) {
+      input.value = "";
+    }
+  }
+
+  function handleDraftInput(event: any) {
+    noteDraft = String(event?.target?.value ?? "");
   }
 
   function saveIssue() {
