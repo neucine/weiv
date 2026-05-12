@@ -13,10 +13,25 @@ direct DOM updates, and minimal runtime semantics.
 - explicit shared state only when it crosses component boundaries
 - a minimal runtime with more work pushed into compiled output
 - direct DOM updates instead of a framework-wide VDOM layer
+- runtime-level routing integrated with emitted component lifecycle
 
 ## Status
 
-Runnable today, still early.
+Runnable today, still pre-v1.
+
+The current checkpoint includes a working direct-DOM browser path,
+compiler-driven invalidation, slot composition, shared observable runtime
+integration, runtime routing, and growing runtime/component verification.
+
+The project is now beyond the initial experimental phase, but still needs:
+
+- more precise dependency analysis
+- broader app-scale verification
+- diagnostics unification
+- IDE/tooling polish
+- additional runtime precision work
+
+before it should be treated as production-ready.
 
 ## Quick Start
 
@@ -45,10 +60,13 @@ weiv compile path/to/App.weiv ./dist
 - [Framework Vision](./docs/framework-vision.md)
 - [Current Architecture](./docs/architecture.md)
 - [Current Status](./docs/status.md)
+- [Next Stage Priorities](./docs/next-stage-priorities.md)
 
 ## Contributor Commands
 
 ```bash
-bun test test/component
-bun test test/runtime
+zig build test
+zig build component-test
+zig build runtime-test
+zig build test-all
 ```
