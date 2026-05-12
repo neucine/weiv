@@ -1464,6 +1464,244 @@ fn module_export_name(name: &oxc_ast::ast::ModuleExportName<'_>) -> String {
     }
 }
 
+#[no_mangle]
+pub extern "C" fn weiv_rewrite_expression(
+    expression: *const c_char,
+    scope_bindings_json: *const c_char,
+    scope_prefix: *const c_char,
+) -> *mut c_char {
+    let expression = match parse_required_cstr(expression) {
+        Some(value) => value,
+        None => return std::ptr::null_mut(),
+    };
+    let scope_bindings_json = match parse_required_cstr(scope_bindings_json) {
+        Some(value) => value,
+        None => return std::ptr::null_mut(),
+    };
+    let scope_prefix = parse_optional_cstr(scope_prefix).unwrap_or_else(|| "scope".to_string());
+
+    let bindings: BTreeSet<String> = match serde_json::from_str(&scope_bindings_json) {
+        Ok(vec) => {
+            let v: Vec<String> = vec;
+            v.into_iter().collect()
+        }
+        Err(_) => return std::ptr::null_mut(),
+    };
+
+    let wrapper = format!("var _ = {};", expression);
+    let allocator = Allocator::default();
+    let source_type = SourceType::ts();
+    let parsed = Parser::new(&allocator, &wrapper, source_type).parse();
+    if !parsed.errors.is_empty() {
+        return std::ptr::null_mut();
+    }
+
+    let init_expr = match parsed.program.body.first() {
+        Some(Statement::VariableDeclaration(decl)) => {
+            decl.declarations.first().and_then(|d| d.init.as_ref())
+        }
+        _ => None,
+    };
+
+    let init_expr = match init_expr {
+        Some(expr) => expr,
+        None => return std::ptr::null_mut(),
+    };
+
+    let result = rewrite_expr(init_expr, &wrapper, &bindings, &scope_prefix);
+
+    match CString::new(result) {
+        Ok(c) => c.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+fn rewrite_expr(
+    expr: &Expression<'_>,
+    source: &str,
+    bindings: &BTreeSet<String>,
+    prefix: &str,
+) -> String {
+    match expr {
+        Expression::Identifier(id) => {
+            let name = id.name.as_str();
+            if bindings.contains(name) {
+                format!("{prefix}.{name}")
+            } else {
+                name.to_string()
+            }
+        }
+        Expression::StaticMemberExpression(member) => {
+            let object = rewrite_expr(&member.object, source, bindings, prefix);
+            let prop = member.property.name.as_str();
+            if member.optional {
+                format!("{object}?.{prop}")
+            } else {
+                format!("{object}.{prop}")
+            }
+        }
+        Expression::ComputedMemberExpression(member) => {
+            let object = rewrite_expr(&member.object, source, bindings, prefix);
+            let prop = rewrite_expr(&member.expression, source, bindings, prefix);
+            if member.optional {
+                format!("{object}?.[{prop}]")
+            } else {
+                format!("{object}[{prop}]")
+            }
+        }
+        Expression::CallExpression(call) => {
+            let callee = rewrite_expr(&call.callee, source, bindings, prefix);
+            let args: Vec<String> = call
+                .arguments
+                .iter()
+                .map(|arg| rewrite_argument(arg, source, bindings, prefix))
+                .collect();
+            let args_str = args.join(", ");
+            if call.optional {
+                format!("{callee}?.({args_str})")
+            } else {
+                format!("{callee}({args_str})")
+            }
+        }
+        Expression::BinaryExpression(binary) => {
+            let left = rewrite_expr(&binary.left, source, bindings, prefix);
+            let op = binary.operator.as_str();
+            let right = rewrite_expr(&binary.right, source, bindings, prefix);
+            format!("{left} {op} {right}")
+        }
+        Expression::LogicalExpression(logical) => {
+            let left = rewrite_expr(&logical.left, source, bindings, prefix);
+            let op = logical.operator.as_str();
+            let right = rewrite_expr(&logical.right, source, bindings, prefix);
+            format!("{left} {op} {right}")
+        }
+        Expression::UnaryExpression(unary) => {
+            let arg = rewrite_expr(&unary.argument, source, bindings, prefix);
+            let op = unary.operator.as_str();
+            if op == "typeof" || op == "void" || op == "delete" {
+                format!("{op} {arg}")
+            } else {
+                format!("{op}{arg}")
+            }
+        }
+        Expression::ConditionalExpression(cond) => {
+            let test = rewrite_expr(&cond.test, source, bindings, prefix);
+            let consequent = rewrite_expr(&cond.consequent, source, bindings, prefix);
+            let alternate = rewrite_expr(&cond.alternate, source, bindings, prefix);
+            format!("{test} ? {consequent} : {alternate}")
+        }
+        Expression::ParenthesizedExpression(paren) => {
+            let inner = rewrite_expr(&paren.expression, source, bindings, prefix);
+            format!("({inner})")
+        }
+        Expression::TemplateLiteral(template) => {
+            let mut result = String::from("`");
+            for (i, quasi) in template.quasis.iter().enumerate() {
+                result.push_str(quasi.value.raw.as_str());
+                if i < template.expressions.len() {
+                    result.push_str("${");
+                    result.push_str(&rewrite_expr(&template.expressions[i], source, bindings, prefix));
+                    result.push('}');
+                }
+            }
+            result.push('`');
+            result
+        }
+        Expression::ArrayExpression(array) => {
+            let elements: Vec<String> = array
+                .elements
+                .iter()
+                .map(|el| match el {
+                    ArrayExpressionElement::SpreadElement(spread) => {
+                        format!("...{}", rewrite_expr(&spread.argument, source, bindings, prefix))
+                    }
+                    _ => {
+                        if let Some(e) = el.as_expression() {
+                            rewrite_expr(e, source, bindings, prefix)
+                        } else {
+                            el.span().source_text(source).to_string()
+                        }
+                    }
+                })
+                .collect();
+            format!("[{}]", elements.join(", "))
+        }
+        Expression::ObjectExpression(object) => {
+            let props: Vec<String> = object
+                .properties
+                .iter()
+                .map(|prop| match prop {
+                    ObjectPropertyKind::ObjectProperty(p) => {
+                        let value = rewrite_expr(&p.value, source, bindings, prefix);
+                        if p.shorthand {
+                            value
+                        } else {
+                            let key = p.key.span().source_text(source);
+                            format!("{key}: {value}")
+                        }
+                    }
+                    ObjectPropertyKind::SpreadProperty(spread) => {
+                        format!("...{}", rewrite_expr(&spread.argument, source, bindings, prefix))
+                    }
+                })
+                .collect();
+            format!("{{ {} }}", props.join(", "))
+        }
+        Expression::ArrowFunctionExpression(arrow) => {
+            let params: Vec<String> = arrow
+                .params
+                .items
+                .iter()
+                .map(|p| p.pattern.span().source_text(source).to_string())
+                .collect();
+            let params_str = if params.len() == 1 && !source[arrow.params.span.start as usize..arrow.params.span.end as usize].contains('(') {
+                params[0].clone()
+            } else {
+                format!("({})", params.join(", "))
+            };
+
+            let mut inner_bindings = bindings.clone();
+            for p in &params {
+                inner_bindings.remove(p.as_str());
+            }
+
+            if arrow.expression {
+                if let Some(Statement::ExpressionStatement(stmt)) = arrow.body.statements.first() {
+                    let body = rewrite_expr(&stmt.expression, source, &inner_bindings, prefix);
+                    format!("{params_str} => {body}")
+                } else {
+                    arrow.span.source_text(source).to_string()
+                }
+            } else {
+                arrow.span.source_text(source).to_string()
+            }
+        }
+        _ => {
+            expr.span().source_text(source).to_string()
+        }
+    }
+}
+
+fn rewrite_argument(
+    arg: &Argument<'_>,
+    source: &str,
+    bindings: &BTreeSet<String>,
+    prefix: &str,
+) -> String {
+    match arg {
+        Argument::SpreadElement(spread) => {
+            format!("...{}", rewrite_expr(&spread.argument, source, bindings, prefix))
+        }
+        _ => {
+            if let Some(expr) = arg.as_expression() {
+                rewrite_expr(expr, source, bindings, prefix)
+            } else {
+                arg.span().source_text(source).to_string()
+            }
+        }
+    }
+}
+
 fn transpile_source(source: &str, source_path: &str) -> Option<String> {
     let allocator = Allocator::default();
     let source_type = SourceType::from_path(source_path).unwrap_or(SourceType::ts());

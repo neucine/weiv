@@ -1,6 +1,6 @@
 const std = @import("std");
 const compiler_diagnostics = @import("../../diagnostics.zig");
-const bundle_graph = @import("app_bundle/graph.zig");
+const bundle_graph = @import("emit_app/graph.zig");
 
 pub const AppValidationReport = struct {
     diagnostics: []compiler_diagnostics.Diagnostic,

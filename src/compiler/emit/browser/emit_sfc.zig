@@ -2,9 +2,26 @@ const std = @import("std");
 const component = @import("../../pipeline/index.zig");
 const browser_plan = @import("../../lower/browser_plan/index.zig");
 const style = @import("scoped_css.zig");
-const setup = @import("direct_component_js/setup.zig");
-const helpers = @import("direct_component_js/helpers.zig");
-const node_codegen = @import("direct_component_js/node_codegen.zig");
+const setup = @import("emit_sfc/setup.zig");
+const helpers = @import("emit_sfc/helpers.zig");
+const node_codegen = @import("emit_sfc/node_codegen.zig");
+
+fn buildBindingsJson(model: *const component.ComponentModel, allocator: std.mem.Allocator) ![]u8 {
+    var json = std.ArrayList(u8){};
+    defer json.deinit(allocator);
+    try json.append(allocator, '[');
+    var first = true;
+    for (model.script.bindings) |binding| {
+        if (!binding.template_visible) continue;
+        if (!first) try json.append(allocator, ',');
+        try json.append(allocator, '"');
+        try json.appendSlice(allocator, binding.name);
+        try json.append(allocator, '"');
+        first = false;
+    }
+    try json.append(allocator, ']');
+    return try json.toOwnedSlice(allocator);
+}
 
 pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.Allocator) ![]u8 {
     var plan = try browser_plan.lower(&model.ir_document, allocator);
@@ -19,21 +36,25 @@ pub fn emitModule(model: *const component.ComponentModel, allocator: std.mem.All
     const css = try style.emitScopedCss(model, allocator);
     defer allocator.free(css);
 
+    const bindings_json = try buildBindingsJson(model, allocator);
+    defer allocator.free(bindings_json);
+
     var body = std.ArrayList(u8){};
     defer body.deinit(allocator);
 
-    try helpers.emitConditionalHelpers(plan.nodes, scope_id, &body, allocator);
+    try helpers.emitConditionalHelpers(plan.nodes, scope_id, bindings_json, &body, allocator);
     try body.appendSlice(allocator, setup_js);
     try body.appendSlice(allocator, "\n");
     try body.writer(allocator).print("export const scopeId = \"{s}\";\n", .{scope_id});
     try body.appendSlice(allocator, "export const css = ");
-    try @import("direct_component_js/common.zig").emitString(css, &body, allocator);
+    try @import("emit_sfc/common.zig").emitString(css, &body, allocator);
     try body.appendSlice(allocator, ";\n\n");
+
     try node_codegen.emitTrackedStateGraphMetadata(model, plan, &body, allocator);
     try body.appendSlice(allocator, "\n");
     try node_codegen.emitCreateFunction(plan, scope_id, &body, allocator);
     try body.appendSlice(allocator, "\n");
-    try node_codegen.emitRegionUpdateFunctions(plan, &body, allocator);
+    try node_codegen.emitRegionUpdateFunctions(plan, bindings_json, &body, allocator);
     try body.appendSlice(allocator, "\n");
     try node_codegen.emitUpdateFunction(plan, &body, allocator);
     try body.appendSlice(allocator, "\n");

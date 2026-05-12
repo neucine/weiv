@@ -1,10 +1,10 @@
 const std = @import("std");
-const app_emit = @import("compiler/emit/browser/app_bundle.zig");
+const app_emit = @import("compiler/emit/browser/emit_app.zig");
 const compiler_diagnostics = @import("compiler/diagnostics.zig");
 const component = @import("compiler/pipeline/index.zig");
 const browser_plan = @import("compiler/lower/browser_plan/index.zig");
 const invalidation_graph = @import("compiler/lower/invalidation_graph/index.zig");
-const emit_direct_js = @import("compiler/emit/browser/direct_component_js.zig");
+const emit_direct_js = @import("compiler/emit/browser/emit_sfc.zig");
 const style = @import("compiler/emit/browser/scoped_css.zig");
 const directives = @import("compiler/parse/template/directives.zig");
 const ast = @import("compiler/parse/template/ast.zig");
@@ -1776,7 +1776,7 @@ test "direct browser modules specialize child component update paths" {
     try std.testing.expect(std.mem.indexOf(u8, loop_js, "record.handle.update();") == null);
 }
 
-test "todomvc direct app bundle emits browser-direct entry files" {
+test "todomvc direct app emit emits browser-direct entry files" {
     const allocator = std.testing.allocator;
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
@@ -1796,7 +1796,7 @@ test "todomvc direct app bundle emits browser-direct entry files" {
     try std.testing.expect(std.mem.indexOf(u8, bundle_js, "export function mount(target, props = {})") != null);
     try std.testing.expect(std.mem.indexOf(u8, bundle_js, "Root.mount(target, props)") != null);
     try std.testing.expect(std.mem.indexOf(u8, bundle_js, "export const components = {") != null);
-    try std.testing.expect(std.mem.indexOf(u8, main_js, "AppBundle.mount(target, props);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, main_js, "WeivApp.mount(target, props);") != null);
 }
 
 test "imported helper render module preserves runtime JS imports" {
@@ -1858,7 +1858,7 @@ test "basic counter emits scoped CSS" {
     try std.testing.expect(std.mem.indexOf(u8, css, "border-radius: 16px;") != null);
 }
 
-test "classic todo app emits multi-file app bundle" {
+test "classic todo app emits multi-file app emit" {
     const allocator = std.testing.allocator;
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
@@ -1893,8 +1893,7 @@ test "classic todo app emits multi-file app bundle" {
     try std.testing.expect(std.mem.indexOf(u8, app_js, "\"TodoItem\": Component_") != null);
     try std.testing.expect(std.mem.indexOf(u8, browser_entry_js, "import { props as previewProps } from \"./props.mjs\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, browser_entry_js, "const props = globalThis.__WEIV_PROPS__ ?? previewProps;") != null);
-    try std.testing.expect(std.mem.indexOf(u8, browser_entry_js, "AppBundle.mount(target, props);") != null);
-    try std.testing.expect(std.mem.indexOf(u8, browser_entry_js, "globalThis.__WEIV_BUNDLE__ = AppBundle;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, browser_entry_js, "WeivApp.mount(target, props);") != null);
     try std.testing.expect(std.mem.indexOf(u8, props_js, "export const props = { title: \"Preview\" };") != null);
     try std.testing.expect(std.mem.indexOf(u8, index_html, "<link rel=\"stylesheet\" href=\"/styles.css\" />") != null);
     try std.testing.expect(std.mem.indexOf(u8, index_html, "<script type=\"module\" src=\"/main.mjs\"></script>") != null);
@@ -1912,7 +1911,7 @@ test "classic todo app emits multi-file app bundle" {
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".todo-item") != null);
 }
 
-test "todomvc verification app emits multi-file app bundle" {
+test "todomvc verification app emits multi-file app emit" {
     const allocator = std.testing.allocator;
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
@@ -1983,7 +1982,7 @@ test "todomvc verification app emits multi-file app bundle" {
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".newtodo") != null);
 }
 
-test "kanib app emits multi-file app bundle" {
+test "kanib app emits multi-file app emit" {
     const allocator = std.testing.allocator;
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
@@ -2037,7 +2036,7 @@ test "kanib app emits multi-file app bundle" {
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".detail-panel__content") != null);
 }
 
-test "basic counter app bundle emits inferred preview props" {
+test "basic counter app emit emits inferred preview props" {
     const allocator = std.testing.allocator;
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
@@ -2055,7 +2054,7 @@ test "basic counter app bundle emits inferred preview props" {
     try std.testing.expect(std.mem.indexOf(u8, props_js, "initialCount: 0") != null);
 }
 
-test "imported helper app bundle copies runtime JS dependencies" {
+test "imported helper app emit copies runtime JS dependencies" {
     const allocator = std.testing.allocator;
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
@@ -2084,7 +2083,7 @@ test "imported helper app bundle copies runtime JS dependencies" {
     try std.testing.expect(std.mem.indexOf(u8, props_js, "count: 0") != null);
 }
 
-test "imported TS helper app bundle transpiles and copies TS dependencies" {
+test "imported TS helper app emit transpiles and copies TS dependencies" {
     const allocator = std.testing.allocator;
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();

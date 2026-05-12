@@ -5,6 +5,7 @@ const pipeline = @import("../../../pipeline/index.zig");
 const script_analysis = @import("../../../analyze/ts/analysis.zig");
 const tracked_root = @import("../../../analyze/tracked_root.zig");
 const common = @import("common.zig");
+const parser_backend = @import("../../../../ffi/parser_backend.zig");
 
 const TrackedRoot = struct {
     id: usize,
@@ -190,7 +191,7 @@ pub fn emitCreateNode(
                         try out.writer(allocator).print("{s}.addEventListener(\"{s}\", (event) => {{\n", .{ var_name, event_dir.event_name });
                         try common.writeIndent(indent + 1, out, allocator);
                         try out.appendSlice(allocator, "const resolved = ");
-                        try emitResolvedExpression(event_dir.expression, scope_expr, out, allocator);
+                        try emitResolvedExpression(event_dir.expression, scope_expr, "", out, allocator);
                         try out.appendSlice(allocator, ";\n");
                         try common.writeIndent(indent + 1, out, allocator);
                         try out.appendSlice(allocator, "if (typeof resolved === \"function\") {\n");
@@ -268,13 +269,13 @@ pub fn emitCreateNode(
             if (props_var_name) |name| {
                 try common.writeIndent(indent, out, allocator);
                 try out.writer(allocator).print("const {s} = ", .{name});
-                try emitPropsObject(component_node.bind_effects, out, allocator, scope_expr);
+                try emitPropsObject(component_node.bind_effects, out, allocator, scope_expr, "");
                 try out.appendSlice(allocator, ";\n");
             }
             if (handlers_var_name) |name| {
                 try common.writeIndent(indent, out, allocator);
                 try out.writer(allocator).print("const {s} = ", .{name});
-                try emitChildHandlersObject(component_node.event_effects, out, allocator, scope_expr);
+                try emitChildHandlersObject(component_node.event_effects, out, allocator, scope_expr, "");
                 try out.appendSlice(allocator, ";\n");
             }
             if (has_slots) {
@@ -393,62 +394,64 @@ pub fn emitSelectiveUpdateFunction(
 
 pub fn emitRegionUpdateFunctions(
     plan: browser_plan.Document,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
     for (plan.nodes) |node| {
-        try emitRegionUpdateFunctionsForNode(node, out, allocator);
+        try emitRegionUpdateFunctionsForNode(node, bindings_json, out, allocator);
     }
 }
 
 fn emitRegionUpdateFunctionsForNode(
     node: browser_plan.Node,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
     switch (node) {
         .text => {},
         .interpolation => |interp| {
-            try emitTextRegionUpdateFunction(interp, out, allocator);
+            try emitTextRegionUpdateFunction(interp, bindings_json, out, allocator);
         },
         .element => |element| {
             for (element.bind_effects) |effect| {
                 switch (effect) {
-                    .bind => |bind_dir| try emitAttributeRegionUpdateFunction(element.ref_id, bind_dir.target_name, bind_dir.expression, out, allocator),
+                    .bind => |bind_dir| try emitAttributeRegionUpdateFunction(element.ref_id, bind_dir.target_name, bind_dir.expression, bindings_json, out, allocator),
                     .event => unreachable,
                 }
             }
             for (element.children) |child| {
-                try emitRegionUpdateFunctionsForNode(child, out, allocator);
+                try emitRegionUpdateFunctionsForNode(child, bindings_json, out, allocator);
             }
         },
         .conditional => |conditional| {
-            try emitConditionalRegionUpdateFunction(conditional, out, allocator);
+            try emitConditionalRegionUpdateFunction(conditional, bindings_json, out, allocator);
             for (conditional.consequent) |child| {
-                try emitRegionUpdateFunctionsForNode(child, out, allocator);
+                try emitRegionUpdateFunctionsForNode(child, bindings_json, out, allocator);
             }
             for (conditional.alternate) |child| {
-                try emitRegionUpdateFunctionsForNode(child, out, allocator);
+                try emitRegionUpdateFunctionsForNode(child, bindings_json, out, allocator);
             }
         },
         .for_loop => |for_loop| {
-            try emitLoopRegionUpdateFunction(for_loop, out, allocator);
+            try emitLoopRegionUpdateFunction(for_loop, bindings_json, out, allocator);
             for (for_loop.body) |child| {
-                try emitRegionUpdateFunctionsForNode(child, out, allocator);
+                try emitRegionUpdateFunctionsForNode(child, bindings_json, out, allocator);
             }
         },
         .component => |component_node| {
-            try emitChildRegionUpdateFunction(component_node, out, allocator);
+            try emitChildRegionUpdateFunction(component_node, bindings_json, out, allocator);
             for (component_node.slot_provisions) |slot| {
                 for (slot.children) |child| {
-                    try emitRegionUpdateFunctionsForNode(child, out, allocator);
+                    try emitRegionUpdateFunctionsForNode(child, bindings_json, out, allocator);
                 }
             }
         },
         .slot_outlet => |slot_outlet| {
-            try emitSlotRegionUpdateFunction(slot_outlet, out, allocator);
+            try emitSlotRegionUpdateFunction(slot_outlet, bindings_json, out, allocator);
             for (slot_outlet.fallback_children) |child| {
-                try emitRegionUpdateFunctionsForNode(child, out, allocator);
+                try emitRegionUpdateFunctionsForNode(child, bindings_json, out, allocator);
             }
         },
     }
@@ -645,11 +648,12 @@ fn countRegions(nodes: []const browser_plan.Node) usize {
 
 fn emitTextRegionUpdateFunction(
     interp: browser_plan.InterpolationNode,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
     try out.writer(allocator).print("function updateRegion_text_{d}(instance, scope, refs) {{\n", .{interp.ref_id});
-    try emitInterpolationUpdate(interp, out, allocator, 1, "scope", "refs");
+    try emitInterpolationUpdate(interp, bindings_json, out, allocator, 1, "scope", "refs");
     try out.appendSlice(allocator, "}\n");
 }
 
@@ -657,6 +661,7 @@ fn emitAttributeRegionUpdateFunction(
     ref_id: usize,
     target_name: []const u8,
     expression: []const u8,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
@@ -664,15 +669,17 @@ fn emitAttributeRegionUpdateFunction(
     defer allocator.free(suffix);
 
     try out.writer(allocator).print("function updateRegion_attribute_{d}_{s}(instance, scope, refs) {{\n", .{ ref_id, suffix });
-    try emitBoundAttributeUpdate(target_name, expression, "refs", ref_id, "scope", 1, out, allocator);
+    try emitBoundAttributeUpdate(target_name, expression, "refs", ref_id, "scope", bindings_json, 1, out, allocator);
     try out.appendSlice(allocator, "}\n");
 }
 
 fn emitConditionalRegionUpdateFunction(
     conditional: browser_plan.ConditionalNode,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
+    _ = bindings_json; // conditional regions delegate to updateConditional_ which handles its own expressions
     try out.writer(allocator).print("function updateRegion_conditional_{d}(instance, scope, refs) {{\n", .{conditional.start_ref_id});
     try common.writeIndent(1, out, allocator);
     try out.writer(allocator).print("updateConditional_{d}(instance, scope);\n", .{conditional.start_ref_id});
@@ -681,9 +688,11 @@ fn emitConditionalRegionUpdateFunction(
 
 fn emitLoopRegionUpdateFunction(
     for_loop: browser_plan.ForLoopNode,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
+    _ = bindings_json; // loop regions delegate to updateForLoop_ which handles its own expressions
     try out.writer(allocator).print("function updateRegion_loop_{d}(instance, scope, refs) {{\n", .{for_loop.start_ref_id});
     try common.writeIndent(1, out, allocator);
     try out.writer(allocator).print("updateForLoop_{d}(instance, scope);\n", .{for_loop.start_ref_id});
@@ -692,19 +701,22 @@ fn emitLoopRegionUpdateFunction(
 
 fn emitChildRegionUpdateFunction(
     component_node: browser_plan.ComponentNode,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
     try out.writer(allocator).print("function updateRegion_child_{d}(instance, scope, refs) {{\n", .{component_node.handle_ref_id});
-    try emitChildComponentUpdateBody(component_node, out, allocator, 1, "scope", "refs");
+    try emitChildComponentUpdateBody(component_node, bindings_json, out, allocator, 1, "scope", "refs");
     try out.appendSlice(allocator, "}\n");
 }
 
 fn emitSlotRegionUpdateFunction(
     slot_outlet: browser_plan.SlotOutletNode,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
+    _ = bindings_json; // slot regions don't directly resolve expressions
     try out.writer(allocator).print("function updateRegion_slot_{d}(instance, scope, refs) {{\n", .{slot_outlet.handle_ref_id});
     try emitSlotOutletUpdateBody(slot_outlet, out, allocator, 1, "scope", "refs");
     try out.appendSlice(allocator, "}\n");
@@ -1182,6 +1194,7 @@ pub fn emitUpdateNode(
 
 fn emitChildComponentUpdateBody(
     component_node: browser_plan.ComponentNode,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
     indent: usize,
@@ -1191,13 +1204,13 @@ fn emitChildComponentUpdateBody(
     if (componentHasProps(component_node)) {
         try common.writeIndent(indent, out, allocator);
         try out.writer(allocator).print("{s}[{d}].setProps(", .{ refs_expr, component_node.handle_ref_id });
-        try emitPropsObject(component_node.bind_effects, out, allocator, scope_expr);
+        try emitPropsObject(component_node.bind_effects, out, allocator, scope_expr, bindings_json);
         try out.appendSlice(allocator, ");\n");
     }
     if (componentHasEventHandlers(component_node)) {
         try common.writeIndent(indent, out, allocator);
         try out.writer(allocator).print("{s}[{d}].setEventHandlers(", .{ refs_expr, component_node.handle_ref_id });
-        try emitChildHandlersObject(component_node.event_effects, out, allocator, scope_expr);
+        try emitChildHandlersObject(component_node.event_effects, out, allocator, scope_expr, bindings_json);
         try out.appendSlice(allocator, ");\n");
     }
     if (componentHasSlots(component_node)) {
@@ -1285,6 +1298,7 @@ fn emitSlotOutletUpdateBody(
 
 fn emitInterpolationUpdate(
     interp: browser_plan.InterpolationNode,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
     indent: usize,
@@ -1293,7 +1307,7 @@ fn emitInterpolationUpdate(
 ) !void {
     try common.writeIndent(indent, out, allocator);
     try out.writer(allocator).print("const __next_text_{d} = String((", .{interp.ref_id});
-    try emitResolvedExpression(interp.expression, scope_expr, out, allocator);
+    try emitResolvedExpression(interp.expression, scope_expr, bindings_json, out, allocator);
     try out.appendSlice(allocator, ") ?? \"\");\n");
     try common.writeIndent(indent, out, allocator);
     try out.writer(allocator).print("if ({s}[{d}].data !== __next_text_{d}) {{\n", .{
@@ -1445,6 +1459,7 @@ fn emitBoundAttributeUpdate(
     refs_expr: []const u8,
     ref_id: usize,
     scope_expr: []const u8,
+    bindings_json: []const u8,
     indent: usize,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
@@ -1458,7 +1473,7 @@ fn emitBoundAttributeUpdate(
     {
         try common.writeIndent(indent, out, allocator);
         try out.writer(allocator).print("const __value_{d}_{s} = ", .{ ref_id, suffix });
-        try emitResolvedExpression(expression, scope_expr, out, allocator);
+        try emitResolvedExpression(expression, scope_expr, bindings_json, out, allocator);
         try out.appendSlice(allocator, ";\n");
         try common.writeIndent(indent, out, allocator);
         try out.writer(allocator).print("const __next_{d}_{s} = Boolean(__value_{d}_{s});\n", .{
@@ -1521,7 +1536,7 @@ fn emitBoundAttributeUpdate(
     if (std.mem.eql(u8, target_name, "value")) {
         try common.writeIndent(indent, out, allocator);
         try out.writer(allocator).print("const __value_{d}_{s} = ", .{ ref_id, suffix });
-        try emitResolvedExpression(expression, scope_expr, out, allocator);
+        try emitResolvedExpression(expression, scope_expr, bindings_json, out, allocator);
         try out.appendSlice(allocator, ";\n");
         try common.writeIndent(indent, out, allocator);
         try out.writer(allocator).print("const __next_{d}_{s} = __value_{d}_{s} ?? \"\";\n", .{ ref_id, suffix, ref_id, suffix });
@@ -1560,7 +1575,7 @@ fn emitBoundAttributeUpdate(
 
     try common.writeIndent(indent, out, allocator);
     try out.writer(allocator).print("const __value_{d}_{s} = ", .{ ref_id, suffix });
-    try emitResolvedExpression(expression, scope_expr, out, allocator);
+    try emitResolvedExpression(expression, scope_expr, bindings_json, out, allocator);
     try out.appendSlice(allocator, ";\n");
     try common.writeIndent(indent, out, allocator);
     try out.writer(allocator).print("if (__value_{d}_{s} === false || __value_{d}_{s} === null || __value_{d}_{s} === undefined) {{\n", .{
@@ -1649,6 +1664,7 @@ pub fn emitPropsObject(
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
     scope_expr: []const u8,
+    bindings_json: []const u8,
 ) !void {
     try out.appendSlice(allocator, "{");
     for (effects, 0..) |effect, idx| {
@@ -1656,7 +1672,7 @@ pub fn emitPropsObject(
             .bind => |bind_dir| {
                 if (idx > 0) try out.appendSlice(allocator, ", ");
                 try out.writer(allocator).print("\"{s}\": ", .{bind_dir.target_name});
-                try emitResolvedExpression(bind_dir.expression, scope_expr, out, allocator);
+                try emitResolvedExpression(bind_dir.expression, scope_expr, bindings_json, out, allocator);
             },
             .event => unreachable,
         }
@@ -1669,6 +1685,7 @@ pub fn emitChildHandlersObject(
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
     scope_expr: []const u8,
+    bindings_json: []const u8,
 ) !void {
     try out.appendSlice(allocator, "{");
     for (effects, 0..) |effect, idx| {
@@ -1676,7 +1693,7 @@ pub fn emitChildHandlersObject(
             .event => |event_dir| {
                 if (idx > 0) try out.appendSlice(allocator, ", ");
                 try out.writer(allocator).print("\"{s}\": (payload) => {{ const resolved = ", .{event_dir.event_name});
-                try emitResolvedExpression(event_dir.expression, scope_expr, out, allocator);
+                try emitResolvedExpression(event_dir.expression, scope_expr, bindings_json, out, allocator);
                 try out.appendSlice(allocator, "; if (typeof resolved === \"function\") { return runOwnedBoundary(instance, () => resolved(payload)); } return undefined; }");
             },
             .bind => unreachable,
@@ -1688,6 +1705,7 @@ pub fn emitChildHandlersObject(
 pub fn emitResolvedExpression(
     expression: []const u8,
     scope_expr: []const u8,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
@@ -1715,6 +1733,14 @@ pub fn emitResolvedExpression(
 
     if (try tryRewriteScopedExpression(trimmed, scope_expr, out, allocator)) {
         return;
+    }
+
+    if (bindings_json.len > 0) {
+        if (parser_backend.rewriteExpression(trimmed, bindings_json, scope_expr, allocator)) |rewritten| {
+            defer allocator.free(rewritten);
+            try out.appendSlice(allocator, rewritten);
+            return;
+        } else |_| {}
     }
 
     try out.appendSlice(allocator, "__weiv_evaluate(");

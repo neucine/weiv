@@ -6,7 +6,12 @@ const node_codegen = @import("node_codegen.zig");
 pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator, needs_evaluate: bool) !void {
     if (needs_evaluate) {
         try out.appendSlice(allocator,
+            \\const __weiv_evaluate_warned = new Set();
             \\function __weiv_evaluate(expression, scope) {
+            \\  if (!__weiv_evaluate_warned.has(expression)) {
+            \\    __weiv_evaluate_warned.add(expression);
+            \\    console.warn(`[weiv] runtime evaluate fallback for expression: ${expression}`);
+            \\  }
             \\  const entries = Object.entries(scope);
             \\  const names = entries.map(([name]) => name);
             \\  const values = entries.map(([, value]) => value);
@@ -295,28 +300,29 @@ pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator, needs_
 pub fn emitConditionalHelpers(
     nodes: []const browser_plan.Node,
     scope_id: []const u8,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
     for (nodes) |node| {
         switch (node) {
-            .element => |element| try emitConditionalHelpers(element.children, scope_id, out, allocator),
+            .element => |element| try emitConditionalHelpers(element.children, scope_id, bindings_json, out, allocator),
             .conditional => |conditional| {
-                try emitSingleConditionalHelper(conditional, scope_id, out, allocator);
-                try emitConditionalHelpers(conditional.consequent, scope_id, out, allocator);
-                try emitConditionalHelpers(conditional.alternate, scope_id, out, allocator);
+                try emitSingleConditionalHelper(conditional, scope_id, bindings_json, out, allocator);
+                try emitConditionalHelpers(conditional.consequent, scope_id, bindings_json, out, allocator);
+                try emitConditionalHelpers(conditional.alternate, scope_id, bindings_json, out, allocator);
             },
             .for_loop => |for_loop| {
-                try emitSingleForLoopHelper(for_loop, scope_id, out, allocator);
-                try emitConditionalHelpers(for_loop.body, scope_id, out, allocator);
+                try emitSingleForLoopHelper(for_loop, scope_id, bindings_json, out, allocator);
+                try emitConditionalHelpers(for_loop.body, scope_id, bindings_json, out, allocator);
             },
             .slot_outlet => |slot_outlet| {
                 try emitSingleSlotFallbackHelper(slot_outlet, scope_id, out, allocator);
-                try emitConditionalHelpers(slot_outlet.fallback_children, scope_id, out, allocator);
+                try emitConditionalHelpers(slot_outlet.fallback_children, scope_id, bindings_json, out, allocator);
             },
             .component => |component_node| {
                 for (component_node.slot_provisions) |slot_provision| {
-                    try emitConditionalHelpers(slot_provision.children, scope_id, out, allocator);
+                    try emitConditionalHelpers(slot_provision.children, scope_id, bindings_json, out, allocator);
                 }
                 if (component_node.slot_provisions.len > 0) {
                     try emitProjectedSlotHelpers(component_node, scope_id, out, allocator);
@@ -376,6 +382,7 @@ fn emitProjectedSlotHelpers(
 fn emitSingleConditionalHelper(
     conditional: browser_plan.ConditionalNode,
     scope_id: []const u8,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
@@ -410,7 +417,7 @@ fn emitSingleConditionalHelper(
         "function updateConditional_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const next = Boolean(",
         .{conditional.start_ref_id},
     );
-    try node_codegen.emitResolvedExpression(conditional.condition, "scope", out, allocator);
+    try node_codegen.emitResolvedExpression(conditional.condition, "scope", bindings_json, out, allocator);
     try out.writer(allocator).print(
         ");\n  if (refs[{d}] !== next) {{\n    const previous = refs[{d}];\n    destroyConditionalBranch_{d}(instance, previous === true);\n    refs[{d}] = next;\n    replaceBetween(refs[{d}], refs[{d}], createConditionalFragment_{d}(instance, scope, next));\n  }}\n",
         .{
@@ -437,20 +444,22 @@ fn emitSingleConditionalHelper(
 fn emitSingleForLoopHelper(
     for_loop: browser_plan.ForLoopNode,
     scope_id: []const u8,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
     if (for_loop.body.len == 1 and std.meta.activeTag(for_loop.body[0]) == .component) {
         const component_node = for_loop.body[0].component;
-        try emitKeyedComponentLoopHelper(for_loop, component_node, out, allocator);
+        try emitKeyedComponentLoopHelper(for_loop, component_node, bindings_json, out, allocator);
         return;
     }
-    try emitKeyedGenericLoopHelper(for_loop, scope_id, out, allocator);
+    try emitKeyedGenericLoopHelper(for_loop, scope_id, bindings_json, out, allocator);
 }
 
 fn emitKeyedComponentLoopHelper(
     for_loop: browser_plan.ForLoopNode,
     component_node: browser_plan.ComponentNode,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
@@ -466,12 +475,12 @@ fn emitKeyedComponentLoopHelper(
     try out.appendSlice(allocator, "]: item };\n");
     if (has_props) {
         try out.appendSlice(allocator, "  const props = ");
-        try node_codegen.emitPropsObject(component_node.bind_effects, out, allocator, "loopScope");
+        try node_codegen.emitPropsObject(component_node.bind_effects, out, allocator, "loopScope", bindings_json);
         try out.appendSlice(allocator, ";\n");
     }
     if (has_handlers) {
         try out.appendSlice(allocator, "  const handlers = ");
-        try node_codegen.emitChildHandlersObject(component_node.event_effects, out, allocator, "loopScope");
+        try node_codegen.emitChildHandlersObject(component_node.event_effects, out, allocator, "loopScope", bindings_json);
         try out.appendSlice(allocator, ";\n");
     }
     if (has_slots) {
@@ -494,7 +503,7 @@ fn emitKeyedComponentLoopHelper(
         "function updateForLoop_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const iterable = (",
         .{for_loop.start_ref_id},
     );
-    try node_codegen.emitResolvedExpression(for_loop.iterable_expr, "scope", out, allocator);
+    try node_codegen.emitResolvedExpression(for_loop.iterable_expr, "scope", bindings_json, out, allocator);
     try out.writer(allocator).print(
         ") ?? [];\n  const previous = refs[{d}] ?? [];\n  const previousByKey = new Map(previous.map((record) => [record.key, record]));\n  const nextRecords = [];\n  for (const item of iterable) {{\n    const key = item?.id ?? item;\n    let record = previousByKey.get(key);\n    const loopScope = {{ ...scope, [",
         .{for_loop.state_ref_id},
@@ -503,12 +512,12 @@ fn emitKeyedComponentLoopHelper(
     try out.appendSlice(allocator, "]: item };\n    if (record) {\n      previousByKey.delete(key);\n");
     if (has_props) {
         try out.appendSlice(allocator, "      record.handle.setProps(");
-        try node_codegen.emitPropsObject(component_node.bind_effects, out, allocator, "loopScope");
+        try node_codegen.emitPropsObject(component_node.bind_effects, out, allocator, "loopScope", bindings_json);
         try out.appendSlice(allocator, ");\n");
     }
     if (has_handlers) {
         try out.appendSlice(allocator, "      record.handle.setEventHandlers(");
-        try node_codegen.emitChildHandlersObject(component_node.event_effects, out, allocator, "loopScope");
+        try node_codegen.emitChildHandlersObject(component_node.event_effects, out, allocator, "loopScope", bindings_json);
         try out.appendSlice(allocator, ");\n");
     }
     if (has_slots) {
@@ -529,6 +538,7 @@ fn emitKeyedComponentLoopHelper(
 fn emitKeyedGenericLoopHelper(
     for_loop: browser_plan.ForLoopNode,
     scope_id: []const u8,
+    bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
 ) !void {
@@ -557,7 +567,7 @@ fn emitKeyedGenericLoopHelper(
         "function updateForLoop_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const iterable = (",
         .{for_loop.start_ref_id},
     );
-    try node_codegen.emitResolvedExpression(for_loop.iterable_expr, "scope", out, allocator);
+    try node_codegen.emitResolvedExpression(for_loop.iterable_expr, "scope", bindings_json, out, allocator);
     try out.writer(allocator).print(
         ") ?? [];\n  const previous = refs[{d}] ?? [];\n  const previousByKey = new Map(previous.map((record) => [record.key, record]));\n  const nextRecords = [];\n  for (const item of iterable) {{\n    const key = item?.id ?? item;\n    let record = previousByKey.get(key);\n    if (record) {{\n      previousByKey.delete(key);\n      record.update(scope, item);\n      moveBoundaryBefore(record.start, record.end, refs[{d}]);\n    }} else {{\n      record = createForEntry_{d}(instance, scope, item, refs[{d}]);\n    }}\n    nextRecords.push(record);\n  }}\n  for (const record of previousByKey.values()) {{\n    if (typeof record.destroy === \"function\") {{\n      record.destroy();\n    }}\n    replaceBetween(record.start, record.end, document.createDocumentFragment());\n    record.start.parentNode.removeChild(record.start);\n    record.end.parentNode.removeChild(record.end);\n  }}\n  refs[{d}] = nextRecords;\n}}\n\n",
         .{ for_loop.state_ref_id, for_loop.end_ref_id, for_loop.start_ref_id, for_loop.end_ref_id, for_loop.state_ref_id },

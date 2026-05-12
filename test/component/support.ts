@@ -370,7 +370,7 @@ export function emitDirectBrowserModule(componentPath: string): string {
   return emitCommand(["emit-js", componentPath]);
 }
 
-export function emitAppBundle(rootPath: string, outDir: string): void {
+export function emitApp(rootPath: string, outDir: string): void {
   emitCommand(["emit-app", rootPath, outDir]);
 }
 

@@ -10,7 +10,7 @@ import {
   change,
   click,
   dblclick,
-  emitAppBundle,
+  emitApp,
   emitDirectBrowserModule,
   findElement,
   findElements,
@@ -21,10 +21,10 @@ import {
   loadModules,
 } from "./support";
 
-test("classic app bundles and helper-copy flows stay healthy", async () => {
-  const bundleDir = mkdtempSync(join(tmpdir(), "weiv-app-bundle-"));
+test("classic app emits and helper-copy flows stay healthy", async () => {
+  const bundleDir = mkdtempSync(join(tmpdir(), "weiv-app-emit-"));
   try {
-    emitAppBundle("test/examples/classic-todo/App.weiv", bundleDir);
+    emitApp("test/examples/classic-todo/App.weiv", bundleDir);
     const indexHtml = readFileSync(join(bundleDir, "index.html"), "utf8");
     const browserEntry = readFileSync(join(bundleDir, "main.mjs"), "utf8");
     const propsModule = readFileSync(join(bundleDir, "props.mjs"), "utf8");
@@ -35,7 +35,7 @@ test("classic app bundles and helper-copy flows stay healthy", async () => {
     }
     if (!browserEntry.includes('import { props as previewProps } from "./props.mjs";') ||
         !browserEntry.includes("const props = globalThis.__WEIV_PROPS__ ?? previewProps;") ||
-        !browserEntry.includes("AppBundle.mount(target, props);")) {
+        !browserEntry.includes("WeivApp.mount(target, props);")) {
       throw new Error("Bundled main.mjs missing browser render bootstrap");
     }
     if (!propsModule.includes('export const props = { title: "Preview" };')) {
@@ -66,7 +66,7 @@ test("classic app bundles and helper-copy flows stay healthy", async () => {
 
   const counterBundleDir = mkdtempSync(join(tmpdir(), "weiv-counter-bundle-"));
   try {
-    emitAppBundle("test/examples/basic/basic-counter.weiv", counterBundleDir);
+    emitApp("test/examples/basic/basic-counter.weiv", counterBundleDir);
     const counterProps = readFileSync(join(counterBundleDir, "props.mjs"), "utf8");
     if (!counterProps.includes('title: "Preview"') || !counterProps.includes("initialCount: 0")) {
       throw new Error("BasicCounter bundled props.mjs missing inferred preview props");
@@ -77,7 +77,7 @@ test("classic app bundles and helper-copy flows stay healthy", async () => {
 
   const importedHelperBundleDir = mkdtempSync(join(tmpdir(), "weiv-imported-helper-bundle-"));
   try {
-    emitAppBundle("test/examples/imported-helper/App.weiv", importedHelperBundleDir);
+    emitApp("test/examples/imported-helper/App.weiv", importedHelperBundleDir);
     const helperModule = readFileSync(join(importedHelperBundleDir, "format.js"), "utf8");
     const punctuationModule = readFileSync(join(importedHelperBundleDir, "punctuation.js"), "utf8");
     const helperAppModule = readFileSync(join(importedHelperBundleDir, "App.mjs"), "utf8");
@@ -108,7 +108,7 @@ test("classic app bundles and helper-copy flows stay healthy", async () => {
 
   const importedTsHelperBundleDir = mkdtempSync(join(tmpdir(), "weiv-imported-ts-helper-bundle-"));
   try {
-    emitAppBundle("test/examples/imported-ts-helper/App.weiv", importedTsHelperBundleDir);
+    emitApp("test/examples/imported-ts-helper/App.weiv", importedTsHelperBundleDir);
     const tsHelperModule = readFileSync(join(importedTsHelperBundleDir, "format.js"), "utf8");
     const tsPunctuationModule = readFileSync(join(importedTsHelperBundleDir, "punctuation.js"), "utf8");
     const tsHelperAppModule = readFileSync(join(importedTsHelperBundleDir, "App.mjs"), "utf8");
@@ -170,7 +170,7 @@ export function incrementShared() {
       "utf8",
     );
 
-    emitAppBundle(join(appDir, "App.weiv"), bundleDir);
+    emitApp(join(appDir, "App.weiv"), bundleDir);
 
     const bundleModule = await importModule(join(bundleDir, "bundle.mjs"));
     const fakeDocument = new FakeDocument();
@@ -206,7 +206,7 @@ export function incrementShared() {
   }
 }, 120_000);
 
-test("TodoMVC direct modules and app bundle behave correctly", async () => {
+test("TodoMVC direct modules and app emit behave correctly", async () => {
   const modules = await loadModules({
     "App.mjs": emitDirectBrowserModule("test/examples/todomvc/App.weiv"),
     "TodoFooter.mjs": emitDirectBrowserModule("test/examples/todomvc/TodoFooter.weiv"),
@@ -307,7 +307,7 @@ test("TodoMVC direct modules and app bundle behave correctly", async () => {
 
   const todomvcBundleDir = mkdtempSync(join(tmpdir(), "weiv-todomvc-bundle-"));
   try {
-    emitAppBundle("test/examples/todomvc/App.weiv", todomvcBundleDir);
+    emitApp("test/examples/todomvc/App.weiv", todomvcBundleDir);
     const todomvcBundle = await importModule(join(todomvcBundleDir, "bundle.mjs"));
     const todomvcStyles = readFileSync(join(todomvcBundleDir, "styles.css"), "utf8");
     if (!todomvcStyles.includes(".todo-header") ||
@@ -411,10 +411,10 @@ test("TodoMVC direct modules and app bundle behave correctly", async () => {
 
   const todomvcDirectBundleDir = mkdtempSync(join(tmpdir(), "weiv-todomvc-direct-bundle-"));
   try {
-    emitAppBundle("test/examples/todomvc/App.weiv", todomvcDirectBundleDir);
+    emitApp("test/examples/todomvc/App.weiv", todomvcDirectBundleDir);
     const directBundleModule = await importModule(join(todomvcDirectBundleDir, "bundle.mjs"));
     const directBundleMain = readFileSync(join(todomvcDirectBundleDir, "main.mjs"), "utf8");
-    if (!directBundleMain.includes("AppBundle.mount(target, props);")) {
+    if (!directBundleMain.includes("WeivApp.mount(target, props);")) {
       throw new Error("TodoMVC direct bundle missing browser bootstrap");
     }
 
@@ -430,11 +430,11 @@ test("TodoMVC direct modules and app bundle behave correctly", async () => {
 
     const bundledDirectNewTodoInput = findElement(directBundleDocument.body, byClass("newtodo"));
     if (!bundledDirectNewTodoInput) throw new Error("TodoMVC direct bundle missing newtodo input");
-    bundledDirectNewTodoInput.value = "Direct app bundle path";
+    bundledDirectNewTodoInput.value = "Direct app emit path";
     keydown(bundledDirectNewTodoInput, "Enter");
 
     const bundledDirectLabels = findElements(directBundleDocument.body, byTag("label")).map((element) => element.textContent.trim());
-    if (bundledDirectLabels[0] !== "Direct app bundle path") {
+    if (bundledDirectLabels[0] !== "Direct app emit path") {
       throw new Error("TodoMVC direct bundle create flow did not prepend the new todo");
     }
   } finally {
@@ -442,10 +442,10 @@ test("TodoMVC direct modules and app bundle behave correctly", async () => {
   }
 }, 120_000);
 
-test("kanib app bundle mounts and navigates through routed product flows", async () => {
+test("kanib app emit mounts and navigates through routed product flows", async () => {
   const kanibBundleDir = mkdtempSync(join(tmpdir(), "weiv-kanib-bundle-"));
   try {
-    emitAppBundle("test/examples/kanib/App.weiv", kanibBundleDir);
+    emitApp("test/examples/kanib/App.weiv", kanibBundleDir);
     const kanibBundle = await importModule(join(kanibBundleDir, "bundle.mjs"));
     const sharedModule = readFileSync(join(kanibBundleDir, "state", "workspace.js"), "utf8");
     const observableModule = readFileSync(join(kanibBundleDir, "__weiv_runtime", "index.js"), "utf8");

@@ -1,7 +1,7 @@
 const std = @import("std");
 const compiler_diagnostics = @import("../../../diagnostics.zig");
 const component = @import("../../../pipeline/index.zig");
-const emit_direct_js = @import("../direct_component_js.zig");
+const emit_direct_js = @import("../emit_sfc.zig");
 const parser_backend = @import("../../../../ffi/parser_backend.zig");
 const style = @import("../scoped_css.zig");
 
@@ -245,20 +245,18 @@ pub const Graph = struct {
     pub fn emitBrowserEntry(self: *Graph, allocator: std.mem.Allocator) ![]u8 {
         _ = self;
         return try std.fmt.allocPrint(allocator,
-            \\import * as AppBundle from "./bundle.mjs";
+            \\import * as WeivApp from "./bundle.mjs";
             \\import {{ props as previewProps }} from "./props.mjs";
             \\
             \\const target = document.getElementById("app");
             \\const props = globalThis.__WEIV_PROPS__ ?? previewProps;
             \\
             \\if (target) {{
-            \\  AppBundle.mount(target, props);
+            \\  WeivApp.mount(target, props);
             \\}}
             \\
-            \\globalThis.__WEIV_BUNDLE__ = AppBundle;
-            \\
             \\export * from "./bundle.mjs";
-            \\export default AppBundle;
+            \\export default WeivApp;
             \\
         , .{});
     }
@@ -475,7 +473,7 @@ pub const Graph = struct {
             };
             const message = try std.fmt.allocPrint(
                 self.allocator,
-                "Component tag `{s}` resolves to multiple .weiv files in the same app bundle",
+                "Component tag `{s}` resolves to multiple .weiv files in the same app emit",
                 .{tag_name},
             );
             defer self.allocator.free(message);
@@ -885,7 +883,7 @@ fn classifyRuntimeImportProblem(source_specifier: []const u8) ?RuntimeImportProb
     if (std.fs.path.isAbsolute(source_specifier)) {
         return .{
             .code = "import.unsupported_absolute_runtime_import",
-            .message = "Absolute runtime imports are not supported in app bundles",
+            .message = "Absolute runtime imports are not supported in app emits",
         };
     }
 
