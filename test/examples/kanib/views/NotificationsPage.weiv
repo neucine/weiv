@@ -1,0 +1,132 @@
+<template>
+  <Panel>
+    <template slot:header>
+      <div>
+        <h2>Notifications</h2>
+        <p class="notifications-page__subhead">{{ unreadCount() }} unread · {{ items().length }} total</p>
+      </div>
+    </template>
+
+    <EmptyState if="items().length === 0">
+      <template slot:message>
+        <p>No notifications for this workspace.</p>
+      </template>
+      <p>Team mentions and issue updates will appear here.</p>
+    </EmptyState>
+
+    <ul else class="notifications-page__list">
+      <li for="item in items()" bind:class="rowClass(item.read)">
+        <div class="notifications-page__body">
+          <strong>{{ item.title }}</strong>
+          <p>{{ item.detail }}</p>
+          <small>{{ item.minutesAgo }}m ago</small>
+        </div>
+        <div class="notifications-page__actions">
+          <button class="notifications-page__ghost" bind:disabled="!item.issueId" on:click="openIssue(item.issueId)">Open issue</button>
+          <button class="notifications-page__primary" bind:disabled="item.read" on:click="markRead(item.id)">
+            {{ item.read ? "Read" : "Mark read" }}
+          </button>
+        </div>
+      </li>
+    </ul>
+  </Panel>
+</template>
+
+<script lang="ts">
+  import EmptyState from "../components/EmptyState.weiv";
+  import Panel from "../components/Panel.weiv";
+  import { issueRoute, listNotifications, markNotificationRead, navigateTo } from "../state/workspace.ts";
+
+  export interface Props {
+    workspaceId: string;
+  }
+
+  export let props: Props;
+
+  function items() {
+    return listNotifications(props.workspaceId);
+  }
+
+  function unreadCount() {
+    return items().filter((item) => !item.read).length;
+  }
+
+  function rowClass(read: boolean) {
+    return read ? "notifications-page__row notifications-page__row--read" : "notifications-page__row";
+  }
+
+  function markRead(notificationId: string) {
+    markNotificationRead(notificationId);
+  }
+
+  function openIssue(issueId: string | null) {
+    if (!issueId) return;
+    navigateTo(issueRoute(props.workspaceId, issueId));
+  }
+</script>
+
+<style>
+  .notifications-page__subhead {
+    color: #68798e;
+  }
+
+  .notifications-page__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .notifications-page__row {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    border: 1px solid #d8e2ec;
+    border-radius: 14px;
+    padding: 0.7rem 0.8rem;
+    background: #f8fbff;
+  }
+
+  .notifications-page__row--read {
+    opacity: 0.72;
+    background: #fcfdff;
+  }
+
+  .notifications-page__body {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .notifications-page__body p,
+  .notifications-page__body small {
+    margin: 0;
+    color: #5e7188;
+  }
+
+  .notifications-page__actions {
+    display: flex;
+    gap: 0.45rem;
+  }
+
+  .notifications-page__ghost,
+  .notifications-page__primary {
+    border-radius: 999px;
+    padding: 0.4rem 0.68rem;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .notifications-page__ghost {
+    border: 1px solid #d0dae4;
+    background: #fff;
+    color: #2e465f;
+  }
+
+  .notifications-page__primary {
+    border: none;
+    background: #16354f;
+    color: #fff;
+  }
+</style>

@@ -39,9 +39,10 @@
   import Panel from "../components/Panel.weiv";
   import {
     boardRoute,
+    findProject,
     findWorkspace,
-    issues,
     issuesRoute,
+    listIssues,
     listMetrics,
     navigateTo,
     workspaceShared
@@ -62,15 +63,18 @@
     return listMetrics(props.workspaceId);
   }
 
+  function selectedProjectName() {
+    const project = findProject(workspaceShared.selectedProjectId);
+    return project ? project.name : "All projects";
+  }
+
   function recentIssues() {
     workspaceShared.saveTick;
-    return issues
-      .filter((issue) => issue.workspaceId === props.workspaceId)
-      .slice(0, 3);
+    return listIssues(props.workspaceId, workspaceShared.selectedProjectId).slice(0, 3);
   }
 
   function recentSummary() {
-    return `${recentIssues().length} issues are visible in the latest review slice.`;
+    return `${recentIssues().length} issues visible in ${selectedProjectName()}.`;
   }
 
   function openIssues() {

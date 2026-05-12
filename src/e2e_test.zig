@@ -524,7 +524,8 @@ test "todo list direct browser module emits loop boundary helpers" {
     try std.testing.expect(std.mem.indexOf(u8, js, "function updateRegion_loop_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "updateRegion_loop_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "document.createComment(\"for:start\")") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "const loopScope = { ...nextScope, [\"item\"]: currentItem };") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "let loopScope = { ...scope, [\"item\"]: currentItem };") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "loopScope = { ...nextScope, [\"item\"]: currentItem };") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "function updateDirtyRegions(instance, dirtyState, scope = instance.refresh())") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"visibleItems\") || dirtySet.has(\"items\") || dirtySet.has(\"showCompleted\") || dirtyRegionSet.has(3)) {") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "dirtySet.has(\"item\")") == null);
@@ -1895,12 +1896,13 @@ test "classic todo app emits multi-file app bundle" {
     try std.testing.expect(std.mem.indexOf(u8, browser_entry_js, "AppBundle.mount(target, props);") != null);
     try std.testing.expect(std.mem.indexOf(u8, browser_entry_js, "globalThis.__WEIV_BUNDLE__ = AppBundle;") != null);
     try std.testing.expect(std.mem.indexOf(u8, props_js, "export const props = { title: \"Preview\" };") != null);
-    try std.testing.expect(std.mem.indexOf(u8, index_html, "<link rel=\"stylesheet\" href=\"./styles.css\" />") != null);
-    try std.testing.expect(std.mem.indexOf(u8, index_html, "<script type=\"module\" src=\"./main.mjs\"></script>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, index_html, "<link rel=\"stylesheet\" href=\"/styles.css\" />") != null);
+    try std.testing.expect(std.mem.indexOf(u8, index_html, "<script type=\"module\" src=\"/main.mjs\"></script>") != null);
     try std.testing.expect(std.mem.indexOf(u8, package_json, "\"dev\": \"bun --hot server.ts\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, package_json, "\"start\": \"bun server.ts\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, dev_server_ts, "const server = Bun.serve({") != null);
     try std.testing.expect(std.mem.indexOf(u8, dev_server_ts, "pathname === \"/\" ? \"/index.html\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, dev_server_ts, "new URL(\"./index.html\", import.meta.url)") != null);
     try std.testing.expect(std.mem.indexOf(u8, app_js, "export function mount(target, props = {})") != null);
     try std.testing.expect(std.mem.indexOf(u8, app_js, "Root.mount(target, props)") != null);
     try std.testing.expect(std.mem.indexOf(u8, list_module_js, "export const css = ") != null);
@@ -2027,8 +2029,8 @@ test "kanib app emits multi-file app bundle" {
     try std.testing.expect(std.mem.indexOf(u8, observable_module_js, "export { observable } from \"./observable.js\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, observable_leaf_module_js, "const WEIV_OBSERVABLE = Symbol.for(\"weiv.observable\");") != null);
     try std.testing.expect(std.mem.indexOf(u8, metric_tone_js, "metric-card--up") != null);
-    try std.testing.expect(std.mem.indexOf(u8, header_module_js, "Refresh signals") != null);
-    try std.testing.expect(std.mem.indexOf(u8, detail_module_js, "Connect save listener") != null);
+    try std.testing.expect(std.mem.indexOf(u8, header_module_js, "Sync updates") != null);
+    try std.testing.expect(std.mem.indexOf(u8, detail_module_js, "Start live sync") != null);
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".workspace-shell") != null);
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".workspace-header") != null);
     try std.testing.expect(std.mem.indexOf(u8, styles_css, ".activity-feed__list") != null);
@@ -2129,7 +2131,7 @@ test "emit app generates import map for bare imports" {
 
     try std.testing.expect(std.mem.indexOf(u8, html, "importmap") != null);
     try std.testing.expect(std.mem.indexOf(u8, html, "\"lodash-es\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, html, "./node_modules/lodash-es") != null);
+    try std.testing.expect(std.mem.indexOf(u8, html, "/node_modules/lodash-es") != null);
 }
 
 test "validate app reports unsupported absolute runtime import with source location" {

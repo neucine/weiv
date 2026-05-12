@@ -15,9 +15,17 @@ export type WorkspaceMetric = {
   change: number;
 };
 
+export type WorkspaceProject = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  key: string;
+};
+
 export type WorkspaceIssue = {
   id: string;
   workspaceId: string;
+  projectId: string;
   title: string;
   summary: string;
   detail: string;
@@ -36,8 +44,28 @@ export type WorkspaceMember = {
   focus: string;
 };
 
+export type IssueComment = {
+  id: string;
+  issueId: string;
+  workspaceId: string;
+  author: string;
+  body: string;
+  minutesAgo: number;
+};
+
+export type NotificationItem = {
+  id: string;
+  workspaceId: string;
+  title: string;
+  detail: string;
+  issueId: string | null;
+  read: boolean;
+  minutesAgo: number;
+};
+
 export interface WorkspaceSharedState {
   currentWorkspaceId: string;
+  selectedProjectId: string;
   selectedIssueId: string;
   notifications: number;
   saveTick: number;
@@ -47,6 +75,7 @@ export interface WorkspaceSharedState {
 
 export const workspaceShared: WorkspaceSharedState = observable({
   currentWorkspaceId: "compiler-lab",
+  selectedProjectId: "proj-core-runtime",
   selectedIssueId: "iss-102",
   notifications: 4,
   saveTick: 0,
@@ -60,30 +89,38 @@ type RouterLike = {
 };
 
 const workspaceCatalog: WorkspaceSummary[] = [
-  { id: "compiler-lab", name: "Compiler Lab", key: "CL", issueCount: 6, openCount: 4 },
-  { id: "design-systems", name: "Design Systems", key: "DS", issueCount: 4, openCount: 3 },
+  { id: "compiler-lab", name: "Compiler Lab", key: "CL", issueCount: 4, openCount: 3 },
+  { id: "design-systems", name: "Design Systems", key: "DS", issueCount: 2, openCount: 2 },
 ];
 
 const workspaceMetrics: Record<string, WorkspaceMetric[]> = {
   "compiler-lab": [
-    { id: "m-1", label: "Open issues", value: "4", change: -1 },
-    { id: "m-2", label: "Review queue", value: "2", change: 1 },
-    { id: "m-3", label: "Cycle time", value: "2.6d", change: -8 },
+    { id: "m-1", label: "Open issues", value: "3", change: -1 },
+    { id: "m-2", label: "Review queue", value: "1", change: -2 },
+    { id: "m-3", label: "Cycle time", value: "3.4d", change: -6 },
   ],
   "design-systems": [
-    { id: "m-4", label: "Open issues", value: "3", change: 0 },
-    { id: "m-5", label: "Review queue", value: "1", change: -1 },
-    { id: "m-6", label: "Cycle time", value: "3.1d", change: 4 },
+    { id: "m-4", label: "Open issues", value: "2", change: 1 },
+    { id: "m-5", label: "Review queue", value: "1", change: 0 },
+    { id: "m-6", label: "Cycle time", value: "2.8d", change: -3 },
   ],
 };
+
+const projects: WorkspaceProject[] = [
+  { id: "proj-core-runtime", workspaceId: "compiler-lab", name: "Core Runtime", key: "CR" },
+  { id: "proj-devx", workspaceId: "compiler-lab", name: "Developer Experience", key: "DX" },
+  { id: "proj-ui-kit", workspaceId: "design-systems", name: "UI Kit", key: "UI" },
+  { id: "proj-theme-engine", workspaceId: "design-systems", name: "Theme Engine", key: "TH" },
+];
 
 export const issues: WorkspaceIssue[] = observable([
   {
     id: "iss-101",
     workspaceId: "compiler-lab",
-    title: "Stabilize router + app bundle hydration",
-    summary: "The routed Kanib app should mount cleanly through the bundle path.",
-    detail: "Make the shell stable, preserve nested routes, and avoid duplicate bootstrap behavior between preview and emitted bundle.",
+    projectId: "proj-core-runtime",
+    title: "Fix router state mismatch after history back",
+    summary: "Returning from issue detail occasionally restores stale workspace path metadata.",
+    detail: "Reproduce history back/forward transitions and make route-derived shell state consistent before and after popstate handlers execute.",
     owner: "Avery",
     status: "in-progress",
     priority: "high",
@@ -93,9 +130,10 @@ export const issues: WorkspaceIssue[] = observable([
   {
     id: "iss-102",
     workspaceId: "compiler-lab",
-    title: "Replace the old demo with a product-grade test base",
-    summary: "Translate a Kaneo-like issue workflow into a compact Weiv example.",
-    detail: "Keep the app understandable to humans while still pressuring router, slots, shared state, and selective updates.",
+    projectId: "proj-devx",
+    title: "Ship inspect snapshot test harness",
+    summary: "Promote invalidation inspect output to a stable CLI contract test suite.",
+    detail: "Add Bun snapshot tests for app-scale inspect output and define update workflow so compiler shape changes are intentionally reviewed.",
     owner: "Mika",
     status: "review",
     priority: "high",
@@ -105,9 +143,10 @@ export const issues: WorkspaceIssue[] = observable([
   {
     id: "iss-103",
     workspaceId: "compiler-lab",
+    projectId: "proj-devx",
     title: "Tighten diagnostics JSON contract",
-    summary: "Make the compiler diagnostics surface stable enough for editor tooling.",
-    detail: "Keep the JSON shape documented, add formatter coverage, and stop letting CLI formatting become the source of truth.",
+    summary: "Editor integration needs a stable machine-readable diagnostics envelope.",
+    detail: "Unify severity fields across parse/bind/emit and add contract tests for lint-style output consumed by editor tooling.",
     owner: "Noa",
     status: "backlog",
     priority: "medium",
@@ -117,9 +156,10 @@ export const issues: WorkspaceIssue[] = observable([
   {
     id: "iss-104",
     workspaceId: "compiler-lab",
-    title: "Audit slot usage in the flagship app",
-    summary: "Make sure shell, panel, and empty-state slots feel product-native.",
-    detail: "Keep dedicated slot fixtures for edge cases, but make the flagship app use named and fallback slots in a believable way.",
+    projectId: "proj-core-runtime",
+    title: "Audit slot usage in flagship app",
+    summary: "Ensure layout slots read as product composition, not framework demos.",
+    detail: "Track named/default/fallback slot behavior across routed shell regions and confirm projected content updates under selective invalidation.",
     owner: "Lina",
     status: "done",
     priority: "low",
@@ -129,9 +169,10 @@ export const issues: WorkspaceIssue[] = observable([
   {
     id: "iss-201",
     workspaceId: "design-systems",
-    title: "Document workspace shell patterns",
-    summary: "Turn shell composition into a reusable reference for later apps.",
-    detail: "Capture sidebar, toolbar, and secondary-aside layout guidance so new example apps can inherit the same pattern.",
+    projectId: "proj-ui-kit",
+    title: "Define token-ready shell spacing scale",
+    summary: "Current shell spacing values drift between sidebar, panels, and detail surfaces.",
+    detail: "Publish a compact spacing scale and refactor key components to consume shared tokenized spacing variables.",
     owner: "Sana",
     status: "review",
     priority: "medium",
@@ -141,9 +182,10 @@ export const issues: WorkspaceIssue[] = observable([
   {
     id: "iss-202",
     workspaceId: "design-systems",
-    title: "Theme the empty states",
-    summary: "Improve empty state density and fallback slot presentation.",
-    detail: "Use clearer copy, cleaner spacing, and action slots that still read well in narrow layouts.",
+    projectId: "proj-theme-engine",
+    title: "Theme empty states for light + high-contrast",
+    summary: "Fallback states need stronger contrast and hierarchy for accessibility review.",
+    detail: "Add high-contrast compliant token variants for empty state borders, body copy, and action affordances while preserving the default theme.",
     owner: "Theo",
     status: "in-progress",
     priority: "low",
@@ -160,8 +202,100 @@ const members: WorkspaceMember[] = [
   { id: "mem-5", workspaceId: "design-systems", name: "Theo", role: "Frontend Engineer", focus: "States" },
 ];
 
+export const comments: IssueComment[] = observable([
+  {
+    id: "cmt-1",
+    issueId: "iss-101",
+    workspaceId: "compiler-lab",
+    author: "Avery",
+    body: "History mismatch reproduces after opening detail from board and navigating back twice.",
+    minutesAgo: 42,
+  },
+  {
+    id: "cmt-2",
+    issueId: "iss-102",
+    workspaceId: "compiler-lab",
+    author: "Mika",
+    body: "Snapshot test naming should mirror inspect command grouping.",
+    minutesAgo: 64,
+  },
+  {
+    id: "cmt-3",
+    issueId: "iss-201",
+    workspaceId: "design-systems",
+    author: "Sana",
+    body: "Spacing token proposals are ready for review in Figma branch v2.",
+    minutesAgo: 21,
+  },
+]);
+
+export const notificationItems: NotificationItem[] = observable([
+  {
+    id: "ntf-1",
+    workspaceId: "compiler-lab",
+    title: "Review requested on inspect harness",
+    detail: "Mika requested review on iss-102",
+    issueId: "iss-102",
+    read: false,
+    minutesAgo: 8,
+  },
+  {
+    id: "ntf-2",
+    workspaceId: "compiler-lab",
+    title: "Router bug status changed",
+    detail: "Avery moved iss-101 to in-progress",
+    issueId: "iss-101",
+    read: false,
+    minutesAgo: 17,
+  },
+  {
+    id: "ntf-3",
+    workspaceId: "compiler-lab",
+    title: "Diagnostics contract review requested",
+    detail: "Noa requested review on iss-103",
+    issueId: "iss-103",
+    read: false,
+    minutesAgo: 25,
+  },
+  {
+    id: "ntf-4",
+    workspaceId: "compiler-lab",
+    title: "Slot audit marked done",
+    detail: "Lina closed iss-104",
+    issueId: "iss-104",
+    read: false,
+    minutesAgo: 39,
+  },
+  {
+    id: "ntf-5",
+    workspaceId: "design-systems",
+    title: "Token scale draft published",
+    detail: "Sana updated iss-201 with spacing draft notes",
+    issueId: "iss-201",
+    read: false,
+    minutesAgo: 12,
+  },
+  {
+    id: "ntf-6",
+    workspaceId: "design-systems",
+    title: "Contrast variant merged",
+    detail: "Theo pushed theme updates for iss-202",
+    issueId: "iss-202",
+    read: true,
+    minutesAgo: 54,
+  },
+]);
+
 const externalSaveListeners: Array<() => void> = [];
 let activeRouter: RouterLike | null = null;
+
+function syncNotificationCount() {
+  workspaceShared.notifications = notificationItems.filter(
+    (item) => item.workspaceId === workspaceShared.currentWorkspaceId && !item.read
+  ).length;
+}
+
+syncNotificationCount();
 
 export function listWorkspaces() {
   return workspaceCatalog;
@@ -171,7 +305,14 @@ export function listMetrics(workspaceId: string) {
   return workspaceMetrics[workspaceId] || [];
 }
 
-export function listIssues(workspaceId: string) {
+export function listProjects(workspaceId: string) {
+  return projects.filter((project) => project.workspaceId === workspaceId);
+}
+
+export function listIssues(workspaceId: string, projectId?: string) {
+  if (projectId) {
+    return issues.filter((issue) => issue.workspaceId === workspaceId && issue.projectId === projectId);
+  }
   return issues.filter((issue) => issue.workspaceId === workspaceId);
 }
 
@@ -179,8 +320,20 @@ export function listMembers(workspaceId: string) {
   return members.filter((member) => member.workspaceId === workspaceId);
 }
 
+export function listComments(issueId: string) {
+  return comments.filter((comment) => comment.issueId === issueId);
+}
+
+export function listNotifications(workspaceId: string) {
+  return notificationItems.filter((item) => item.workspaceId === workspaceId);
+}
+
 export function findWorkspace(workspaceId: string) {
   return workspaceCatalog.find((workspace) => workspace.id === workspaceId) || workspaceCatalog[0];
+}
+
+export function findProject(projectId: string) {
+  return projects.find((project) => project.id === projectId) || null;
 }
 
 export function findIssue(issueId: string) {
@@ -189,6 +342,13 @@ export function findIssue(issueId: string) {
 
 export function setCurrentWorkspaceId(workspaceId: string) {
   workspaceShared.currentWorkspaceId = workspaceId;
+  const workspaceProjects = listProjects(workspaceId);
+  workspaceShared.selectedProjectId = workspaceProjects[0]?.id ?? "";
+  syncNotificationCount();
+}
+
+export function setSelectedProjectId(projectId: string) {
+  workspaceShared.selectedProjectId = projectId;
 }
 
 export function setSelectedIssueId(issueId: string) {
@@ -196,11 +356,61 @@ export function setSelectedIssueId(issueId: string) {
 }
 
 export function clearNotifications() {
-  workspaceShared.notifications = 0;
+  for (const item of notificationItems) {
+    if (item.workspaceId === workspaceShared.currentWorkspaceId) {
+      item.read = true;
+    }
+  }
+  syncNotificationCount();
+  workspaceShared.saveTick += 1;
 }
 
 export function bumpNotifications() {
-  workspaceShared.notifications += 1;
+  const issue = findIssue(workspaceShared.selectedIssueId);
+  const workspaceId = issue ? issue.workspaceId : workspaceShared.currentWorkspaceId;
+  notificationItems.unshift({
+    id: `ntf-${notificationItems.length + 1}`,
+    workspaceId,
+    title: "New update available",
+    detail: issue ? `${issue.owner} updated ${issue.id}` : "Workspace activity refreshed",
+    issueId: issue ? issue.id : null,
+    read: false,
+    minutesAgo: 0,
+  });
+  syncNotificationCount();
+  workspaceShared.saveTick += 1;
+}
+
+export function addComment(issueId: string, author: string, body: string) {
+  const issue = findIssue(issueId);
+  if (!issue) return;
+  comments.unshift({
+    id: `cmt-${comments.length + 1}`,
+    issueId,
+    workspaceId: issue.workspaceId,
+    author,
+    body,
+    minutesAgo: 0,
+  });
+  notificationItems.unshift({
+    id: `ntf-${notificationItems.length + 1}`,
+    workspaceId: issue.workspaceId,
+    title: `New comment on ${issue.id}`,
+    detail: `${author}: ${body}`,
+    issueId,
+    read: false,
+    minutesAgo: 0,
+  });
+  syncNotificationCount();
+  workspaceShared.saveTick += 1;
+}
+
+export function markNotificationRead(notificationId: string) {
+  const item = notificationItems.find((entry) => entry.id === notificationId);
+  if (!item || item.read) return;
+  item.read = true;
+  syncNotificationCount();
+  workspaceShared.saveTick += 1;
 }
 
 export function registerExternalSaveListener(listener: () => void) {
@@ -232,6 +442,19 @@ export function cycleIssueStatus(issueId: string) {
   workspaceShared.saveTick += 1;
 }
 
+export function moveIssueToStatus(
+  issueId: string,
+  status: "backlog" | "in-progress" | "review" | "done",
+) {
+  const issue = findIssue(issueId);
+  if (!issue) return;
+  if (issue.status === status) return;
+  issue.status = status;
+  issue.updatedMinutesAgo = 0;
+  issue.watchers += 1;
+  workspaceShared.saveTick += 1;
+}
+
 export function setWorkspaceRouter(router: RouterLike) {
   activeRouter = router;
 }
@@ -240,13 +463,23 @@ export function syncRouteState(path: string, workspaceId?: string, issueId?: str
   workspaceShared.currentPath = path;
   if (workspaceId) {
     workspaceShared.currentWorkspaceId = workspaceId;
+    const workspaceProjects = listProjects(workspaceId);
+    const hasSelectedProject = workspaceProjects.some((project) => project.id === workspaceShared.selectedProjectId);
+    if (!hasSelectedProject) {
+      workspaceShared.selectedProjectId = workspaceProjects[0]?.id ?? "";
+    }
+    syncNotificationCount();
   }
   if (issueId) {
     workspaceShared.selectedIssueId = issueId;
+    const issue = findIssue(issueId);
+    if (issue && issue.workspaceId === workspaceShared.currentWorkspaceId) {
+      workspaceShared.selectedProjectId = issue.projectId;
+    }
     return;
   }
 
-  const workspaceIssues = listIssues(workspaceShared.currentWorkspaceId);
+  const workspaceIssues = listIssues(workspaceShared.currentWorkspaceId, workspaceShared.selectedProjectId);
   if (workspaceIssues.length > 0) {
     workspaceShared.selectedIssueId = workspaceIssues[0].id;
   }
@@ -274,6 +507,10 @@ export function boardRoute(workspaceId: string) {
 
 export function issueRoute(workspaceId: string, issueId: string) {
   return `/workspaces/${workspaceId}/issues/${issueId}`;
+}
+
+export function notificationsRoute(workspaceId: string) {
+  return `/workspaces/${workspaceId}/notifications`;
 }
 
 export function membersRoute(workspaceId: string) {

@@ -16,15 +16,53 @@
       </EmptyState>
 
       <div else class="issue-board__cards">
-        <button
+        <article
           for="issue in column.items"
           class="issue-board__card"
-          on:click="openIssue(issue.id)"
         >
           <strong>{{ issue.title }}</strong>
           <p>{{ issue.summary }}</p>
           <small>{{ issue.owner }} · {{ issue.priority }}</small>
-        </button>
+          <div class="issue-board__top-actions">
+            <button class="issue-board__open" on:click="openIssue(issue.id)" type="button">Open detail</button>
+            <button class="issue-board__advance" on:click="advanceIssue(issue.id)" type="button">Advance</button>
+          </div>
+          <span class="issue-board__move-label">Move to</span>
+          <div class="issue-board__move-row">
+            <button
+              class="issue-board__move"
+              bind:disabled="issue.status === 'backlog'"
+              on:click="moveToBacklog(issue.id)"
+              type="button"
+            >
+              Backlog
+            </button>
+            <button
+              class="issue-board__move"
+              bind:disabled="issue.status === 'in-progress'"
+              on:click="moveToInProgress(issue.id)"
+              type="button"
+            >
+              In progress
+            </button>
+            <button
+              class="issue-board__move"
+              bind:disabled="issue.status === 'review'"
+              on:click="moveToReview(issue.id)"
+              type="button"
+            >
+              Review
+            </button>
+            <button
+              class="issue-board__move"
+              bind:disabled="issue.status === 'done'"
+              on:click="moveToDone(issue.id)"
+              type="button"
+            >
+              Done
+            </button>
+          </div>
+        </article>
       </div>
     </Panel>
   </section>
@@ -33,7 +71,7 @@
 <script lang="ts">
   import EmptyState from "../components/EmptyState.weiv";
   import Panel from "../components/Panel.weiv";
-  import { issueRoute, issues, navigateTo, workspaceShared } from "../state/workspace.ts";
+  import { cycleIssueStatus, issueRoute, listIssues, moveIssueToStatus, navigateTo, workspaceShared } from "../state/workspace.ts";
 
   export interface Props {
     workspaceId: string;
@@ -43,7 +81,8 @@
 
   function boardItems(status: string) {
     workspaceShared.saveTick;
-    return issues.filter((issue) => issue.workspaceId === props.workspaceId && issue.status === status);
+    return listIssues(props.workspaceId, workspaceShared.selectedProjectId)
+      .filter((issue) => issue.status === status);
   }
 
   function columns() {
@@ -58,17 +97,42 @@
   function openIssue(issueId: string) {
     navigateTo(issueRoute(props.workspaceId, issueId));
   }
+
+  function advanceIssue(issueId: string) {
+    cycleIssueStatus(issueId);
+  }
+
+  function moveIssue(issueId: string, status: "backlog" | "in-progress" | "review" | "done") {
+    moveIssueToStatus(issueId, status);
+  }
+
+  function moveToBacklog(issueId: string) {
+    moveIssue(issueId, "backlog");
+  }
+
+  function moveToInProgress(issueId: string) {
+    moveIssue(issueId, "in-progress");
+  }
+
+  function moveToReview(issueId: string) {
+    moveIssue(issueId, "review");
+  }
+
+  function moveToDone(issueId: string) {
+    moveIssue(issueId, "done");
+  }
 </script>
 
 <style>
   .issue-board {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
+    gap: 0.9rem;
   }
 
   .issue-board__subhead {
     color: #68798e;
+    font-size: 0.88rem;
   }
 
   .issue-board__cards {
@@ -78,14 +142,94 @@
 
   .issue-board__card {
     display: grid;
-    gap: 0.4rem;
-    padding: 0.95rem;
+    gap: 0.35rem;
+    padding: 0.85rem;
     border: 1px solid #dde5ed;
     border-radius: 16px;
-    background: #f8fbff;
+    background: linear-gradient(180deg, #f9fbff 0%, #f4f8fc 100%);
     text-align: left;
     font: inherit;
+    color: #182c42;
+    box-shadow: 0 8px 18px rgba(24, 44, 66, 0.06);
+  }
+
+  .issue-board__card strong {
+    line-height: 1.25;
+  }
+
+  .issue-board__card p {
+    color: #41556d;
+    line-height: 1.35;
+  }
+
+  .issue-board__card small {
+    color: #6a7d93;
+  }
+
+  .issue-board__open {
+    border: 1px solid #dbe4ec;
+    border-radius: 999px;
+    background: #fff;
+    color: #30455d;
+    font: inherit;
+    font-size: 0.82rem;
+    padding: 0.35rem 0.65rem;
     cursor: pointer;
+  }
+
+  .issue-board__top-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.1rem;
+  }
+
+  .issue-board__advance {
+    border: none;
+    border-radius: 999px;
+    background: #182c42;
+    color: #fff;
+    font: inherit;
+    font-size: 0.82rem;
+    padding: 0.35rem 0.65rem;
+    cursor: pointer;
+  }
+
+  .issue-board__open:hover,
+  .issue-board__move:hover {
+    border-color: #c0cfdf;
+    background: #fbfdff;
+  }
+
+  .issue-board__advance:hover {
+    background: #0f2136;
+  }
+
+  .issue-board__move-label {
+    margin-top: 0.1rem;
+    color: #647389;
+    font-size: 0.82rem;
+  }
+
+  .issue-board__move-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.3rem;
+  }
+
+  .issue-board__move {
+    border: 1px solid #dbe4ec;
+    border-radius: 999px;
+    background: #fff;
+    color: #182c42;
+    font: inherit;
+    font-size: 0.8rem;
+    padding: 0.26rem 0.48rem;
+    cursor: pointer;
+  }
+
+  .issue-board__move:disabled {
+    cursor: default;
+    opacity: 0.45;
   }
 
   @media (max-width: 900px) {

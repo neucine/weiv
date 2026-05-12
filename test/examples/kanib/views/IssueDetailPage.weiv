@@ -24,14 +24,17 @@
         <DetailSection bind:body="issue().detail" bind:title="'Implementation notes'" />
 
         <div class="issue-detail-page__composer">
-          <label>Route note</label>
-          <input
-            id="detail-note"
-            bind:value="noteDraft"
-            class="issue-detail-page__input"
-            placeholder="Leave a note for the next reviewer"
-            type="text"
-          />
+          <label>Add comment</label>
+          <div class="issue-detail-page__composer-row">
+            <input
+              id="detail-note"
+              bind:value="noteDraft"
+              class="issue-detail-page__input"
+              placeholder="Write a comment for your team"
+              type="text"
+            />
+            <button class="issue-detail-page__composer-submit" on:click="submitComment" type="button">Post</button>
+          </div>
         </div>
       </section>
 
@@ -71,7 +74,8 @@
         <ul if="issue()" class="issue-detail-page__activity">
           <li>{{ issue().owner }} updated this issue {{ issue().updatedMinutesAgo }} minutes ago.</li>
           <li>Route-level save flow is wired through `setTimeout` and shared observable updates.</li>
-          <li if="noteDraft">Draft note: {{ noteDraft }}</li>
+          <li for="comment in issueComments()">{{ comment.author }} · {{ comment.minutesAgo }}m · {{ comment.body }}</li>
+          <li if="noteDraft">Draft: {{ noteDraft }}</li>
         </ul>
       </Panel>
     </div>
@@ -83,10 +87,12 @@
   import EmptyState from "../components/EmptyState.weiv";
   import Panel from "../components/Panel.weiv";
   import {
+    addComment,
     bumpNotifications,
     cycleIssueStatus,
     findIssue,
     issuesRoute,
+    listComments,
     navigateTo,
     workspaceShared
   } from "../state/workspace.ts";
@@ -122,6 +128,18 @@
     navigateTo(issuesRoute(props.workspaceId));
   }
 
+  function issueComments() {
+    workspaceShared.saveTick;
+    return listComments(props.issueId);
+  }
+
+  function submitComment() {
+    const body = noteDraft.trim();
+    if (!body) return;
+    addComment(props.issueId, "You", body);
+    noteDraft = "";
+  }
+
   function saveIssue() {
     if (!issue()) {
       return;
@@ -149,6 +167,7 @@
 
   .issue-detail-page__subhead {
     color: #68798e;
+    line-height: 1.35;
   }
 
   .issue-detail-page__content,
@@ -156,6 +175,10 @@
   .issue-detail-page__activity {
     display: grid;
     gap: 0.75rem;
+  }
+
+  .issue-detail-page__content {
+    gap: 0.85rem;
   }
 
   .issue-detail-page__meta,
@@ -168,8 +191,16 @@
   .issue-detail-page__composer {
     display: grid;
     gap: 0.45rem;
-    padding-top: 0.75rem;
+    padding-top: 0.85rem;
     border-top: 1px solid #edf2f6;
+    margin-top: 0.2rem;
+  }
+
+  .issue-detail-page__composer-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: center;
   }
 
   .issue-detail-page__input {
@@ -177,6 +208,27 @@
     border-radius: 12px;
     padding: 0.75rem 0.85rem;
     font: inherit;
+    background: #fcfeff;
+  }
+
+  .issue-detail-page__input:focus {
+    outline: none;
+    border-color: #9bb0c8;
+    box-shadow: 0 0 0 3px rgba(71, 122, 176, 0.14);
+  }
+
+  .issue-detail-page__composer-submit {
+    border: none;
+    border-radius: 10px;
+    padding: 0.62rem 0.78rem;
+    background: #17344f;
+    color: #fff;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .issue-detail-page__composer-submit:hover {
+    background: #122a3f;
   }
 
   .issue-detail-page__ghost,
@@ -192,10 +244,19 @@
     background: #fff;
   }
 
+  .issue-detail-page__ghost:hover {
+    border-color: #c4d2e0;
+    background: #f8fbff;
+  }
+
   .issue-detail-page__primary {
     border: none;
     background: #182c42;
     color: #fff;
+  }
+
+  .issue-detail-page__primary:hover {
+    background: #0f2136;
   }
 
   .issue-detail-page__footer {
@@ -203,6 +264,16 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
+    padding-top: 0.2rem;
+  }
+
+  .issue-detail-page__meta li,
+  .issue-detail-page__activity li {
+    padding: 0.4rem 0.55rem;
+    border: 1px solid #e7edf4;
+    border-radius: 12px;
+    background: #fbfdff;
+    color: #2b445f;
   }
 
   @media (max-width: 900px) {

@@ -8,9 +8,24 @@
         bind:subtitle="headerSubtitle()"
         bind:title="headerTitle()"
         on:clear-notifications="clearHeaderNotifications"
+        on:open-notifications="openNotifications"
         on:queue-refresh="queueRefresh"
         on:toggle-sidebar="toggleSidebar"
       />
+    </template>
+
+    <template slot:toolbar>
+      <div class="project-health">
+        <div class="project-health__label">
+          <strong>{{ projectLabel() }}</strong>
+          <small>{{ projectIssues().length }} issues in scope</small>
+        </div>
+        <div class="project-health__stats">
+          <span class="project-health__chip project-health__chip--open">Open {{ projectOpenCount() }}</span>
+          <span class="project-health__chip project-health__chip--review">Review {{ projectReviewCount() }}</span>
+          <span class="project-health__chip project-health__chip--done">Done {{ projectDoneCount() }}</span>
+        </div>
+      </div>
     </template>
 
     <template slot:sidebar>
@@ -18,8 +33,10 @@
         bind:collapsed="shellState.collapsed"
         bind:currentPath="workspaceShared.currentPath"
         bind:currentWorkspaceId="workspaceShared.currentWorkspaceId"
+        bind:selectedProjectId="workspaceShared.selectedProjectId"
         bind:statusMessage="shellState.statusMessage"
         on:navigate="handleNavigate"
+        on:switch-project="switchProject"
         on:switch-workspace="switchWorkspace"
       />
     </template>
@@ -31,7 +48,9 @@
     <template slot:detail>
       <DetailPanel
         bind:externalTicks="externalTicks"
+        bind:liveSyncConnected="externalWatchRegistered"
         bind:item="selectedIssue()"
+        bind:recentEvents="recentEvents"
         bind:workspaceId="workspaceShared.currentWorkspaceId"
         on:advance-issue="advanceSelectedIssue"
         on:open-issue="openSelectedIssue"
@@ -49,6 +68,7 @@
   import DetailPanel from "./components/DetailPanel.weiv";
   import IssueBoardPage from "./views/IssueBoardPage.weiv";
   import IssueDetailPage from "./views/IssueDetailPage.weiv";
+  import NotificationsPage from "./views/NotificationsPage.weiv";
   import MembersPage from "./views/MembersPage.weiv";
   import SettingsPage from "./views/SettingsPage.weiv";
   import WorkspaceHeader from "./components/WorkspaceHeader.weiv";
@@ -61,11 +81,16 @@
     cycleIssueStatus,
     emitExternalSavePulse,
     findIssue,
+    findProject,
     findWorkspace,
+    issuesRoute,
     issueRoute,
     listIssues,
     navigateTo,
+    notificationsRoute,
     registerExternalSaveListener,
+    setCurrentWorkspaceId,
+    setSelectedProjectId,
     setWorkspaceRouter,
     syncRouteState,
     workspaceRoute,
@@ -77,12 +102,20 @@
   export let props: Props;
 
   let routerReady = false;
+  let routerBootstrapQueued = false;
   let externalTicks = 0;
   let externalWatchRegistered = false;
+  let recentEvents = [
+    "Workspace opened. Team activity stream is online."
+  ];
   let shellState = {
     collapsed: false,
     statusMessage: "Track issues, board movement, and team updates from one workspace."
   };
+
+  function pushRecentEvent(message: string) {
+    recentEvents = [message, ...recentEvents].slice(0, 6);
+  }
 
   function headerTitle() {
     const workspace = findWorkspace(workspaceShared.currentWorkspaceId);
@@ -91,10 +124,12 @@
 
   function headerSubtitle() {
     const workspace = findWorkspace(workspaceShared.currentWorkspaceId);
+    const project = findProject(workspaceShared.selectedProjectId);
     if (!workspace) {
       return shellState.statusMessage;
     }
-    return `${workspace.openCount} open issues · ${workspace.issueCount} total · ${shellState.statusMessage}`;
+    const projectLabel = project ? `${project.name}` : "All projects";
+    return `${workspace.openCount} open issues · ${workspace.issueCount} total · ${projectLabel} · ${shellState.statusMessage}`;
   }
 
   function currentSectionLabel() {
@@ -102,13 +137,41 @@
     if (path.indexOf("/issues/") !== -1) return "Issue detail";
     if (path.endsWith("/issues")) return "Issue list";
     if (path.endsWith("/board")) return "Board";
+    if (path.endsWith("/notifications")) return "Notifications";
     if (path.endsWith("/members")) return "Members";
     if (path.endsWith("/settings")) return "Settings";
     return "Overview";
   }
 
   function selectedIssue() {
-    return findIssue(workspaceShared.selectedIssueId);
+    const selected = findIssue(workspaceShared.selectedIssueId);
+    if (selected && selected.workspaceId === workspaceShared.currentWorkspaceId) {
+      return selected;
+    }
+    const workspaceIssues = listIssues(workspaceShared.currentWorkspaceId, workspaceShared.selectedProjectId);
+    return workspaceIssues.length > 0 ? workspaceIssues[0] : null;
+  }
+
+  function projectLabel() {
+    const project = findProject(workspaceShared.selectedProjectId);
+    return project ? `${project.key} · ${project.name}` : "All projects";
+  }
+
+  function projectIssues() {
+    workspaceShared.saveTick;
+    return listIssues(workspaceShared.currentWorkspaceId, workspaceShared.selectedProjectId);
+  }
+
+  function projectOpenCount() {
+    return projectIssues().filter((issue) => issue.status !== "done").length;
+  }
+
+  function projectReviewCount() {
+    return projectIssues().filter((issue) => issue.status === "review").length;
+  }
+
+  function projectDoneCount() {
+    return projectIssues().filter((issue) => issue.status === "done").length;
   }
 
   function toggleSidebar() {
@@ -120,14 +183,16 @@
 
   function clearHeaderNotifications() {
     clearNotifications();
-    shellState.statusMessage = "Notification badge cleared.";
+    shellState.statusMessage = "Notifications cleared.";
+    pushRecentEvent("Notifications cleared by workspace owner.");
   }
 
   function queueRefresh() {
-    shellState.statusMessage = "Refreshing workspace signals.";
+    shellState.statusMessage = "Syncing updates.";
     queueMicrotask(() => {
       bumpNotifications();
-      shellState.statusMessage = "Workspace signals refreshed.";
+      shellState.statusMessage = "Updates synced.";
+      pushRecentEvent("Updates synced from live sources.");
     });
   }
 
@@ -135,8 +200,21 @@
     navigateTo(path);
   }
 
+  function openNotifications() {
+    navigateTo(notificationsRoute(workspaceShared.currentWorkspaceId));
+  }
+
   function switchWorkspace(workspaceId: string) {
+    setCurrentWorkspaceId(workspaceId);
     navigateTo(workspaceRoute(workspaceId));
+  }
+
+  function switchProject(projectId: string) {
+    setSelectedProjectId(projectId);
+    syncRouteState(workspaceShared.currentPath, workspaceShared.currentWorkspaceId);
+    if (workspaceShared.currentPath.indexOf("/issues/") !== -1) {
+      navigateTo(issuesRoute(workspaceShared.currentWorkspaceId));
+    }
   }
 
   function openSelectedIssue() {
@@ -150,6 +228,7 @@
   function advanceSelectedIssue(issueId: string) {
     cycleIssueStatus(issueId);
     shellState.statusMessage = "Issue status advanced.";
+    pushRecentEvent(`Issue ${issueId} status moved forward.`);
   }
 
   function registerExternalWatch() {
@@ -161,8 +240,12 @@
     registerExternalSaveListener(() => {
       externalTicks += 1;
       shellState.statusMessage = "External save signal received.";
+      const issue = selectedIssue();
+      const issueLabel = issue ? issue.id : "current issue";
+      pushRecentEvent(`Teammate update synced for ${issueLabel}.`);
     });
-    shellState.statusMessage = "External save listener connected.";
+    shellState.statusMessage = "Live sync connected.";
+    pushRecentEvent("Live sync connected for teammate updates.");
   }
 
   function triggerExternalPulse() {
@@ -173,6 +256,7 @@
     if (path.indexOf("/issues/") !== -1) return "Review the issue details and move status forward.";
     if (path.endsWith("/issues")) return "Filter the issue list and open the next item.";
     if (path.endsWith("/board")) return "Watch work move between backlog, progress, review, and done.";
+    if (path.endsWith("/notifications")) return "Review personal mentions and recent workspace updates.";
     if (path.endsWith("/members")) return "Keep team roles and ownership visible.";
     if (path.endsWith("/settings")) return "Change workspace behavior without leaving the app shell.";
     return "Overview keeps the workspace signal clear.";
@@ -185,6 +269,13 @@
 
     const routeTarget = document.getElementById("workspace-route-root");
     if (!routeTarget) {
+      if (!routerBootstrapQueued) {
+        routerBootstrapQueued = true;
+        queueMicrotask(() => {
+          routerBootstrapQueued = false;
+          ensureRouter();
+        });
+      }
       return "";
     }
 
@@ -225,6 +316,11 @@
           props: (route) => ({ workspaceId: route.params.workspaceId })
         },
         {
+          path: "/workspaces/:workspaceId/notifications",
+          component: () => NotificationsPage,
+          props: (route) => ({ workspaceId: route.params.workspaceId })
+        },
+        {
           path: "/workspaces/:workspaceId/settings",
           component: () => SettingsPage,
           props: (route) => ({ workspaceId: route.params.workspaceId })
@@ -242,8 +338,8 @@
     routerReady = true;
 
     const issue = selectedIssue();
-    if (!issue && listIssues(workspaceShared.currentWorkspaceId).length > 0) {
-      const firstIssue = listIssues(workspaceShared.currentWorkspaceId)[0];
+    if (!issue && listIssues(workspaceShared.currentWorkspaceId, workspaceShared.selectedProjectId).length > 0) {
+      const firstIssue = listIssues(workspaceShared.currentWorkspaceId, workspaceShared.selectedProjectId)[0];
       syncRouteState(workspaceShared.currentPath, workspaceShared.currentWorkspaceId, firstIssue.id);
     }
     return "";
@@ -251,6 +347,58 @@
 </script>
 
 <style>
+  .project-health {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid #d7e0e8;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 10px 24px rgba(24, 44, 66, 0.08);
+  }
+
+  .project-health__label {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  .project-health__label small {
+    color: #66788f;
+  }
+
+  .project-health__stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .project-health__chip {
+    padding: 0.35rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    border: 1px solid transparent;
+  }
+
+  .project-health__chip--open {
+    background: #eef4fb;
+    color: #264766;
+    border-color: #d4e2f2;
+  }
+
+  .project-health__chip--review {
+    background: #fff3e8;
+    color: #80522f;
+    border-color: #f5dec8;
+  }
+
+  .project-health__chip--done {
+    background: #eaf7ef;
+    color: #2f6a48;
+    border-color: #cfe8d8;
+  }
+
   .kanib-app__route-root {
     min-height: 100%;
   }

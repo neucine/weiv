@@ -475,8 +475,9 @@ fn emitKeyedComponentLoopHelper(
         try out.appendSlice(allocator, ";\n");
     }
     if (has_slots) {
+        try out.appendSlice(allocator, "  const slotOwner = { refresh: () => loopScope, update: () => instance.update() };\n");
         try out.appendSlice(allocator, "  const slots = ");
-        try common.emitProjectedSlotObject(component_node, "instance", out, allocator);
+        try common.emitProjectedSlotObject(component_node, "slotOwner", out, allocator);
         try out.appendSlice(allocator, ";\n");
     }
     try out.writer(allocator).print(
@@ -511,8 +512,9 @@ fn emitKeyedComponentLoopHelper(
         try out.appendSlice(allocator, ");\n");
     }
     if (has_slots) {
+        try out.appendSlice(allocator, "      const slotOwner = { refresh: () => loopScope, update: () => instance.update() };\n");
         try out.appendSlice(allocator, "      record.handle.setSlots(");
-        try common.emitProjectedSlotObject(component_node, "instance", out, allocator);
+        try common.emitProjectedSlotObject(component_node, "slotOwner", out, allocator);
         try out.appendSlice(allocator, ");\n");
     }
     if (needs_update) {
@@ -531,9 +533,11 @@ fn emitKeyedGenericLoopHelper(
     allocator: std.mem.Allocator,
 ) !void {
     try out.writer(allocator).print(
-        "function createForEntry_{d}(instance, scope, item, reference) {{\n  const parent = reference.parentNode;\n  const start = document.createComment(\"for:item:start\");\n  const end = document.createComment(\"for:item:end\");\n  parent.insertBefore(start, reference);\n  parent.insertBefore(end, reference);\n  const entryRefs = [];\n  let currentItem = item;\n  function update(nextScope, nextItem) {{\n    if (arguments.length > 1) currentItem = nextItem;\n    const refs = entryRefs;\n    const loopScope = {{ ...nextScope, [",
+        "function createForEntry_{d}(instance, scope, item, reference) {{\n  const parent = reference.parentNode;\n  const start = document.createComment(\"for:item:start\");\n  const end = document.createComment(\"for:item:end\");\n  parent.insertBefore(start, reference);\n  parent.insertBefore(end, reference);\n  const entryRefs = [];\n  let currentItem = item;\n  let loopScope = {{ ...scope, [",
         .{for_loop.start_ref_id},
     );
+    try common.emitString(for_loop.item_name, out, allocator);
+    try out.appendSlice(allocator, "]: currentItem };\n  function update(nextScope, nextItem) {\n    if (arguments.length > 1) currentItem = nextItem;\n    const refs = entryRefs;\n    loopScope = { ...nextScope, [");
     try common.emitString(for_loop.item_name, out, allocator);
     try out.appendSlice(allocator, "]: currentItem };\n");
     for (for_loop.body) |node| {
@@ -541,7 +545,7 @@ fn emitKeyedGenericLoopHelper(
     }
     try out.appendSlice(allocator, "  }\n  const fragment = document.createDocumentFragment();\n");
     for (for_loop.body) |node| {
-        try node_codegen.emitCreateNode(node, "fragment", scope_id, out, allocator, 1, "scope", "entryRefs");
+        try node_codegen.emitCreateNode(node, "fragment", scope_id, out, allocator, 1, "loopScope", "entryRefs");
     }
     try out.appendSlice(allocator, "  function destroy() {\n    const refs = entryRefs;\n");
     for (for_loop.body) |node| {

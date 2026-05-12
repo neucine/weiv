@@ -7,13 +7,18 @@ const server = Bun.serve({
   async fetch(req) {
     const url = new URL(req.url);
     const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
-    const file = Bun.file(new URL(`.${pathname}`, import.meta.url));
+    const staticFile = Bun.file(new URL(`.${pathname}`, import.meta.url));
 
-    if (!(await file.exists())) {
-      return new Response("Not Found", { status: 404 });
+    if (await staticFile.exists()) {
+      return new Response(staticFile);
     }
 
-    return new Response(file);
+    const fallbackFile = Bun.file(new URL("./index.html", import.meta.url));
+    if (await fallbackFile.exists()) {
+      return new Response(fallbackFile);
+    }
+
+    return new Response("Not Found", { status: 404 });
   },
 });
 

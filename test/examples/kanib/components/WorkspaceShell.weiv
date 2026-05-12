@@ -4,6 +4,10 @@
       <slot name="header"></slot>
     </header>
 
+    <section class="workspace-shell__toolbar">
+      <slot name="toolbar"></slot>
+    </section>
+
     <div class="workspace-shell__body">
       <aside class="workspace-shell__sidebar">
         <slot name="sidebar"></slot>
@@ -37,8 +41,9 @@
     min-height: 100vh;
     padding: 1.25rem;
     background:
-      radial-gradient(circle at top left, rgba(255, 224, 184, 0.6), transparent 28%),
-      linear-gradient(180deg, #f8fbff 0%, #eef3f8 100%);
+      radial-gradient(circle at 12% 2%, rgba(255, 214, 166, 0.65), transparent 30%),
+      radial-gradient(circle at 88% 4%, rgba(190, 220, 255, 0.55), transparent 33%),
+      linear-gradient(180deg, #f8fbff 0%, #edf3f8 100%);
     color: #182c42;
     font-family: "IBM Plex Sans", "Helvetica Neue", sans-serif;
   }
@@ -55,7 +60,16 @@
   }
 
   .workspace-shell__header {
+    margin-bottom: 0.75rem;
+  }
+
+  .workspace-shell__toolbar {
     margin-bottom: 1rem;
+  }
+
+  .workspace-shell__main,
+  .workspace-shell__detail {
+    min-width: 0;
   }
 
   @media (max-width: 1100px) {

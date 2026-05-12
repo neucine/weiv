@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test:component": "bun test test/component",
+    "test:inspect": "bun test test/inspect",
     "test:runtime": "bun test test/runtime",
     "test:observable": "bun test test/runtime",
     "test:render": "bun test test/component",

@@ -8,12 +8,13 @@
 
     <div class="workspace-header__actions">
       <span class="workspace-header__section">{{ props.sectionLabel }}</span>
-      <button class="workspace-header__ghost" on:click="handleQueueRefresh">Refresh signals</button>
-      <button class="workspace-header__ghost" on:click="handleClearNotifications">Clear inbox</button>
+      <button class="workspace-header__ghost" on:click="handleOpenNotifications">Open notifications</button>
+      <button class="workspace-header__ghost" on:click="handleQueueRefresh">Sync updates</button>
+      <button class="workspace-header__ghost" on:click="handleClearNotifications">Clear notifications</button>
       <button class="workspace-header__primary" on:click="handleToggleSidebar">
         {{ props.collapsed ? "Expand sidebar" : "Collapse sidebar" }}
       </button>
-      <span class="workspace-header__notification">{{ props.notifications }} workspace alerts</span>
+      <span class="workspace-header__notification">{{ props.notifications }} notifications</span>
     </div>
   </div>
 </template>
@@ -37,6 +38,10 @@
     emit("queue-refresh", null);
   }
 
+  function handleOpenNotifications() {
+    emit("open-notifications", null);
+  }
+
   function handleClearNotifications() {
     emit("clear-notifications", null);
   }
@@ -53,7 +58,7 @@
     border-radius: 24px;
     background: rgba(255, 255, 255, 0.86);
     backdrop-filter: blur(12px);
-    box-shadow: 0 20px 50px rgba(24, 44, 66, 0.08);
+    box-shadow: 0 16px 42px rgba(24, 44, 66, 0.1);
   }
 
   .workspace-header__eyebrow,
@@ -89,9 +94,18 @@
     color: #30455d;
   }
 
+  .workspace-header__ghost:hover {
+    border-color: #aebbc9;
+    background: #f7fafc;
+  }
+
   .workspace-header__primary {
     border: none;
     background: #182c42;
     color: #fff;
+  }
+
+  .workspace-header__primary:hover {
+    background: #0f2136;
   }
 </style>

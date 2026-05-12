@@ -347,13 +347,13 @@ pub const Graph = struct {
         try out.appendSlice(allocator, "    <meta charset=\"utf-8\" />\n");
         try out.appendSlice(allocator, "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n");
         try out.writer(allocator).print("    <title>{s}</title>\n", .{page_title});
-        try out.appendSlice(allocator, "    <link rel=\"stylesheet\" href=\"./styles.css\" />\n");
+        try out.appendSlice(allocator, "    <link rel=\"stylesheet\" href=\"/styles.css\" />\n");
         if (import_map.len > 0) {
             try out.appendSlice(allocator, import_map);
         }
         try out.appendSlice(allocator, "  </head>\n  <body>\n");
         try out.appendSlice(allocator, "    <div id=\"app\"></div>\n");
-        try out.appendSlice(allocator, "    <script type=\"module\" src=\"./main.mjs\"></script>\n");
+        try out.appendSlice(allocator, "    <script type=\"module\" src=\"/main.mjs\"></script>\n");
         try out.appendSlice(allocator, "  </body>\n</html>\n");
 
         return try out.toOwnedSlice(allocator);
@@ -385,7 +385,7 @@ pub const Graph = struct {
         for (specifiers.items, 0..) |specifier, i| {
             try out.appendSlice(allocator, "        \"");
             try out.appendSlice(allocator, specifier);
-            try out.appendSlice(allocator, "\": \"./node_modules/");
+            try out.appendSlice(allocator, "\": \"/node_modules/");
             try out.appendSlice(allocator, specifier);
             try out.appendSlice(allocator, "\"");
             if (i + 1 < specifiers.items.len) {
@@ -427,13 +427,18 @@ pub const Graph = struct {
             \\  async fetch(req) {{
             \\    const url = new URL(req.url);
             \\    const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
-            \\    const file = Bun.file(new URL(`.${{pathname}}`, import.meta.url));
+            \\    const staticFile = Bun.file(new URL(`.${{pathname}}`, import.meta.url));
             \\
-            \\    if (!(await file.exists())) {{
-            \\      return new Response("Not Found", {{ status: 404 }});
+            \\    if (await staticFile.exists()) {{
+            \\      return new Response(staticFile);
             \\    }}
             \\
-            \\    return new Response(file);
+            \\    const fallbackFile = Bun.file(new URL("./index.html", import.meta.url));
+            \\    if (await fallbackFile.exists()) {{
+            \\      return new Response(fallbackFile);
+            \\    }}
+            \\
+            \\    return new Response("Not Found", {{ status: 404 }});
             \\  }},
             \\}});
             \\

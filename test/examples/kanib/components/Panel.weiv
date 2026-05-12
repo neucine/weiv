@@ -31,8 +31,14 @@
   .panel {
     border: 1px solid #d7e0e8;
     border-radius: 18px;
-    background: #fff;
-    box-shadow: 0 18px 40px rgba(24, 44, 66, 0.08);
+    background: linear-gradient(180deg, #ffffff 0%, #fdfefe 100%);
+    box-shadow: 0 14px 34px rgba(24, 44, 66, 0.08);
+    transition: box-shadow 180ms ease, border-color 180ms ease;
+  }
+
+  .panel:hover {
+    border-color: #cfdbe7;
+    box-shadow: 0 18px 42px rgba(24, 44, 66, 0.12);
   }
 
   .panel__header {

@@ -13,6 +13,18 @@
     </section>
 
     <section class="workspace-sidebar__section">
+      <p class="workspace-sidebar__label">Projects</p>
+      <button
+        for="project in projects()"
+        bind:class="projectClass(project.id)"
+        on:click="selectProject(project.id)"
+      >
+        <span>{{ project.key }}</span>
+        <small>{{ project.name }}</small>
+      </button>
+    </section>
+
+    <section class="workspace-sidebar__section">
       <p class="workspace-sidebar__label">Views</p>
       <button bind:class="itemClass(overviewPath())" on:click="showOverview">
         <span>Overview</span>
@@ -25,6 +37,10 @@
       <button bind:class="itemClass(boardPath())" on:click="showBoard">
         <span>Board</span>
         <small>status grouped work</small>
+      </button>
+      <button bind:class="itemClass(notificationsPath())" on:click="showNotifications">
+        <span>Notifications</span>
+        <small>mentions and activity</small>
       </button>
       <button bind:class="itemClass(membersPath())" on:click="showMembers">
         <span>Members</span>
@@ -44,14 +60,17 @@
   import {
     boardRoute,
     issuesRoute,
+    listProjects,
     listWorkspaces,
     membersRoute,
+    notificationsRoute,
     settingsRoute,
     workspaceRoute
   } from "../state/workspace.ts";
 
   export interface Props {
     currentWorkspaceId: string;
+    selectedProjectId: string;
     currentPath: string;
     collapsed: boolean;
     statusMessage: string;
@@ -65,6 +84,10 @@
 
   function workspaces() {
     return listWorkspaces();
+  }
+
+  function projects() {
+    return listProjects(props.currentWorkspaceId);
   }
 
   function overviewPath() {
@@ -83,6 +106,10 @@
     return membersRoute(props.currentWorkspaceId);
   }
 
+  function notificationsPath() {
+    return notificationsRoute(props.currentWorkspaceId);
+  }
+
   function settingsPath() {
     return settingsRoute(props.currentWorkspaceId);
   }
@@ -95,6 +122,12 @@
 
   function workspaceClass(workspaceId: string) {
     return props.currentWorkspaceId === workspaceId
+      ? "workspace-sidebar__workspace workspace-sidebar__workspace--active"
+      : "workspace-sidebar__workspace";
+  }
+
+  function projectClass(projectId: string) {
+    return props.selectedProjectId === projectId
       ? "workspace-sidebar__workspace workspace-sidebar__workspace--active"
       : "workspace-sidebar__workspace";
   }
@@ -115,12 +148,20 @@
     emit("navigate", membersPath());
   }
 
+  function showNotifications() {
+    emit("navigate", notificationsPath());
+  }
+
   function showSettings() {
     emit("navigate", settingsPath());
   }
 
   function selectWorkspace(workspaceId: string) {
     emit("switch-workspace", workspaceId);
+  }
+
+  function selectProject(projectId: string) {
+    emit("switch-project", projectId);
   }
 </script>
 
@@ -162,6 +203,11 @@
     color: #42556c;
   }
 
+  .workspace-sidebar__workspace:hover {
+    border-color: #c8d6e5;
+    background: #fbfdff;
+  }
+
   .workspace-sidebar__workspace--active {
     border-color: #2f7f73;
     box-shadow: inset 0 0 0 1px rgba(47, 127, 115, 0.16);
@@ -171,6 +217,11 @@
   .workspace-sidebar__item {
     border: 1px solid #dde5ed;
     color: #182c42;
+  }
+
+  .workspace-sidebar__item:hover {
+    border-color: #c2d0df;
+    background: #f6faff;
   }
 
   .workspace-sidebar__item--active {

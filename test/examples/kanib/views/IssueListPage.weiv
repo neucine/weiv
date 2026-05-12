@@ -3,7 +3,7 @@
     <template slot:header>
       <div>
         <h2>Issue list</h2>
-        <p class="activity-feed__subhead">{{ props.workspaceId }} · {{ visibleIssues().length }} visible issues</p>
+        <p class="activity-feed__subhead">{{ projectLabel() }} · {{ visibleIssues().length }} visible issues</p>
       </div>
     </template>
 
@@ -40,7 +40,7 @@
   import ActivityItem from "../components/ActivityItem.weiv";
   import EmptyState from "../components/EmptyState.weiv";
   import Panel from "../components/Panel.weiv";
-  import { issueRoute, issues, navigateTo, workspaceShared } from "../state/workspace.ts";
+  import { findProject, issueRoute, listIssues, navigateTo, workspaceShared } from "../state/workspace.ts";
 
   export type IssueFilter = "all" | "active" | "review";
 
@@ -53,7 +53,12 @@
 
   function allIssues() {
     workspaceShared.saveTick;
-    return issues.filter((issue) => issue.workspaceId === props.workspaceId);
+    return listIssues(props.workspaceId, workspaceShared.selectedProjectId);
+  }
+
+  function projectLabel() {
+    const project = findProject(workspaceShared.selectedProjectId);
+    return project ? `${project.key} · ${project.name}` : props.workspaceId;
   }
 
   function visibleIssues() {

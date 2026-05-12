@@ -30,7 +30,7 @@ test("classic app bundles and helper-copy flows stay healthy", async () => {
     const propsModule = readFileSync(join(bundleDir, "props.mjs"), "utf8");
     const packageJson = readFileSync(join(bundleDir, "package.json"), "utf8");
     const devServer = readFileSync(join(bundleDir, "server.ts"), "utf8");
-    if (!indexHtml.includes('<script type="module" src="./main.mjs"></script>')) {
+    if (!indexHtml.includes('<script type="module" src="/main.mjs"></script>')) {
       throw new Error("Bundled index.html missing browser module entry");
     }
     if (!browserEntry.includes('import { props as previewProps } from "./props.mjs";') ||
@@ -44,7 +44,9 @@ test("classic app bundles and helper-copy flows stay healthy", async () => {
     if (!packageJson.includes('"dev": "bun --hot server.ts"') || !packageJson.includes('"start": "bun server.ts"')) {
       throw new Error("Bundled package.json missing Bun preview scripts");
     }
-    if (!devServer.includes("const server = Bun.serve({") || !devServer.includes('pathname === "/" ? "/index.html"')) {
+    if (!devServer.includes("const server = Bun.serve({") ||
+        !devServer.includes('pathname === "/" ? "/index.html"') ||
+        !devServer.includes('new URL("./index.html", import.meta.url)')) {
       throw new Error("Bundled server.ts missing static Bun server bootstrap");
     }
     const bundleModule = await importModule(join(bundleDir, "bundle.mjs"));
@@ -485,8 +487,47 @@ test("kanib app bundle mounts and navigates through routed product flows", async
     if (!appTarget.textContent.includes("Compiler Lab overview")) {
       throw new Error("Kanib did not render the overview route on first mount");
     }
-    if (!appTarget.textContent.includes("4 workspace alerts")) {
-      throw new Error("Kanib did not render initial alert count");
+    if (!appTarget.textContent.includes("4 notifications")) {
+      throw new Error("Kanib did not render initial notification count");
+    }
+
+    const openNotificationsButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
+      element.textContent.includes("Open notifications")
+    );
+    if (!openNotificationsButton) throw new Error("Kanib is missing open notifications header action");
+    click(openNotificationsButton);
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    if (!appTarget.textContent.includes("Notifications")) {
+      throw new Error("Kanib did not navigate to the notifications route");
+    }
+    if (!appTarget.textContent.includes("unread")) {
+      throw new Error("Kanib notifications route did not render unread summary");
+    }
+
+    const designSystemsButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
+      element.textContent.includes("Design Systems")
+    );
+    if (!designSystemsButton) throw new Error("Kanib is missing Design Systems workspace switch action");
+    click(designSystemsButton);
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    if (!appTarget.textContent.includes("Design Systems overview")) {
+      throw new Error("Kanib did not switch to the Design Systems workspace");
+    }
+    if (!appTarget.textContent.includes("Define token-ready shell spacing scale")) {
+      throw new Error("Kanib right panel did not update to the selected Design Systems issue");
+    }
+
+    const themeEngineProjectButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
+      element.textContent.includes("Theme Engine")
+    );
+    if (!themeEngineProjectButton) throw new Error("Kanib is missing Theme Engine project switch action");
+    click(themeEngineProjectButton);
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    if (!appTarget.textContent.includes("Theme empty states for light + high-contrast")) {
+      throw new Error("Kanib did not switch right panel selection after changing project");
     }
 
     const issuesButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
@@ -499,6 +540,9 @@ test("kanib app bundle mounts and navigates through routed product flows", async
     if (!appTarget.textContent.includes("Issue list")) {
       throw new Error("Kanib did not navigate to the issue list route");
     }
+    if (!appTarget.textContent.includes("Theme empty states for light + high-contrast")) {
+      throw new Error("Kanib issue list did not scope to the active Design Systems project");
+    }
 
     const openButtons = findElements(fakeDocument.body, byTag("button")).filter((element) =>
       element.textContent.trim() === "Open"
@@ -506,6 +550,36 @@ test("kanib app bundle mounts and navigates through routed product flows", async
     if (openButtons.length === 0) {
       throw new Error("Kanib issue list is missing open buttons");
     }
+
+    const boardButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
+      element.textContent.includes("Board")
+    );
+    if (!boardButton) throw new Error("Kanib is missing board navigation");
+    click(boardButton);
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    if (!appTarget.textContent.includes("Backlog")) {
+      throw new Error("Kanib did not navigate to the board route");
+    }
+    if (!appTarget.textContent.includes("1 issues")) {
+      throw new Error("Kanib board did not render the expected initial column counts");
+    }
+
+    const advanceButtons = findElements(fakeDocument.body, byTag("button")).filter((element) =>
+      element.textContent.trim() === "Advance"
+    );
+    if (advanceButtons.length === 0) {
+      throw new Error("Kanib board is missing advance actions");
+    }
+    click(advanceButtons[0]);
+    await new Promise((resolve) => queueMicrotask(resolve));
+
+    if (!appTarget.textContent.includes("0 issues")) {
+      throw new Error("Kanib board advance action did not refresh grouped counts");
+    }
+
+    click(issuesButton);
+    await new Promise((resolve) => queueMicrotask(resolve));
     click(openButtons[0]);
     await new Promise((resolve) => queueMicrotask(resolve));
 
@@ -521,19 +595,19 @@ test("kanib app bundle mounts and navigates through routed product flows", async
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => queueMicrotask(resolve));
 
-    if (!appTarget.textContent.includes("5 workspace alerts")) {
+    if (!appTarget.textContent.includes("2 notifications")) {
       throw new Error("Kanib detail save did not update shared notification count");
     }
 
-    const clearInboxButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
-      element.textContent.includes("Clear inbox")
+    const clearNotificationsButton = findElements(fakeDocument.body, byTag("button")).find((element) =>
+      element.textContent.includes("Clear notifications")
     );
-    if (!clearInboxButton) throw new Error("Kanib is missing the clear inbox button");
-    click(clearInboxButton);
+    if (!clearNotificationsButton) throw new Error("Kanib is missing the clear notifications button");
+    click(clearNotificationsButton);
     await new Promise((resolve) => queueMicrotask(resolve));
 
-    if (!appTarget.textContent.includes("0 workspace alerts")) {
-      throw new Error("Kanib clear inbox did not patch the shared alert count");
+    if (!appTarget.textContent.includes("0 notifications")) {
+      throw new Error("Kanib clear notifications did not patch the shared notification count");
     }
   } finally {
     rmSync(kanibBundleDir, { recursive: true, force: true });
