@@ -13,6 +13,33 @@
 - [ ] Observable-to-region mapping — shared state wakes specific regions, not whole component
 - [ ] IDE `emit` typing — virtual declarations from `export interface Emits`
 
+## Bundler Integration
+
+Goal: `npm install @weiv/compiler` + thin plugins for each bundler. Plugin intercepts `.weiv` imports, calls the compiler, returns compiled JS. Same pattern as `@vue/compiler-sfc` or `svelte/compiler`.
+
+**Plugin architecture:**
+```
+@weiv/compiler          — core: source in, JS out
+@weiv/bun-plugin        — hooks into Bun's plugin API
+@weiv/vite-plugin       — hooks into Vite's plugin API
+```
+
+**Compiler distribution options (decision pending):**
+
+| Option | How | Pros | Cons |
+|--------|-----|------|------|
+| WASM | Compile Zig+Rust to `wasm32-wasi`, ship `.wasm` in npm | Single artifact, all platforms, no native deps | Zig+Rust cross-toolchain WASM linking is unproven; ~10% slower |
+| Native + NAPI-RS | Prebuilt binaries per platform via `optionalDependencies` | Fastest runtime, proven pattern (SWC, esbuild) | Platform matrix packaging, CI complexity |
+| CLI exec | Plugin shells out to `weiv` binary on PATH | Works today, zero new infra | Users install `weiv` separately, process-per-file overhead |
+
+**Industry reference:**
+- Svelte, Vue, Angular — compiler is pure JS, direct import. No native code.
+- SWC, esbuild, Lightning CSS, Turbopack — native code distributed as platform-specific npm packages via `optionalDependencies`, with optional WASM fallback.
+
+**Weiv compiler stats:** ~9200 lines of Zig (parse → analyze → lower → emit) + ~1700 lines of Rust (Oxc parser backend). Rewriting to JS is not viable.
+
+**Recommended path:** Start with CLI exec to validate the plugin hooks (resolve, HMR, source maps), then invest in WASM or NAPI-RS for proper npm distribution.
+
 ## Post-v1
 
 - SSR / hydration
