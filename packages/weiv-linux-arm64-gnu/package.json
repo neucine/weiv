@@ -1,0 +1,8 @@
+{
+  "name": "@weiv/weiv-linux-arm64-gnu",
+  "version": "0.1.0",
+  "private": true,
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "files": ["bin/weiv"]
+}

@@ -1,0 +1,44 @@
+{
+  "name": "weiv",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Weiv compiler CLI and bundler adapters (Bun + Vite)",
+  "types": "./types/index.d.ts",
+  "scripts": {
+    "generate:types": "node ./scripts/generate-types.mjs",
+    "prepack": "npm run generate:types"
+  },
+  "bin": {
+    "weiv": "./bin/weiv.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.mjs"
+    },
+    "./vite": {
+      "types": "./types/vite.d.ts",
+      "default": "./src/vite.mjs"
+    },
+    "./bun": {
+      "types": "./types/bun.d.ts",
+      "default": "./src/bun.mjs"
+    }
+  },
+  "optionalDependencies": {
+    "@weiv/weiv-darwin-arm64": "0.1.0",
+    "@weiv/weiv-darwin-x64": "0.1.0",
+    "@weiv/weiv-linux-x64-gnu": "0.1.0",
+    "@weiv/weiv-linux-arm64-gnu": "0.1.0",
+    "@weiv/weiv-win32-x64-msvc": "0.1.0"
+  },
+  "peerDependencies": {
+    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  }
+}

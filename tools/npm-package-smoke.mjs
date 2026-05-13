@@ -1,0 +1,112 @@
+import { cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+
+const repoRoot = process.cwd();
+const weivBin = resolve(repoRoot, "zig-out/bin/weiv");
+const tempRoot = mkdtempSync(join(tmpdir(), "weiv-npm-smoke-"));
+const packedTarballs = [];
+
+function run(cmd, args, cwd, env = process.env) {
+  execFileSync(cmd, args, {
+    cwd,
+    env,
+    stdio: "inherit"
+  });
+}
+
+function runCapture(cmd, args, cwd) {
+  return execFileSync(cmd, args, {
+    cwd,
+    encoding: "utf8"
+  }).trim();
+}
+
+function pack(dir) {
+  const raw = runCapture("npm", ["pack", "--json", dir], repoRoot);
+  const jsonStart = raw.indexOf("[");
+  if (jsonStart === -1) {
+    throw new Error(`Could not find JSON payload in npm pack output for ${dir}: ${raw}`);
+  }
+  const jsonCandidate = raw.slice(jsonStart).trim();
+  const parsed = JSON.parse(jsonCandidate);
+  const name = Array.isArray(parsed) ? parsed[0]?.filename : null;
+  if (!name) {
+    throw new Error(`Could not parse npm pack filename for ${dir}: ${raw}`);
+  }
+  const tarballPath = resolve(repoRoot, name);
+  packedTarballs.push(tarballPath);
+  return tarballPath;
+}
+
+function unpackTarball(tarballPath, destDir) {
+  mkdirSync(destDir, { recursive: true });
+  run("tar", ["-xzf", tarballPath, "-C", destDir], repoRoot);
+  const packageDir = join(destDir, "package");
+  if (!packageDir) throw new Error(`Failed to unpack tarball: ${tarballPath}`);
+  return packageDir;
+}
+
+function currentPlatformPackageDir() {
+  if (process.platform === "darwin" && process.arch === "arm64") {
+    return "./packages/weiv-darwin-arm64";
+  }
+  if (process.platform === "darwin" && process.arch === "x64") {
+    return "./packages/weiv-darwin-x64";
+  }
+  if (process.platform === "linux" && process.arch === "x64") {
+    return "./packages/weiv-linux-x64-gnu";
+  }
+  if (process.platform === "linux" && process.arch === "arm64") {
+    return "./packages/weiv-linux-arm64-gnu";
+  }
+  if (process.platform === "win32" && process.arch === "x64") {
+    return "./packages/weiv-win32-x64-msvc";
+  }
+  return null;
+}
+
+try {
+  const appRoot = join(tempRoot, "app");
+  const nodeModules = join(appRoot, "node_modules");
+  const scopedNodeModules = join(nodeModules, "@weiv");
+  mkdirSync(scopedNodeModules, { recursive: true });
+
+  const weivTar = pack("./packages/weiv");
+  const weivUnpackRoot = join(tempRoot, "weiv-unpack");
+  const weivPkgDir = unpackTarball(weivTar, weivUnpackRoot);
+  cpSync(weivPkgDir, join(nodeModules, "weiv"), { recursive: true });
+
+  const platformDir = currentPlatformPackageDir();
+  if (platformDir) {
+    const platformTar = pack(platformDir);
+    const platformUnpackRoot = join(tempRoot, "platform-unpack");
+    const platformPkgDir = unpackTarball(platformTar, platformUnpackRoot);
+    const platformPkgJson = JSON.parse(
+      runCapture("node", ["-e", `process.stdout.write(JSON.stringify(require('${platformPkgDir.replace(/\\/g, "\\\\")}/package.json')))`], repoRoot)
+    );
+    const platformName = platformPkgJson.name.split("/")[1];
+    cpSync(platformPkgDir, join(scopedNodeModules, platformName), { recursive: true });
+  }
+
+  run("node", ["--input-type=module", "-e", "import('weiv/vite').then(()=>console.log('vite export ok'))"], appRoot);
+  run("node", ["--input-type=module", "-e", "import('weiv/bun').then(()=>console.log('bun export ok'))"], appRoot);
+
+  run(
+    "node",
+    [join(nodeModules, "weiv", "bin", "weiv.mjs"), "--help"],
+    appRoot,
+    {
+      ...process.env,
+      WEIV_BINARY_PATH: weivBin,
+    }
+  );
+
+  console.log(`Smoke test completed in ${tempRoot}`);
+} finally {
+  rmSync(tempRoot, { recursive: true, force: true });
+  for (const tarball of packedTarballs) {
+    rmSync(tarball, { force: true });
+  }
+}

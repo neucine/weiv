@@ -2,6 +2,9 @@
   "name": "weiv",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "test:component": "bun test test/component",
     "test:inspect": "bun test test/inspect",
@@ -9,7 +12,10 @@
     "test:observable": "bun test test/runtime",
     "test:render": "bun test test/component",
     "cypress:direct": "bun test test/cypress/run_direct.ts",
-    "cypress:slots": "bun test test/cypress/run_slots.ts"
+    "cypress:slots": "bun test test/cypress/run_slots.ts",
+    "pkg:pack:weiv": "npm pack ./packages/weiv",
+    "pkg:pack:darwin-arm64": "npm pack ./packages/weiv-darwin-arm64",
+    "pkg:smoke": "node ./tools/npm-package-smoke.mjs"
   },
   "devDependencies": {
     "cypress": "^14.5.0",

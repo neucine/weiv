@@ -40,6 +40,16 @@ Goal: `npm install @weiv/compiler` + thin plugins for each bundler. Plugin inter
 
 **Recommended path:** Start with CLI exec to validate the plugin hooks (resolve, HMR, source maps), then invest in WASM or NAPI-RS for proper npm distribution.
 
+### Next Actions (Bun + Vite)
+
+- [ ] Create `@weiv/bun-plugin` POC using Bun plugin hooks for `.weiv` (`onResolve` + `onLoad`) and CLI-bridge compile.
+- [ ] Create `@weiv/vite-plugin` POC using Vite plugin hooks for `.weiv` (`resolveId` + `load`/`transform`) and CLI-bridge compile.
+- [ ] Add minimal sample apps proving direct `.weiv` import works in Bun and Vite dev mode.
+- [ ] Add CI smoke tests for both plugin paths (dev/build or equivalent non-interactive checks).
+- [ ] Define migration path from CLI-bridge to native or wasm compiler distribution without changing plugin user API.
+
+See: `docs/bundler-integration-plan.md`
+
 ## Post-v1
 
 - SSR / hydration

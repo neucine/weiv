@@ -1,0 +1,8 @@
+{
+  "name": "@weiv/weiv-darwin-x64",
+  "version": "0.1.0",
+  "private": true,
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "files": ["bin/weiv"]
+}

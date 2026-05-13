@@ -1,0 +1,8 @@
+{
+  "name": "@weiv/weiv-win32-x64-msvc",
+  "version": "0.1.0",
+  "private": true,
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "files": ["bin/weiv.exe"]
+}
