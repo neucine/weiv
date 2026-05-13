@@ -1,6 +1,6 @@
 # NPM Single-Package Distribution (Optional Platform Binaries)
 
-This repo now includes a scaffold for shipping `weiv` as one installable package that
+This repo now includes a scaffold for shipping `weivjs` as one installable package that
 supports both CLI and bundler adapters.
 
 ## Package Layout
@@ -8,18 +8,18 @@ supports both CLI and bundler adapters.
 - `packages/weiv`
   - CLI launcher: `bin/weiv.mjs`
   - Bundler adapters:
-    - `weiv/vite`
-    - `weiv/bun`
+    - `weivjs/vite`
+    - `weivjs/bun`
   - virtual runtime module typing:
     - `weiv:observable`
     - `weiv:router`
   - Source modules under `src/` (including runtime and binary resolver)
 - `packages/weiv-<platform>` (stubbed)
-  - `@weiv/weiv-darwin-arm64`
-  - `@weiv/weiv-darwin-x64`
-  - `@weiv/weiv-linux-x64-gnu`
-  - `@weiv/weiv-linux-arm64-gnu`
-  - `@weiv/weiv-win32-x64-msvc`
+  - `@weivjs/weiv-darwin-arm64`
+  - `@weivjs/weiv-darwin-x64`
+  - `@weivjs/weiv-linux-x64-gnu`
+  - `@weivjs/weiv-linux-arm64-gnu`
+  - `@weivjs/weiv-win32-x64-msvc`
 
 ## Resolution Order
 
@@ -36,7 +36,7 @@ supports both CLI and bundler adapters.
 1. Build platform binaries from CI.
 2. Replace placeholder files in `packages/weiv-*/bin`.
 3. Publish platform packages first.
-4. Publish `weiv` package with `optionalDependencies` pointing to matching versions.
+4. Publish `weivjs` package with `optionalDependencies` pointing to matching versions.
 
 ## Local Validation
 
@@ -48,11 +48,13 @@ npm run pkg:smoke
 
 This validates:
 
-- `weiv` tarball packs correctly
-- bundler adapter exports load (`weiv/vite`, `weiv/bun`)
+- `weivjs` tarball packs correctly
+- bundler adapter exports load (`weivjs/vite`, `weivjs/bun`)
 - CLI launcher resolves and executes with `WEIV_BINARY_PATH`
 
 ## Important
 
-Current platform packages are placeholders and intentionally exit with an error.
-They must be replaced with real binaries before publishing.
+`@weivjs/weiv-darwin-arm64` is now backed by a real binary path in this repo
+and is suitable for macOS arm64 distribution. Other platform packages still
+use placeholders and must be replaced with real binaries before full
+cross-platform publishing.

@@ -1,5 +1,15 @@
 # Weiv — v1 Roadmap
 
+## Recently Closed
+
+- [x] Ship single-package npm surface as `weivjs` with:
+  - `weiv` CLI
+  - `weivjs/vite` and `weivjs/bun` adapter exports
+  - optional `weiv:*` typings (`weiv:observable`, `weiv:router`)
+- [x] Publish macOS arm64 platform package (`@weivjs/weiv-darwin-arm64`) and `weivjs`
+- [x] Add package-level clean-install E2E verification (`npm run test:package`)
+- [x] Move VS Code extension into workspace packages and add publish scripts/docs
+
 ## Must-Have (blocking v1)
 
 - [x] Reduce `evaluate(...)` fallbacks — compile dynamic expressions to direct access
@@ -15,13 +25,13 @@
 
 ## Bundler Integration
 
-Goal: `npm install @weiv/compiler` + thin plugins for each bundler. Plugin intercepts `.weiv` imports, calls the compiler, returns compiled JS. Same pattern as `@vue/compiler-sfc` or `svelte/compiler`.
+Goal: `npm install weivjs` with thin bundler adapters. Adapter intercepts `.weiv` imports, calls the compiler, and returns compiled JS.
 
-**Plugin architecture:**
+**Current package architecture:**
 ```
-@weiv/compiler          — core: source in, JS out
-@weiv/bun-plugin        — hooks into Bun's plugin API
-@weiv/vite-plugin       — hooks into Vite's plugin API
+weivjs                 — CLI + adapter exports
+weivjs/bun             — Bun adapter surface
+weivjs/vite            — Vite adapter surface
 ```
 
 **Compiler distribution options (decision pending):**
@@ -38,17 +48,18 @@ Goal: `npm install @weiv/compiler` + thin plugins for each bundler. Plugin inter
 
 **Weiv compiler stats:** ~9200 lines of Zig (parse → analyze → lower → emit) + ~1700 lines of Rust (Oxc parser backend). Rewriting to JS is not viable.
 
-**Recommended path:** Start with CLI exec to validate the plugin hooks (resolve, HMR, source maps), then invest in WASM or NAPI-RS for proper npm distribution.
+**Current path:** CLI-exec bridge is implemented inside `weivjs` adapters. Next step is performance/distribution hardening without changing the adapter API.
 
 ### Next Actions (Bun + Vite)
 
-- [ ] Create `@weiv/bun-plugin` POC using Bun plugin hooks for `.weiv` (`onResolve` + `onLoad`) and CLI-bridge compile.
-- [ ] Create `@weiv/vite-plugin` POC using Vite plugin hooks for `.weiv` (`resolveId` + `load`/`transform`) and CLI-bridge compile.
+- [ ] Improve Bun adapter reliability for larger apps (watch rebuild behavior, diagnostics polish).
+- [ ] Improve Vite adapter reliability for larger apps (watch rebuild behavior, diagnostics polish).
 - [ ] Add minimal sample apps proving direct `.weiv` import works in Bun and Vite dev mode.
 - [ ] Add CI smoke tests for both plugin paths (dev/build or equivalent non-interactive checks).
 - [ ] Define migration path from CLI-bridge to native or wasm compiler distribution without changing plugin user API.
+- [ ] Replace remaining non-mac platform placeholder binaries and publish full optional-dependency matrix.
 
-See: `docs/bundler-integration-plan.md`
+See: `docs/archive/bundler-integration-plan.md`
 
 ## Post-v1
 

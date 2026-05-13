@@ -9,11 +9,11 @@ The current vocabulary for this architecture is documented in
 [Terminology](./terminology.md).
 
 The current direction for the next script-side precision upgrade is documented
-in [AST Script Analysis Plan](./ast-script-analysis-plan.md).
+in [AST Script Analysis Plan](./archive/ast-script-analysis-plan.md).
 The current active next-direction for cross-component/shared state is
-documented in [Shared Observable State Design](./shared-observable-state-design.md).
+documented in [Shared Observable State Design](./archive/shared-observable-state-design.md).
 The next diagnostics collection direction is documented in
-[Compiler Diagnostics Architecture](./compiler-diagnostics-architecture.md).
+[Compiler Diagnostics Architecture](./archive/compiler-diagnostics-architecture.md).
 The current direct-browser timing flow is documented in
 [Runtime Scheduling](./runtime-scheduling.md).
 
@@ -97,7 +97,7 @@ Current slot behavior includes:
 
 ## Router
 
-The runtime router (`src/runtime/router.ts`) provides:
+The runtime router (`packages/weiv/src/runtime/router.ts`) provides:
 
 - route matching with static, `:param`, and `*` wildcard segments
 - nested routes with parent preservation and child swapping

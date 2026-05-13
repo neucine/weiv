@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { isObservable, observable, observableBrandSymbol, snapshot, subscribe } from "../../src/runtime/observable";
+import { isObservable, observable, observableBrandSymbol, snapshot, subscribe } from "../../packages/weiv/src/runtime/observable";
 
 test("observable batches multiple sync writes into one notification", async () => {
   const state = observable({ count: 0, label: "draft" });

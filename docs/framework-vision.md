@@ -392,7 +392,7 @@ These should be future phases, not day-one obligations.
 
 Data-fetching should not be required to prove the core framework.
 
-A runtime-level router now exists (`src/runtime/router.ts`) as a companion
+A runtime-level router now exists (`packages/weiv/src/runtime/router.ts`) as a companion
 module. It integrates with the existing `mountIntoBoundary`/`destroy` component
 lifecycle and uses the observable runtime for reactive route state. It was
 implemented as a pure runtime module with no compiler changes required.
@@ -459,7 +459,7 @@ The intended maturity path should be:
 
 ### Phase 4: Ecosystem Foundations
 
-- ~~router~~ (done — runtime-level, `src/runtime/router.ts`)
+- ~~router~~ (done — runtime-level, `packages/weiv/src/runtime/router.ts`)
 - testing utilities
 - async resource primitives if actually needed
 - form helpers

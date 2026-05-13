@@ -1,8 +1,26 @@
 {
-  "name": "@weiv/weiv-darwin-arm64",
+  "name": "@weivjs/weiv-darwin-arm64",
   "version": "0.1.0",
-  "private": true,
-  "os": ["darwin"],
-  "cpu": ["arm64"],
-  "files": ["bin/weiv"]
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "bin/weiv"
+  ],
+  "description": "Weiv native binary for weiv-darwin-arm64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/affon-ai/weiv.git"
+  },
+  "bugs": {
+    "url": "https://github.com/affon-ai/weiv/issues"
+  },
+  "homepage": "https://github.com/affon-ai/weiv#readme",
+  "publishConfig": {
+    "access": "public"
+  }
 }

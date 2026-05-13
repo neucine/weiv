@@ -1,4 +1,4 @@
-import { observable } from "@weiv/runtime";
+import { observable } from "weiv:observable";
 
 export type WorkspaceSummary = {
   id: string;

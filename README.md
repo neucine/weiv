@@ -56,6 +56,16 @@ cd ./dist
 bun server.ts
 ```
 
+## NPM Package
+
+`weivjs` is now published with:
+
+- CLI command: `weiv`
+- bundler adapters: `weivjs/vite`, `weivjs/bun`
+- optional typings: `weiv:observable`, `weiv:router`
+
+See packaging details in [NPM Single-Package Distribution](./docs/npm-single-package-distribution.md).
+
 ## Learn More
 
 - [Docs Index](./docs/README.md)
@@ -71,4 +81,5 @@ zig build test
 zig build component-test
 zig build runtime-test
 zig build test-all
+npm run test:package
 ```

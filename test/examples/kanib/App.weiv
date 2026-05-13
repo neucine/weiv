@@ -62,7 +62,7 @@
 </template>
 
 <script lang="ts">
-  import { createRouter } from "@weiv/runtime";
+  import { createRouter } from "weiv:router";
   import IssueListPage from "./views/IssueListPage.weiv";
   import OverviewPage from "./views/OverviewPage.weiv";
   import DetailPanel from "./components/DetailPanel.weiv";

@@ -1,8 +1,26 @@
 {
-  "name": "@weiv/weiv-win32-x64-msvc",
+  "name": "@weivjs/weiv-win32-x64-msvc",
   "version": "0.1.0",
-  "private": true,
-  "os": ["win32"],
-  "cpu": ["x64"],
-  "files": ["bin/weiv.exe"]
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/weiv.exe"
+  ],
+  "description": "Weiv native binary for weiv-win32-x64-msvc",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/affon-ai/weiv.git"
+  },
+  "bugs": {
+    "url": "https://github.com/affon-ai/weiv/issues"
+  },
+  "homepage": "https://github.com/affon-ai/weiv#readme",
+  "publishConfig": {
+    "access": "public"
+  }
 }

@@ -150,7 +150,7 @@ For the larger verification app, we should eventually have:
 The larger verification app should become part of the normal regression story,
 not just a one-off demo.
 
-Use [Testing Implementation Plan](./testing-implementation-plan.md) for the
+Use [Testing Implementation Plan](./archive/testing-implementation-plan.md) for the
 concrete rollout steps.
 Use [Testing Capability Matrix](./testing-capability-matrix.md) for the
 required Weiv feature coverage of the flagship app.

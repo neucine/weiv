@@ -5,11 +5,11 @@ import { join } from "node:path";
 const require = createRequire(import.meta.url);
 
 const PLATFORM_PACKAGES = {
-  "darwin-arm64": "@weiv/weiv-darwin-arm64",
-  "darwin-x64": "@weiv/weiv-darwin-x64",
-  "linux-x64": "@weiv/weiv-linux-x64-gnu",
-  "linux-arm64": "@weiv/weiv-linux-arm64-gnu",
-  "win32-x64": "@weiv/weiv-win32-x64-msvc"
+  "darwin-arm64": "@weivjs/weiv-darwin-arm64",
+  "darwin-x64": "@weivjs/weiv-darwin-x64",
+  "linux-x64": "@weivjs/weiv-linux-x64-gnu",
+  "linux-arm64": "@weivjs/weiv-linux-arm64-gnu",
+  "win32-x64": "@weivjs/weiv-win32-x64-msvc"
 };
 
 export function resolveWeivBinaryPath() {

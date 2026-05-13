@@ -8,9 +8,9 @@ The normalized vocabulary for this model lives in
 [Terminology](./terminology.md).
 
 The next implementation-focused upgrade for script-side precision is documented
-in [AST Script Analysis Plan](./ast-script-analysis-plan.md).
+in [AST Script Analysis Plan](./archive/ast-script-analysis-plan.md).
 The current next-direction for cross-component/shared state is documented in
-[Shared Observable State Design](./shared-observable-state-design.md).
+[Shared Observable State Design](./archive/shared-observable-state-design.md).
 
 The current direction is:
 
@@ -228,7 +228,7 @@ That document is the source of truth for:
 
 ## Router
 
-The runtime includes a client-side router (`src/runtime/router.ts`) that
+The runtime includes a client-side router (`packages/weiv/src/runtime/router.ts`) that
 integrates directly with emitted component modules through the existing
 `mountIntoBoundary(start, end, props)` / `destroy()` lifecycle contract.
 

@@ -1,8 +1,26 @@
 {
-  "name": "@weiv/weiv-linux-x64-gnu",
+  "name": "@weivjs/weiv-linux-x64-gnu",
   "version": "0.1.0",
-  "private": true,
-  "os": ["linux"],
-  "cpu": ["x64"],
-  "files": ["bin/weiv"]
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/weiv"
+  ],
+  "description": "Weiv native binary for weiv-linux-x64-gnu",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/affon-ai/weiv.git"
+  },
+  "bugs": {
+    "url": "https://github.com/affon-ai/weiv/issues"
+  },
+  "homepage": "https://github.com/affon-ai/weiv#readme",
+  "publishConfig": {
+    "access": "public"
+  }
 }

@@ -6,16 +6,23 @@
     "packages/*"
   ],
   "scripts": {
+    "weiv": "zig build run --",
+    "test:zig": "zig build test",
+    "test:zig:all": "zig build test-all",
     "test:component": "bun test test/component",
     "test:inspect": "bun test test/inspect",
     "test:runtime": "bun test test/runtime",
-    "test:observable": "bun test test/runtime",
-    "test:render": "bun test test/component",
+    "test:observable": "bun test test/runtime/observable.test.ts",
+    "test:router": "bun test test/runtime/router.test.ts",
+    "test:package": "node ./test/package/package-e2e.test.mjs",
     "cypress:direct": "bun test test/cypress/run_direct.ts",
     "cypress:slots": "bun test test/cypress/run_slots.ts",
-    "pkg:pack:weiv": "npm pack ./packages/weiv",
+    "pkg:pack:weivjs": "npm pack ./packages/weiv",
     "pkg:pack:darwin-arm64": "npm pack ./packages/weiv-darwin-arm64",
-    "pkg:smoke": "node ./tools/npm-package-smoke.mjs"
+    "pkg:smoke": "node ./tools/npm-package-smoke.mjs",
+    "pkg:release-check": "node ./tools/npm-release-check.mjs",
+    "vscode:package": "tools/publish-vscode.sh --dry-run",
+    "vscode:publish": "tools/publish-vscode.sh --publish"
   },
   "devDependencies": {
     "cypress": "^14.5.0",

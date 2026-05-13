@@ -45,8 +45,8 @@ function rewriteRuntimeImports(code) {
 }
 
 export function weiv() {
-  const observableRuntimePath = fileURLToPath(new URL("./runtime/observable.ts", import.meta.url));
-  const routerRuntimePath = fileURLToPath(new URL("./runtime/router.ts", import.meta.url));
+  const observableRuntimePath = fileURLToPath(new URL("./runtime/observable.js", import.meta.url));
+  const routerRuntimePath = fileURLToPath(new URL("./runtime/router.js", import.meta.url));
 
   return {
     name: "weiv",

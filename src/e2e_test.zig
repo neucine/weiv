@@ -2020,9 +2020,9 @@ test "kanib app emits multi-file app emit" {
     try std.testing.expect(std.mem.indexOf(u8, bundle_js, "\"DetailPanel\": Component_") != null);
     try std.testing.expect(std.mem.indexOf(u8, root_module_js, "queueMicrotask") != null);
     try std.testing.expect(std.mem.indexOf(u8, root_module_js, "registerExternalSaveListener") != null);
-    try std.testing.expect(std.mem.indexOf(u8, root_module_js, "./__weiv_runtime/index.js") != null);
+    try std.testing.expect(std.mem.indexOf(u8, root_module_js, "./__weiv_runtime/router.js") != null);
     try std.testing.expect(std.mem.indexOf(u8, shared_module_js, "export const workspaceShared") != null);
-    try std.testing.expect(std.mem.indexOf(u8, shared_module_js, "import { observable } from \"../__weiv_runtime/index.js\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, shared_module_js, "import { observable } from \"../__weiv_runtime/observable.js\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, shared_module_js, "export const workspaceShared = observable({") != null);
     try std.testing.expect(std.mem.indexOf(u8, shared_module_js, "emitExternalSavePulse") != null);
     try std.testing.expect(std.mem.indexOf(u8, observable_module_js, "export { observable } from \"./observable.js\";") != null);

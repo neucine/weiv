@@ -9,7 +9,7 @@ The app domain is secondary. The primary goal is to ensure one medium-scale app
 exercises a wide enough slice of `weiv` itself.
 
 Use [Testing Strategy](./testing-strategy.md) for the overall testing shape and
-[Testing Implementation Plan](./testing-implementation-plan.md) for rollout
+[Testing Implementation Plan](./archive/testing-implementation-plan.md) for rollout
 sequencing.
 
 ## Coverage Rule

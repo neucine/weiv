@@ -6,14 +6,13 @@ first-class bundler integration for `.weiv` imports.
 ## Goals
 
 - Allow importing `.weiv` files directly in Bun and Vite projects.
-- Keep compiler semantics in `@weiv/compiler`; bundler plugins stay thin.
+- Keep compiler semantics in the `weiv` CLI; bundler adapters stay thin.
 - Start with a reliable, easy-to-ship bridge (`CLI exec`) and then optimize.
 
-## Target Packages
+## Target Package Surface
 
-- `@weiv/compiler`
-- `@weiv/bun-plugin`
-- `@weiv/vite-plugin`
+- `weivjs/bun`
+- `weivjs/vite`
 
 ## Phase 1 (Now): Plugin POC via CLI Exec
 

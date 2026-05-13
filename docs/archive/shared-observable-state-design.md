@@ -44,7 +44,7 @@ So the new rule is:
 Shared state should be created through one Weiv helper:
 
 ```ts
-import { observable } from "@weiv/runtime";
+import { observable } from "weiv:observable";
 
 export const workspace = observable({
   notifications: 3,

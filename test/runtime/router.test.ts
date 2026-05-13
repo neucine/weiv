@@ -53,7 +53,7 @@ beforeEach(() => {
 // --- Core Routing ---
 
 test("mounts the matching route component", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -75,7 +75,7 @@ test("mounts the matching route component", async () => {
 });
 
 test("push navigates to a new route", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -102,7 +102,7 @@ test("push navigates to a new route", async () => {
 });
 
 test("extracts route params from dynamic segments", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -128,7 +128,7 @@ test("extracts route params from dynamic segments", async () => {
 });
 
 test("same pattern re-uses component instance with updated props", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -164,7 +164,7 @@ test("same pattern re-uses component instance with updated props", async () => {
 });
 
 test("no matching route clears the outlet", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -188,7 +188,7 @@ test("no matching route clears the outlet", async () => {
 });
 
 test("replace does not add a history entry", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -211,7 +211,7 @@ test("replace does not add a history entry", async () => {
 });
 
 test("parses query parameters", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -233,7 +233,7 @@ test("parses query parameters", async () => {
 });
 
 test("wildcard route captures remainder", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -254,8 +254,8 @@ test("wildcard route captures remainder", async () => {
 });
 
 test("route state is observable", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
-  const { subscribe } = await import("../../src/runtime/observable");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
+  const { subscribe } = await import("../../packages/weiv/src/runtime/observable");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -284,7 +284,7 @@ test("route state is observable", async () => {
 });
 
 test("async component loading", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -308,7 +308,7 @@ test("async component loading", async () => {
 });
 
 test("destroy cleans up listeners and mounted component", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -331,7 +331,7 @@ test("destroy cleans up listeners and mounted component", async () => {
 });
 
 test("multiple params in path", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -361,7 +361,7 @@ test("multiple params in path", async () => {
 // --- Link Interception ---
 
 test("clicking an internal link navigates via router", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -397,7 +397,7 @@ test("clicking an internal link navigates via router", async () => {
 });
 
 test("clicking a link with target=_blank is not intercepted", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -432,7 +432,7 @@ test("clicking a link with target=_blank is not intercepted", async () => {
 });
 
 test("clicking an external link is not intercepted", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -464,7 +464,7 @@ test("clicking an external link is not intercepted", async () => {
 });
 
 test("ctrl+click on a link is not intercepted", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -501,7 +501,7 @@ test("ctrl+click on a link is not intercepted", async () => {
 // --- Navigation Guards ---
 
 test("beforeEach guard blocks navigation when returning false", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -530,7 +530,7 @@ test("beforeEach guard blocks navigation when returning false", async () => {
 });
 
 test("beforeEach guard redirects when returning a string", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -559,7 +559,7 @@ test("beforeEach guard redirects when returning a string", async () => {
 });
 
 test("beforeEach guard allows navigation when returning void", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -588,7 +588,7 @@ test("beforeEach guard allows navigation when returning void", async () => {
 });
 
 test("async beforeEach guard works", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -616,7 +616,7 @@ test("async beforeEach guard works", async () => {
 });
 
 test("per-route beforeEnter guard", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -646,7 +646,7 @@ test("per-route beforeEnter guard", async () => {
 });
 
 test("per-route beforeLeave guard", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -681,7 +681,7 @@ test("per-route beforeLeave guard", async () => {
 });
 
 test("unsubscribing a beforeEach guard removes it", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -710,7 +710,7 @@ test("unsubscribing a beforeEach guard removes it", async () => {
 });
 
 test("afterEach hook is called after navigation", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -743,7 +743,7 @@ test("afterEach hook is called after navigation", async () => {
 // --- Nested Routes ---
 
 test("nested routes mount parent and child", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -773,7 +773,7 @@ test("nested routes mount parent and child", async () => {
 });
 
 test("switching child routes preserves parent", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -814,7 +814,7 @@ test("switching child routes preserves parent", async () => {
 });
 
 test("nested route params are merged", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -849,7 +849,7 @@ test("nested route params are merged", async () => {
 });
 
 test("navigating away from nested route destroys all levels", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -885,7 +885,7 @@ test("navigating away from nested route destroys all levels", async () => {
 // --- Scroll Restoration ---
 
 test("scrollBehavior is called with navigation context", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);
@@ -923,7 +923,7 @@ test("scrollBehavior is called with navigation context", async () => {
 });
 
 test("scrollBehavior can scroll to element selector", async () => {
-  const { createRouter } = await import("../../src/runtime/router");
+  const { createRouter } = await import("../../packages/weiv/src/runtime/router");
 
   const target = document.createElement("div");
   document.body.appendChild(target);

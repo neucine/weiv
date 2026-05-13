@@ -21,7 +21,7 @@ Syntax highlighting for `.weiv` single-file components.
 ## Install (development)
 
 ```bash
-cd editors/vscode
+cd packages/vscode-extension
 npx @vscode/vsce package
 code --install-extension weiv-vscode-0.1.0.vsix
 ```

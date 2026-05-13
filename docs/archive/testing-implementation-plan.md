@@ -209,7 +209,7 @@ Bad uses:
 Recommended usage style:
 
 - define the shared state in a normal `.ts` module
-- create that shared state explicitly with `observable()` from `@weiv/runtime`
+- create that shared state explicitly with `observable()` from `weiv:observable`
 - import it into the relevant `.weiv` components
 - keep most component state local even when one bounded shared area
   exists

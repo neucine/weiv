@@ -12,7 +12,7 @@ is allowed to depend on.
 Keep the public runtime surface small while still giving the compiler a stable
 integration seam.
 
-The public `@weiv/runtime` story should stay simple:
+The public `weiv:observable` story should stay simple:
 
 - `observable(value)`
 

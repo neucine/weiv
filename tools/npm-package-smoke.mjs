@@ -70,13 +70,13 @@ function currentPlatformPackageDir() {
 try {
   const appRoot = join(tempRoot, "app");
   const nodeModules = join(appRoot, "node_modules");
-  const scopedNodeModules = join(nodeModules, "@weiv");
+  const scopedNodeModules = join(nodeModules, "@weivjs");
   mkdirSync(scopedNodeModules, { recursive: true });
 
   const weivTar = pack("./packages/weiv");
   const weivUnpackRoot = join(tempRoot, "weiv-unpack");
   const weivPkgDir = unpackTarball(weivTar, weivUnpackRoot);
-  cpSync(weivPkgDir, join(nodeModules, "weiv"), { recursive: true });
+  cpSync(weivPkgDir, join(nodeModules, "weivjs"), { recursive: true });
 
   const platformDir = currentPlatformPackageDir();
   if (platformDir) {
@@ -90,12 +90,12 @@ try {
     cpSync(platformPkgDir, join(scopedNodeModules, platformName), { recursive: true });
   }
 
-  run("node", ["--input-type=module", "-e", "import('weiv/vite').then(()=>console.log('vite export ok'))"], appRoot);
-  run("node", ["--input-type=module", "-e", "import('weiv/bun').then(()=>console.log('bun export ok'))"], appRoot);
+  run("node", ["--input-type=module", "-e", "import('weivjs/vite').then(()=>console.log('vite export ok'))"], appRoot);
+  run("node", ["--input-type=module", "-e", "import('weivjs/bun').then(()=>console.log('bun export ok'))"], appRoot);
 
   run(
     "node",
-    [join(nodeModules, "weiv", "bin", "weiv.mjs"), "--help"],
+    [join(nodeModules, "weivjs", "bin", "weiv.mjs"), "--help"],
     appRoot,
     {
       ...process.env,

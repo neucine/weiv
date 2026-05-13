@@ -451,7 +451,7 @@ test("kanib app emit mounts and navigates through routed product flows", async (
     const observableModule = readFileSync(join(kanibBundleDir, "__weiv_runtime", "index.js"), "utf8");
     const runtimeIndex = readFileSync(join(kanibBundleDir, "__weiv_runtime", "index.js"), "utf8");
 
-    if (!sharedModule.includes('import { observable } from "../__weiv_runtime/index.js";')) {
+    if (!sharedModule.includes('import { observable } from "../__weiv_runtime/observable.js";')) {
       throw new Error("Kanib bundle did not preserve observable helper import");
     }
     if (!sharedModule.includes("export const workspaceShared = observable({")) {

@@ -32,7 +32,7 @@ component lifecycle.
 ### Usage
 
 ```typescript
-import { createRouter } from "@weiv/runtime";
+import { createRouter } from "weiv:router";
 
 const router = createRouter({
   mode: "history",       // "history" (pushState) or "hash" (#-based)
@@ -102,5 +102,5 @@ router.beforeEach(async ({ from, to }) => {
 
 Weiv component integration currently relies on the observable brand and metadata
 contract directly rather than importing these helper wrappers from
-`@weiv/runtime`. The router works with any module that exports
+`weiv:observable`. The router works with any module that exports
 `mountIntoBoundary(start, end, props)`.

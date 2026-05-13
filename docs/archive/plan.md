@@ -134,7 +134,7 @@ Next work:
 Current state:
 
 - the public shared-state story is now:
-  - `import { observable } from "@weiv/runtime"`
+  - `import { observable } from "weiv:observable"`
   - create shared state at the source
   - consume imported observables automatically in components
 - the standalone observable runtime exists and is verified independently
