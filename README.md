@@ -5,13 +5,13 @@
 Frontend, with room to breathe.
 
 `weiv` is a compiler-first frontend framework for single-file components,
-direct DOM updates, and minimal runtime semantics.
+direct DOM updates, and zero runtime by default.
 
 - single-file components with clear template, script, and style boundaries
 - TypeScript-friendly authoring without JSX
 - plain local state by default
 - explicit shared state only when it crosses component boundaries
-- a minimal runtime with more work pushed into compiled output
+- zero runtime by default; optional tiny runtime surface when needed
 - direct DOM updates instead of a framework-wide VDOM layer
 - runtime-level routing integrated with emitted component lifecycle
 
