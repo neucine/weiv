@@ -176,8 +176,9 @@ context, but they are no longer the active top-level story.
   `--json-diagnostics` (`action`, `sourcePath`, `ok`, and structured
   diagnostics records).
 - `weiv dev` now watches and rebuilds, defaults to an ephemeral preview
-  port unless `PORT` is set, and debounces rebuilds after file changes, but
-  the loop is still polling-based and needs polish around long-running process
+  port unless `PORT` is set, debounces rebuilds after file changes, and now
+  emits normalized `weiv dev info <event>: ...` log lines; the loop is still
+  polling-based and needs further polish around long-running process
   ergonomics.
 - diagnostics are still not fully unified across every code path: the main
   failure surface is now structured, but dev-loop informational output and some

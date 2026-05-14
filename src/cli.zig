@@ -696,10 +696,8 @@ pub fn formatCliFailureDiagnosticsJson(
 }
 
 fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.Allocator) !void {
-    std.debug.print("weiv dev\n", .{});
-    std.debug.print("  root: {s}\n", .{root_path});
-    std.debug.print("  out:  {s}\n", .{out_dir});
-    std.debug.print("  starting watch/rebuild loop...\n", .{});
+    printDevInfo("session.start", "root={s} out={s}", .{ root_path, out_dir });
+    printDevInfo("watch.starting", "starting watch/rebuild loop", .{});
 
     const root_abs_path = try std.fs.cwd().realpathAlloc(allocator, root_path);
     defer allocator.free(root_abs_path);
@@ -729,17 +727,17 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
         watcher_thread.join();
     }
 
-    std.debug.print("  starting Bun preview server...\n", .{});
+    printDevInfo("server.starting", "starting Bun preview server", .{});
 
     var child = std.process.Child.init(&.{ "bun", "--hot", "server.ts" }, allocator);
     var env_map = try std.process.getEnvMap(allocator);
     defer env_map.deinit();
 
     if (env_map.get("PORT")) |port| {
-        std.debug.print("  port: {s} (from PORT)\n", .{port});
+        printDevInfo("server.port", "port={s} source=env", .{port});
     } else {
         try env_map.put("PORT", "0");
-        std.debug.print("  port: auto (ephemeral)\n", .{});
+        printDevInfo("server.port", "port=auto source=ephemeral", .{});
     }
 
     child.env_map = &env_map;
@@ -753,7 +751,7 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
     switch (term) {
         .Exited => |code| {
             if (code == 130 or code == 143) {
-                std.debug.print("  Bun preview server stopped gracefully\n", .{});
+                printDevInfo("server.stop", "preview server stopped gracefully", .{});
                 return;
             }
             if (code != 0) {
@@ -765,7 +763,7 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
         },
         .Signal => |sig| {
             if (sig == std.posix.SIG.INT or sig == std.posix.SIG.TERM) {
-                std.debug.print("  Bun preview server stopped gracefully\n", .{});
+                printDevInfo("server.stop", "preview server stopped gracefully", .{});
                 return;
             }
             const sig_msg = std.fmt.allocPrint(allocator, "ChildSignal({d})", .{sig}) catch "ChildSignal(alloc-failed)";
@@ -775,7 +773,7 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
         },
         .Stopped => |sig| {
             if (sig == std.posix.SIG.INT or sig == std.posix.SIG.TERM) {
-                std.debug.print("  Bun preview server stopped gracefully\n", .{});
+                printDevInfo("server.stop", "preview server stopped gracefully", .{});
                 return;
             }
             const sig_msg = std.fmt.allocPrint(allocator, "ChildStoppedSignal({d})", .{sig}) catch "ChildStoppedSignal(alloc-failed)";
@@ -825,27 +823,31 @@ fn devWatchLoop(context: *DevWatcherContext) void {
             if (next_fingerprint == last_handled_fingerprint) continue;
             pending_fingerprint = next_fingerprint;
             pending_since_ns = std.time.nanoTimestamp();
-            std.debug.print("  change detected, waiting for files to settle...\n", .{});
+            printDevInfo("watch.change_detected", "waiting for files to settle", .{});
             continue;
         }
 
-        std.debug.print("  rebuilding...\n", .{});
+        printDevInfo("watch.rebuild", "rebuilding", .{});
         runEmitApp(context.root_path, context.out_dir, allocator) catch |err| {
             if (err == error.Reported) {
-                std.debug.print("  rebuild blocked by diagnostics\n", .{});
+                printDevInfo("watch.rebuild_blocked", "rebuild blocked by diagnostics", .{});
             } else {
                 printCliStageError("dev rebuild", context.root_path, .bundle, "dev.rebuild_failed", err, allocator) catch {};
             }
-            std.debug.print("  watching for the next change...\n", .{});
+            printDevInfo("watch.resume", "watching for the next change", .{});
             last_handled_fingerprint = next_fingerprint;
             pending_fingerprint = null;
             continue;
         };
-        std.debug.print("  rebuild complete\n", .{});
-        std.debug.print("  watching for the next change...\n", .{});
+        printDevInfo("watch.rebuild_complete", "rebuild complete", .{});
+        printDevInfo("watch.resume", "watching for the next change", .{});
         last_handled_fingerprint = next_fingerprint;
         pending_fingerprint = null;
     }
+}
+
+fn printDevInfo(comptime event: []const u8, comptime fmt: []const u8, args: anytype) void {
+    std.debug.print("weiv dev info {s}: " ++ fmt ++ "\n", .{event} ++ args);
 }
 
 fn printCliDevMessage(
