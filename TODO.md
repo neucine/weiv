@@ -9,13 +9,18 @@
 - [x] Publish macOS arm64 platform package (`@weivjs/weiv-darwin-arm64`) and `weivjs`
 - [x] Add package-level clean-install E2E verification (`npm run test:package`)
 - [x] Move VS Code extension into workspace packages and add publish scripts/docs
+- [x] Ship canonical CLI diagnostics mode (`--json-diagnostics`) with contract tests
+- [x] Normalize `weiv dev` info logs and harden watch ergonomics (tunable poll/debounce, scan throttling)
+- [x] Scaffold UI package split:
+  - `@weivjs/ui-core` (headless behavior primitives)
+  - `@weivjs/ui-theme-default` (token/theme starter)
 
 ## Must-Have (blocking v1)
 
 - [x] Reduce `evaluate(...)` fallbacks — compile dynamic expressions to direct access
-- [ ] Diagnostics unification — structured author errors across all compiler phases
+- [x] Diagnostics unification — structured author errors across primary CLI/dev failure paths
 - [ ] App-scale verification — kanib as the primary confidence anchor
-- [ ] `weiv dev` polish — solid authoring loop, rebuild clarity, process ergonomics
+- [x] `weiv dev` polish — solid authoring loop, rebuild clarity, process ergonomics
 
 ## Should-Have (v1 quality bar)
 
@@ -69,6 +74,15 @@ See: `docs/archive/bundler-integration-plan.md`
 - Public reactivity APIs (signal/ref/proxy)
 - Testing helpers
 - Async resource primitives
+
+## UI Library Track (`@weivjs/ui-*`)
+
+- [x] Establish split architecture: headless core + themed visual layer
+- [x] Publishable package scaffolds for `@weivjs/ui-core` and `@weivjs/ui-theme-default`
+- [ ] Implement first full primitive contract (Dialog: focus restore, escape, outside click semantics)
+- [ ] Add core form-control primitives (Field, Input, Select, Checkbox, Radio)
+- [ ] Add default theme variants and density modes
+- [ ] Add UI package integration examples in Kanib or dedicated sample app
 
 ## VS Code Extension DX
 
