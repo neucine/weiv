@@ -853,8 +853,8 @@ fn parseJsModuleImports(source: []const u8, allocator: std.mem.Allocator) ![][]u
 }
 
 fn validateRuntimeImportSpecifier(graph: *Graph, importer_path: []const u8, source_specifier: []const u8) !void {
+    _ = importer_path;
     if (std.fs.path.isAbsolute(source_specifier)) {
-        std.debug.print("error: unsupported absolute runtime import in {s}: {s}\n", .{ importer_path, source_specifier });
         return error.UnsupportedRuntimeImport;
     }
 
@@ -873,7 +873,6 @@ fn validateRuntimeImportSpecifier(graph: *Graph, importer_path: []const u8, sour
     }
 
     if (!isBrowserLoadableImport(source_specifier) and !isTranspilableTypeScriptModule(source_specifier)) {
-        std.debug.print("error: unsupported runtime import type in {s}: {s}\n", .{ importer_path, source_specifier });
         return error.UnsupportedRuntimeImport;
     }
 }

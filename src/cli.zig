@@ -27,11 +27,13 @@ const DevWatcherContext = struct {
     out_dir: []const u8,
     watch_root_dir: []const u8,
     ignore_dir: ?[]const u8,
+    watch_poll_ms: u64,
+    rebuild_debounce_ms: u64,
     state: *WatchState,
 };
 
-const dev_watch_poll_ms: u64 = 200;
-const dev_rebuild_debounce_ms: u64 = 300;
+const dev_watch_poll_ms_default: u64 = 200;
+const dev_rebuild_debounce_ms_default: u64 = 300;
 var json_diagnostics_mode: bool = false;
 
 pub const CliReportedError = error{Reported};
@@ -714,11 +716,15 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
     defer if (ignore_dir) |value| allocator.free(value);
 
     var watch_state = WatchState{};
+    const watch_poll_ms = readDevTimingEnvU64("WEIV_DEV_WATCH_POLL_MS", dev_watch_poll_ms_default);
+    const rebuild_debounce_ms = readDevTimingEnvU64("WEIV_DEV_REBUILD_DEBOUNCE_MS", dev_rebuild_debounce_ms_default);
     var watcher_context = DevWatcherContext{
         .root_path = root_path,
         .out_dir = out_dir,
         .watch_root_dir = watch_root_dir,
         .ignore_dir = ignore_dir,
+        .watch_poll_ms = watch_poll_ms,
+        .rebuild_debounce_ms = rebuild_debounce_ms,
         .state = &watch_state,
     };
     var watcher_thread = try std.Thread.spawn(.{}, devWatchLoop, .{&watcher_context});
@@ -798,13 +804,19 @@ fn devWatchLoop(context: *DevWatcherContext) void {
     };
     var pending_fingerprint: ?u64 = null;
     var pending_since_ns: i128 = 0;
+    var last_scan_error_log_ns: i128 = 0;
 
     while (!context.state.stop.load(.acquire)) {
-        std.Thread.sleep(dev_watch_poll_ms * std.time.ns_per_ms);
+        std.Thread.sleep(context.watch_poll_ms * std.time.ns_per_ms);
         const next_fingerprint = computeWatchFingerprint(context.watch_root_dir, context.ignore_dir, allocator) catch |err| {
-            printCliStageError("dev watch scan", context.root_path, .bundle, "dev.watch_scan_failed", err, allocator) catch {};
+            const now_ns = std.time.nanoTimestamp();
+            if (last_scan_error_log_ns == 0 or now_ns - last_scan_error_log_ns >= 5 * std.time.ns_per_s) {
+                printCliStageError("dev watch scan", context.root_path, .bundle, "dev.watch_scan_failed", err, allocator) catch {};
+                last_scan_error_log_ns = now_ns;
+            }
             continue;
         };
+        last_scan_error_log_ns = 0;
 
         if (pending_fingerprint) |expected| {
             if (next_fingerprint == last_handled_fingerprint) {
@@ -816,7 +828,7 @@ fn devWatchLoop(context: *DevWatcherContext) void {
                 pending_since_ns = std.time.nanoTimestamp();
                 continue;
             }
-            if (std.time.nanoTimestamp() - pending_since_ns < dev_rebuild_debounce_ms * std.time.ns_per_ms) {
+            if (std.time.nanoTimestamp() - pending_since_ns < context.rebuild_debounce_ms * std.time.ns_per_ms) {
                 continue;
             }
         } else {
@@ -893,6 +905,7 @@ fn computeWatchFingerprint(
     while (try walker.next()) |entry| {
         if (entry.kind != .file) continue;
         if (shouldIgnoreWatchedPath(root_dir_path, entry.path, ignore_dir, allocator)) continue;
+        if (!isWatchRelevantFile(entry.path)) continue;
 
         const stat = try dir.statFile(entry.path);
         hasher.update(entry.path);
@@ -916,6 +929,23 @@ fn shouldIgnoreWatchedPath(
     defer allocator.free(abs_path);
     return std.mem.startsWith(u8, abs_path, ignored) and
         (abs_path.len == ignored.len or abs_path[ignored.len] == std.fs.path.sep);
+}
+
+fn isWatchRelevantFile(path: []const u8) bool {
+    return std.mem.endsWith(u8, path, ".weiv") or
+        std.mem.endsWith(u8, path, ".ts") or
+        std.mem.endsWith(u8, path, ".mts") or
+        std.mem.endsWith(u8, path, ".js") or
+        std.mem.endsWith(u8, path, ".mjs") or
+        std.mem.endsWith(u8, path, ".css") or
+        std.mem.endsWith(u8, path, ".json") or
+        std.mem.endsWith(u8, path, ".html");
+}
+
+fn readDevTimingEnvU64(name: []const u8, default_value: u64) u64 {
+    const value = std.process.getEnvVarOwned(std.heap.page_allocator, name) catch return default_value;
+    defer std.heap.page_allocator.free(value);
+    return std.fmt.parseUnsigned(u64, value, 10) catch default_value;
 }
 
 pub fn formatComponentAnalysisReport(model: component.ComponentModel, allocator: std.mem.Allocator) ![]u8 {

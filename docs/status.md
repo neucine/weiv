@@ -178,8 +178,9 @@ context, but they are no longer the active top-level story.
 - `weiv dev` now watches and rebuilds, defaults to an ephemeral preview
   port unless `PORT` is set, debounces rebuilds after file changes, and now
   emits normalized `weiv dev info <event>: ...` log lines; the loop is still
-  polling-based and needs further polish around long-running process
-  ergonomics.
+  polling-based but now supports tuning via `WEIV_DEV_WATCH_POLL_MS` and
+  `WEIV_DEV_REBUILD_DEBOUNCE_MS`, limits scans to watch-relevant source files,
+  and throttles repeated scan-failure diagnostics.
 - diagnostics are still not fully unified across every code path: the main
   failure surface is now structured, but dev-loop informational output and some
   secondary internals still need normalization.
