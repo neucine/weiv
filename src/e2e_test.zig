@@ -2321,6 +2321,55 @@ test "cli failure formatter json reports ok true when no fatal diagnostics" {
     try std.testing.expect(std.mem.indexOf(u8, json, "\"fatal\": false") != null);
 }
 
+test "cli failure formatter json keeps stable canonical shape" {
+    const allocator = std.testing.allocator;
+    var bag = compiler_diagnostics.DiagnosticBag.init();
+    defer bag.deinit(allocator);
+
+    try bag.appendOwned(
+        allocator,
+        "emit.js_failed",
+        .@"error",
+        "emit js (InvalidTemplate)",
+        .emit,
+        "test/examples/sample.weiv",
+        null,
+        null,
+        true,
+    );
+
+    const diagnostics = try bag.toOwnedSlice(allocator);
+    defer {
+        for (diagnostics) |*diagnostic| diagnostic.deinit(allocator);
+        allocator.free(diagnostics);
+    }
+
+    const json = try cli.formatCliFailureDiagnosticsJson("emit js", "test/examples/sample.weiv", diagnostics, allocator);
+    defer allocator.free(json);
+
+    const expected =
+        \\{
+        \\  "action": "emit js",
+        \\  "sourcePath": "test/examples/sample.weiv",
+        \\  "ok": false,
+        \\  "diagnostics": [
+        \\    {
+        \\      "code": "emit.js_failed",
+        \\      "severity": "error",
+        \\      "stage": "emit",
+        \\      "message": "emit js (InvalidTemplate)",
+        \\      "sourcePath": "test/examples/sample.weiv",
+        \\      "span": null,
+        \\      "location": null,
+        \\      "fatal": true
+        \\    }
+        \\  ]
+        \\}
+        \\
+    ;
+    try std.testing.expectEqualStrings(expected, json);
+}
+
 test "validate app reports invalid scoped style diagnostics" {
     const allocator = std.testing.allocator;
     var temp_dir = std.testing.tmpDir(.{});
