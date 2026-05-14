@@ -1,0 +1,39 @@
+{
+  "name": "@weivjs/ui-theme-default",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Default token theme and starter styles for Weiv UI",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./tokens.css": "./src/tokens.css",
+    "./components.css": "./src/components.css"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "package.json"
+  ],
+  "peerDependencies": {
+    "@weivjs/ui-core": "^0.1.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/affon-ai/weiv.git"
+  },
+  "bugs": {
+    "url": "https://github.com/affon-ai/weiv/issues"
+  },
+  "homepage": "https://github.com/affon-ai/weiv#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "weiv",
+    "ui",
+    "theme",
+    "tokens",
+    "design-system"
+  ]
+}

@@ -14,6 +14,7 @@ Active docs:
 - [Next Stage Priorities](./next-stage-priorities.md): current milestone priorities and sequencing.
 - [NPM Single-Package Distribution](./npm-single-package-distribution.md): current packaging/publish model for `weivjs`.
 - [VS Code Publish](./vscode-publish.md): packaging and publish flow for the VS Code extension.
+- [UI Library Direction](./ui-library-direction.md): split architecture for headless core plus tokenized theme package.
 - [Runtime README](../packages/weiv/src/runtime/README.md): observable and router API reference.
 - [Testing Strategy](./testing-strategy.md): testing layers, current coverage gap, and the larger verification-app direction.
 - [Testing Capability Matrix](./testing-capability-matrix.md): required Weiv feature coverage for the flagship verification app.

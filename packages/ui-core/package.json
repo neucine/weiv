@@ -1,0 +1,33 @@
+{
+  "name": "@weivjs/ui-core",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Headless UI primitives for Weiv",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "package.json"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/affon-ai/weiv.git"
+  },
+  "bugs": {
+    "url": "https://github.com/affon-ai/weiv/issues"
+  },
+  "homepage": "https://github.com/affon-ai/weiv#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "weiv",
+    "ui",
+    "headless",
+    "components"
+  ]
+}

@@ -1,0 +1,62 @@
+[data-theme="default"] {
+  color: var(--weiv-color-text);
+  font-family: var(--weiv-font-body);
+  background: var(--weiv-color-bg);
+}
+
+.wv-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--weiv-space-2);
+  min-height: 38px;
+  padding: 0 var(--weiv-space-4);
+  border: 1px solid var(--weiv-color-primary);
+  border-radius: var(--weiv-radius-md);
+  background: var(--weiv-color-primary);
+  color: var(--weiv-color-primary-contrast);
+  font: 600 14px/1 var(--weiv-font-body);
+  box-shadow: var(--weiv-shadow-sm);
+  transition: transform var(--weiv-motion-fast) ease, box-shadow var(--weiv-motion-base) ease;
+}
+
+.wv-button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--weiv-shadow-md);
+}
+
+.wv-input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 var(--weiv-space-3);
+  border: 1px solid var(--weiv-color-border);
+  border-radius: var(--weiv-radius-md);
+  background: var(--weiv-color-surface);
+  color: var(--weiv-color-text);
+  font: 500 14px/1.2 var(--weiv-font-body);
+}
+
+.wv-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--weiv-color-primary), white 65%);
+  outline-offset: 1px;
+}
+
+.wv-field {
+  display: grid;
+  gap: var(--weiv-space-2);
+}
+
+.wv-label {
+  color: var(--weiv-color-text);
+  font: 600 13px/1.2 var(--weiv-font-body);
+}
+
+.wv-help {
+  color: var(--weiv-color-muted);
+  font: 500 12px/1.3 var(--weiv-font-body);
+}
+
+.wv-error {
+  color: var(--weiv-color-danger);
+  font: 600 12px/1.3 var(--weiv-font-body);
+}

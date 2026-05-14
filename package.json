@@ -22,7 +22,9 @@
     "pkg:smoke": "node ./tools/npm-package-smoke.mjs",
     "pkg:release-check": "node ./tools/npm-release-check.mjs",
     "vscode:package": "tools/publish-vscode.sh --dry-run",
-    "vscode:publish": "tools/publish-vscode.sh --publish"
+    "vscode:publish": "tools/publish-vscode.sh --publish",
+    "pkg:pack:ui-core": "npm pack ./packages/ui-core",
+    "pkg:pack:ui-theme-default": "npm pack ./packages/ui-theme-default"
   },
   "devDependencies": {
     "cypress": "^14.5.0",

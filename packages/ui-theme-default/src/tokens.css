@@ -1,0 +1,31 @@
+:root,
+[data-theme="default"] {
+  --weiv-color-bg: #f6f7fb;
+  --weiv-color-surface: #ffffff;
+  --weiv-color-text: #131722;
+  --weiv-color-muted: #6b7385;
+  --weiv-color-border: #d8deea;
+  --weiv-color-primary: #0b63f6;
+  --weiv-color-primary-contrast: #ffffff;
+  --weiv-color-danger: #d92d20;
+
+  --weiv-space-1: 4px;
+  --weiv-space-2: 8px;
+  --weiv-space-3: 12px;
+  --weiv-space-4: 16px;
+  --weiv-space-5: 20px;
+  --weiv-space-6: 24px;
+
+  --weiv-radius-sm: 6px;
+  --weiv-radius-md: 10px;
+  --weiv-radius-lg: 14px;
+
+  --weiv-font-body: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --weiv-font-mono: "JetBrains Mono", "SFMono-Regular", monospace;
+
+  --weiv-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --weiv-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.08);
+
+  --weiv-motion-fast: 120ms;
+  --weiv-motion-base: 180ms;
+}
