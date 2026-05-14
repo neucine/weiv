@@ -119,7 +119,7 @@ test "kanib app components build through current pipeline" {
         try readFixture(allocator, "test/examples/kanib/components/WorkspaceSidebar.weiv"),
         "test/examples/kanib/components/WorkspaceSidebar.weiv",
         0,
-        1,
+        2,
     );
     try expectComponentBuild(
         allocator,
@@ -2254,6 +2254,73 @@ test "validate app can format machine-readable json diagnostics" {
     try std.testing.expect(std.mem.indexOf(u8, json, "\"fatal\": true") != null);
 }
 
+test "cli failure formatter emits canonical machine-readable diagnostics json" {
+    const allocator = std.testing.allocator;
+    var bag = compiler_diagnostics.DiagnosticBag.init();
+    defer bag.deinit(allocator);
+
+    try bag.appendOwned(
+        allocator,
+        "cli.read_failed",
+        .@"error",
+        "read component (FileNotFound)",
+        .sfc_parse,
+        "/tmp/missing.weiv",
+        null,
+        null,
+        true,
+    );
+
+    const diagnostics = try bag.toOwnedSlice(allocator);
+    defer {
+        for (diagnostics) |*diagnostic| diagnostic.deinit(allocator);
+        allocator.free(diagnostics);
+    }
+
+    const json = try cli.formatCliFailureDiagnosticsJson("read component", "/tmp/missing.weiv", diagnostics, allocator);
+    defer allocator.free(json);
+
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"action\": \"read component\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"sourcePath\": \"/tmp/missing.weiv\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"ok\": false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"code\": \"cli.read_failed\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"severity\": \"error\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"stage\": \"sfc_parse\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"fatal\": true") != null);
+}
+
+test "cli failure formatter json reports ok true when no fatal diagnostics" {
+    const allocator = std.testing.allocator;
+    var bag = compiler_diagnostics.DiagnosticBag.init();
+    defer bag.deinit(allocator);
+
+    try bag.appendOwned(
+        allocator,
+        "binding.escape_warning",
+        .warning,
+        "local alias may escape tracked root",
+        .binding,
+        "test/examples/sample.weiv",
+        null,
+        null,
+        false,
+    );
+
+    const diagnostics = try bag.toOwnedSlice(allocator);
+    defer {
+        for (diagnostics) |*diagnostic| diagnostic.deinit(allocator);
+        allocator.free(diagnostics);
+    }
+
+    const json = try cli.formatCliFailureDiagnosticsJson("inspect invalidation-graph", "test/examples/sample.weiv", diagnostics, allocator);
+    defer allocator.free(json);
+
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"ok\": true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"severity\": \"warning\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"stage\": \"binding\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"fatal\": false") != null);
+}
+
 test "validate app reports invalid scoped style diagnostics" {
     const allocator = std.testing.allocator;
     var temp_dir = std.testing.tmpDir(.{});
@@ -2491,6 +2558,21 @@ test "component style emit diagnostics report invalid scoped css" {
     try std.testing.expectEqual(@as(usize, 1), bag.diagnostics.items.len);
     try std.testing.expectEqualStrings("style.unterminated_rule", bag.diagnostics.items[0].code);
     try std.testing.expectEqual(.emit, bag.diagnostics.items[0].stage);
+}
+
+test "kanib WorkspaceSidebar binding diagnostics stay on helper.external_state warnings" {
+    const allocator = std.testing.allocator;
+    const source = try readFixture(allocator, "test/examples/kanib/components/WorkspaceSidebar.weiv");
+    defer allocator.free(source);
+
+    var model = try component.build(source, "test/examples/kanib/components/WorkspaceSidebar.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 2), model.binding_result.diagnostics.len);
+    for (model.binding_result.diagnostics) |diagnostic| {
+        try std.testing.expectEqualStrings("warning", diagnostic.severity);
+        try std.testing.expectEqualStrings("helper.external_state", diagnostic.kind);
+    }
 }
 
 fn expectComponentBuild(

@@ -172,13 +172,16 @@ context, but they are no longer the active top-level story.
 - Binding-phase diagnostics now carry a formal `error` / `warning` / `info`
   severity model, and invalidation-graph diagnostics now surface `warning` /
   `info` levels in the inspect output while remaining inspect-only.
+- CLI failure paths now support canonical machine-readable diagnostics through
+  `--json-diagnostics` (`action`, `sourcePath`, `ok`, and structured
+  diagnostics records).
 - `weiv dev` now watches and rebuilds, defaults to an ephemeral preview
   port unless `PORT` is set, and debounces rebuilds after file changes, but
   the loop is still polling-based and needs polish around long-running process
   ergonomics.
-- diagnostics are still structurally uneven across phases: script and binding
-  analysis already accumulate structured records, but several parse and emit
-  author errors still stop compilation through the first thrown error path.
+- diagnostics are still not fully unified across every code path: the main
+  failure surface is now structured, but dev-loop informational output and some
+  secondary internals still need normalization.
 
 ## Current Health
 

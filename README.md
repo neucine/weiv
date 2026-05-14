@@ -66,6 +66,21 @@ bun server.ts
 
 See packaging details in [NPM Single-Package Distribution](./docs/npm-single-package-distribution.md).
 
+## Diagnostics JSON
+
+For tooling and machine-readable failure handling:
+
+```bash
+zig build run -- --json-diagnostics compile emit js path/to/App.weiv
+```
+
+This emits canonical diagnostics JSON with:
+
+- `action`
+- `sourcePath`
+- `ok`
+- `diagnostics` (`code`, `severity`, `stage`, `message`, `location`, `span`, `fatal`)
+
 ## Learn More
 
 - [Docs Index](./docs/README.md)

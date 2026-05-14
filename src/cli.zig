@@ -32,6 +32,7 @@ const DevWatcherContext = struct {
 
 const dev_watch_poll_ms: u64 = 200;
 const dev_rebuild_debounce_ms: u64 = 300;
+var json_diagnostics_mode: bool = false;
 
 pub const CliReportedError = error{Reported};
 
@@ -40,10 +41,17 @@ pub fn run(allocator: std.mem.Allocator) !void {
     defer args.deinit();
 
     _ = args.next();
-    const command = args.next() orelse {
+    const first = args.next() orelse {
         try printUsage();
         return;
     };
+    const command = if (std.mem.eql(u8, first, "--json-diagnostics")) blk: {
+        json_diagnostics_mode = true;
+        break :blk args.next() orelse {
+            try printUsage();
+            return;
+        };
+    } else first;
 
     if (std.mem.eql(u8, command, "inspect")) {
         const subcommand = args.next() orelse {
@@ -276,13 +284,13 @@ pub fn run(allocator: std.mem.Allocator) !void {
 
 fn loadComponent(path: []const u8, allocator: std.mem.Allocator) !LoadedComponent {
     const source = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch |err| {
-        try printCommandError("read component", path, err);
+        try printCliStageError("read component", path, .sfc_parse, "cli.read_failed", err, allocator);
         return error.Reported;
     };
     errdefer allocator.free(source);
 
     var report = component.buildReport(source, path, allocator) catch |err| {
-        try printCommandError("build component", path, err);
+        try printCliStageError("build component", path, .lowering, "component.build_failed", err, allocator);
         return error.Reported;
     };
     defer report.deinit(allocator);
@@ -293,7 +301,7 @@ fn loadComponent(path: []const u8, allocator: std.mem.Allocator) !LoadedComponen
     }
 
     var model = report.intoComponentModel() catch |err| {
-        try printCommandError("build component", path, err);
+        try printCliStageError("build component", path, .lowering, "component.model_conversion_failed", err, allocator);
         return error.Reported;
     };
     errdefer model.deinit(allocator);
@@ -317,10 +325,16 @@ fn loadComponent(path: []const u8, allocator: std.mem.Allocator) !LoadedComponen
 }
 
 fn runAnalyzeScript(path: []const u8, allocator: std.mem.Allocator) !void {
-    const source = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
+    const source = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch |err| {
+        try printCliStageError("analyze script", path, .script_analysis, "cli.read_failed", err, allocator);
+        return error.Reported;
+    };
     defer allocator.free(source);
 
-    const analysis_json = try parser_backend.analyzeScriptRaw(source, path, allocator);
+    const analysis_json = parser_backend.analyzeScriptRaw(source, path, allocator) catch |err| {
+        try printCliStageError("analyze script", path, .script_analysis, "script.backend_failure", err, allocator);
+        return error.Reported;
+    };
     defer allocator.free(analysis_json);
 
     try std.fs.File.stdout().writeAll(analysis_json);
@@ -329,13 +343,13 @@ fn runAnalyzeScript(path: []const u8, allocator: std.mem.Allocator) !void {
 
 fn runAnalyzeComponent(path: []const u8, allocator: std.mem.Allocator, json: bool) !void {
     const source = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch |err| {
-        try printCommandError("read component", path, err);
+        try printCliStageError("read component", path, .sfc_parse, "cli.read_failed", err, allocator);
         return error.Reported;
     };
     defer allocator.free(source);
 
     var report = component.buildReport(source, path, allocator) catch |err| {
-        try printCommandError("analyze component", path, err);
+        try printCliStageError("analyze component", path, .lowering, "component.build_failed", err, allocator);
         return error.Reported;
     };
     defer report.deinit(allocator);
@@ -356,7 +370,10 @@ fn runInspectBrowserPlan(path: []const u8, allocator: std.mem.Allocator) !void {
     var loaded = try loadComponent(path, allocator);
     defer loaded.deinit(allocator);
 
-    var plan = try browser_plan.lower(&loaded.model.ir_document, allocator);
+    var plan = browser_plan.lower(&loaded.model.ir_document, allocator) catch |err| {
+        try printCliStageError("inspect browser-plan", path, .browser_plan, "browser_plan.lower_failed", err, allocator);
+        return error.Reported;
+    };
     defer plan.deinit(allocator);
 
     const formatted = try browser_plan.debug.formatDocument(&plan, allocator);
@@ -368,10 +385,16 @@ fn runInspectInvalidationGraph(path: []const u8, allocator: std.mem.Allocator) !
     var loaded = try loadComponent(path, allocator);
     defer loaded.deinit(allocator);
 
-    var plan = try browser_plan.lower(&loaded.model.ir_document, allocator);
+    var plan = browser_plan.lower(&loaded.model.ir_document, allocator) catch |err| {
+        try printCliStageError("inspect invalidation-graph", path, .browser_plan, "browser_plan.lower_failed", err, allocator);
+        return error.Reported;
+    };
     defer plan.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&loaded.model, &plan, allocator);
+    const formatted = invalidation_graph.formatDocument(&loaded.model, &plan, allocator) catch |err| {
+        try printCliStageError("inspect invalidation-graph", path, .lowering, "invalidation_graph.format_failed", err, allocator);
+        return error.Reported;
+    };
     defer allocator.free(formatted);
     try std.fs.File.stdout().writeAll(formatted);
 }
@@ -384,7 +407,10 @@ fn runEmitJs(path: []const u8, allocator: std.mem.Allocator) !void {
         return error.Reported;
     }
 
-    const js = try emit_direct_js.emitModule(&loaded.model, allocator);
+    const js = emit_direct_js.emitModule(&loaded.model, allocator) catch |err| {
+        try printCliStageError("emit js", path, .emit, "emit.js_failed", err, allocator);
+        return error.Reported;
+    };
     defer allocator.free(js);
     try std.fs.File.stdout().writeAll(js);
 }
@@ -397,14 +423,17 @@ fn runEmitCss(path: []const u8, allocator: std.mem.Allocator) !void {
         return error.Reported;
     }
 
-    const css = try style.emitScopedCss(&loaded.model, allocator);
+    const css = style.emitScopedCss(&loaded.model, allocator) catch |err| {
+        try printCliStageError("emit css", path, .emit, "emit.css_failed", err, allocator);
+        return error.Reported;
+    };
     defer allocator.free(css);
     try std.fs.File.stdout().writeAll(css);
 }
 
 fn runEmitApp(root_path: []const u8, out_dir: []const u8, allocator: std.mem.Allocator) !void {
     var validation = app_emit.validateApp(root_path, allocator) catch |err| {
-        try printCommandError("validate app", root_path, err);
+        try printCliStageError("validate app", root_path, .bundle, "app.validate_failed", err, allocator);
         return error.Reported;
     };
     defer validation.deinit(allocator);
@@ -415,14 +444,14 @@ fn runEmitApp(root_path: []const u8, out_dir: []const u8, allocator: std.mem.All
     }
 
     app_emit.emitApp(root_path, out_dir, allocator) catch |err| {
-        try printCommandError("emit app", root_path, err);
+        try printCliStageError("emit app", root_path, .bundle, "app.emit_failed", err, allocator);
         return error.Reported;
     };
 }
 
 fn runValidateApp(root_path: []const u8, allocator: std.mem.Allocator, json: bool) !void {
     var validation = app_emit.validateApp(root_path, allocator) catch |err| {
-        try printCommandError("validate app", root_path, err);
+        try printCliStageError("validate app", root_path, .bundle, "app.validate_failed", err, allocator);
         return error.Reported;
     };
     defer validation.deinit(allocator);
@@ -445,6 +474,7 @@ fn runValidateApp(root_path: []const u8, allocator: std.mem.Allocator, json: boo
 fn printUsage() !void {
     try std.fs.File.stderr().writeAll(
         \\Usage:
+        \\  weiv --json-diagnostics <command...>
         \\  weiv inspect ir <path>
         \\  weiv inspect browser-plan <path>
         \\  weiv inspect invalidation-graph <path>
@@ -474,30 +504,57 @@ fn printUsage() !void {
     );
 }
 
-fn printCommandError(action: []const u8, path: []const u8, err: anyerror) !void {
-    var stderr = std.fs.File.stderr();
-    var buffer: [512]u8 = undefined;
-    var writer = stderr.writer(&buffer);
-
-    try writer.interface.print("weiv {s} failed for {s}\n", .{ action, path });
-    try writer.interface.print("  error: {s}\n", .{friendlyErrorName(err)});
-
-    try writer.interface.flush();
-}
-
 fn friendlyErrorName(err: anyerror) []const u8 {
     return @errorName(err);
 }
 
 pub fn printUnhandledError(err: anyerror) !void {
-    var stderr = std.fs.File.stderr();
-    var buffer: [512]u8 = undefined;
-    var writer = stderr.writer(&buffer);
-    try writer.interface.print("weiv failed\n  error: {s}\n", .{@errorName(err)});
-    try writer.interface.flush();
+    try printCliStageError("run", "<process>", .bundle, "cli.unhandled_error", err, std.heap.page_allocator);
+}
+
+fn printCliStageError(
+    action: []const u8,
+    source_path: []const u8,
+    stage: compiler_diagnostics.Stage,
+    code: []const u8,
+    err: anyerror,
+    allocator: std.mem.Allocator,
+) !void {
+    var bag = compiler_diagnostics.DiagnosticBag.init();
+    defer bag.deinit(allocator);
+
+    const message = try std.fmt.allocPrint(allocator, "{s} ({s})", .{ action, friendlyErrorName(err) });
+    defer allocator.free(message);
+
+    try bag.appendOwned(
+        allocator,
+        code,
+        .@"error",
+        message,
+        stage,
+        source_path,
+        null,
+        null,
+        true,
+    );
+
+    const diagnostics = try bag.toOwnedSlice(allocator);
+    defer {
+        for (diagnostics) |*diagnostic| diagnostic.deinit(allocator);
+        allocator.free(diagnostics);
+    }
+    try printComponentDiagnosticsFailure(action, source_path, diagnostics);
 }
 
 fn printComponentBuildFailure(action: []const u8, path: []const u8, report: component.ComponentBuildReport) !void {
+    if (json_diagnostics_mode) {
+        var stderr = std.fs.File.stderr();
+        const formatted = try formatComponentBuildReportJson(report, std.heap.page_allocator);
+        defer std.heap.page_allocator.free(formatted);
+        try stderr.writeAll(formatted);
+        return;
+    }
+
     var stderr = std.fs.File.stderr();
     var buffer: [1024]u8 = undefined;
     var writer = stderr.writer(&buffer);
@@ -513,6 +570,14 @@ fn printComponentDiagnosticsFailure(
     path: []const u8,
     diagnostics: []const compiler_diagnostics.Diagnostic,
 ) !void {
+    if (json_diagnostics_mode) {
+        var stderr = std.fs.File.stderr();
+        const formatted = try formatFailureDiagnosticsJson(action, path, diagnostics, std.heap.page_allocator);
+        defer std.heap.page_allocator.free(formatted);
+        try stderr.writeAll(formatted);
+        return;
+    }
+
     var stderr = std.fs.File.stderr();
     var buffer: [1024]u8 = undefined;
     var writer = stderr.writer(&buffer);
@@ -586,10 +651,48 @@ pub fn formatAppValidationDiagnosticsJson(
 }
 
 fn printAppValidationDiagnostics(root_path: []const u8, diagnostics: []const compiler_diagnostics.Diagnostic) !void {
+    if (json_diagnostics_mode) {
+        var stderr = std.fs.File.stderr();
+        const formatted = try formatAppValidationDiagnosticsJson(root_path, diagnostics, std.heap.page_allocator);
+        defer std.heap.page_allocator.free(formatted);
+        try stderr.writeAll(formatted);
+        return;
+    }
+
     var stderr = std.fs.File.stderr();
     const formatted = try formatAppValidationDiagnostics(root_path, diagnostics, std.heap.page_allocator);
     defer std.heap.page_allocator.free(formatted);
     try stderr.writeAll(formatted);
+}
+
+fn formatFailureDiagnosticsJson(
+    action: []const u8,
+    source_path: []const u8,
+    diagnostics: []const compiler_diagnostics.Diagnostic,
+    allocator: std.mem.Allocator,
+) ![]u8 {
+    var out = std.ArrayList(u8){};
+    defer out.deinit(allocator);
+    const writer = out.writer(allocator);
+
+    try writer.writeAll("{\n");
+    try writer.print("  \"action\": {f},\n", .{std.json.fmt(action, .{})});
+    try writer.print("  \"sourcePath\": {f},\n", .{std.json.fmt(source_path, .{})});
+    try writer.print("  \"ok\": {any},\n", .{!hasFatalDiagnostics(diagnostics)});
+    try writer.writeAll("  \"diagnostics\": [\n");
+    try compiler_diagnostics.writeJsonDiagnostics(writer, diagnostics, "    ");
+    try writer.writeAll("  ]\n");
+    try writer.writeAll("}\n");
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn formatCliFailureDiagnosticsJson(
+    action: []const u8,
+    source_path: []const u8,
+    diagnostics: []const compiler_diagnostics.Diagnostic,
+    allocator: std.mem.Allocator,
+) ![]u8 {
+    return formatFailureDiagnosticsJson(action, source_path, diagnostics, allocator);
 }
 
 fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.Allocator) !void {
@@ -654,7 +757,9 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
                 return;
             }
             if (code != 0) {
-                std.debug.print("weiv dev server exited with code {d}\n", .{code});
+                const err_name = std.fmt.allocPrint(allocator, "ChildExitCode({d})", .{code}) catch "ChildExitCode(alloc-failed)";
+                defer if (!std.mem.eql(u8, err_name, "ChildExitCode(alloc-failed)")) allocator.free(err_name);
+                printCliDevMessage("dev server", root_path, .bundle, "dev.server_exit_code", err_name) catch {};
                 return error.ChildProcessFailed;
             }
         },
@@ -663,7 +768,9 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
                 std.debug.print("  Bun preview server stopped gracefully\n", .{});
                 return;
             }
-            std.debug.print("weiv dev server exited from signal {d}\n", .{sig});
+            const sig_msg = std.fmt.allocPrint(allocator, "ChildSignal({d})", .{sig}) catch "ChildSignal(alloc-failed)";
+            defer if (!std.mem.eql(u8, sig_msg, "ChildSignal(alloc-failed)")) allocator.free(sig_msg);
+            printCliDevMessage("dev server", root_path, .bundle, "dev.server_signal", sig_msg) catch {};
             return error.ChildProcessFailed;
         },
         .Stopped => |sig| {
@@ -671,11 +778,15 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
                 std.debug.print("  Bun preview server stopped gracefully\n", .{});
                 return;
             }
-            std.debug.print("weiv dev server stopped by signal {d}\n", .{sig});
+            const sig_msg = std.fmt.allocPrint(allocator, "ChildStoppedSignal({d})", .{sig}) catch "ChildStoppedSignal(alloc-failed)";
+            defer if (!std.mem.eql(u8, sig_msg, "ChildStoppedSignal(alloc-failed)")) allocator.free(sig_msg);
+            printCliDevMessage("dev server", root_path, .bundle, "dev.server_stopped_signal", sig_msg) catch {};
             return error.ChildProcessFailed;
         },
         .Unknown => |status| {
-            std.debug.print("weiv dev server exited with unknown status {d}\n", .{status});
+            const status_msg = std.fmt.allocPrint(allocator, "ChildUnknownStatus({d})", .{status}) catch "ChildUnknownStatus(alloc-failed)";
+            defer if (!std.mem.eql(u8, status_msg, "ChildUnknownStatus(alloc-failed)")) allocator.free(status_msg);
+            printCliDevMessage("dev server", root_path, .bundle, "dev.server_unknown_status", status_msg) catch {};
             return error.ChildProcessFailed;
         },
     }
@@ -684,7 +795,7 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
 fn devWatchLoop(context: *DevWatcherContext) void {
     const allocator = std.heap.page_allocator;
     var last_handled_fingerprint = computeWatchFingerprint(context.watch_root_dir, context.ignore_dir, allocator) catch |err| {
-        std.debug.print("weiv dev watch failed to initialize fingerprint\n  error: {s}\n", .{@errorName(err)});
+        printCliStageError("dev watch initialize", context.root_path, .bundle, "dev.watch_init_failed", err, allocator) catch {};
         return;
     };
     var pending_fingerprint: ?u64 = null;
@@ -693,7 +804,7 @@ fn devWatchLoop(context: *DevWatcherContext) void {
     while (!context.state.stop.load(.acquire)) {
         std.Thread.sleep(dev_watch_poll_ms * std.time.ns_per_ms);
         const next_fingerprint = computeWatchFingerprint(context.watch_root_dir, context.ignore_dir, allocator) catch |err| {
-            std.debug.print("weiv dev watch scan failed\n  error: {s}\n", .{@errorName(err)});
+            printCliStageError("dev watch scan", context.root_path, .bundle, "dev.watch_scan_failed", err, allocator) catch {};
             continue;
         };
 
@@ -723,7 +834,7 @@ fn devWatchLoop(context: *DevWatcherContext) void {
             if (err == error.Reported) {
                 std.debug.print("  rebuild blocked by diagnostics\n", .{});
             } else {
-                std.debug.print("  rebuild failed\n  error: {s}\n", .{@errorName(err)});
+                printCliStageError("dev rebuild", context.root_path, .bundle, "dev.rebuild_failed", err, allocator) catch {};
             }
             std.debug.print("  watching for the next change...\n", .{});
             last_handled_fingerprint = next_fingerprint;
@@ -735,6 +846,34 @@ fn devWatchLoop(context: *DevWatcherContext) void {
         last_handled_fingerprint = next_fingerprint;
         pending_fingerprint = null;
     }
+}
+
+fn printCliDevMessage(
+    action: []const u8,
+    source_path: []const u8,
+    stage: compiler_diagnostics.Stage,
+    code: []const u8,
+    detail: []const u8,
+) !void {
+    var bag = compiler_diagnostics.DiagnosticBag.init();
+    defer bag.deinit(std.heap.page_allocator);
+    try bag.appendOwned(
+        std.heap.page_allocator,
+        code,
+        .@"error",
+        detail,
+        stage,
+        source_path,
+        null,
+        null,
+        true,
+    );
+    const diagnostics = try bag.toOwnedSlice(std.heap.page_allocator);
+    defer {
+        for (diagnostics) |*diagnostic| diagnostic.deinit(std.heap.page_allocator);
+        std.heap.page_allocator.free(diagnostics);
+    }
+    try printComponentDiagnosticsFailure(action, source_path, diagnostics);
 }
 
 fn computeWatchFingerprint(
