@@ -18,6 +18,11 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("weiv_parser_backend");
     if (target.result.os.tag == .windows) {
         exe.bundle_compiler_rt = false;
+        exe.linkSystemLibrary("ws2_32");
+        exe.linkSystemLibrary("userenv");
+        exe.addCSourceFile(.{
+            .file = b.path("src/windows_shims.c"),
+        });
     }
 
     if (target.result.os.tag == .macos) {
@@ -59,6 +64,11 @@ pub fn build(b: *std.Build) void {
     tests.linkSystemLibrary("weiv_parser_backend");
     if (target.result.os.tag == .windows) {
         tests.bundle_compiler_rt = false;
+        tests.linkSystemLibrary("ws2_32");
+        tests.linkSystemLibrary("userenv");
+        tests.addCSourceFile(.{
+            .file = b.path("src/windows_shims.c"),
+        });
     }
     if (target.result.os.tag == .macos) {
         tests.linkFramework("CoreFoundation");
