@@ -13,7 +13,7 @@ hero:
       text: Get Started
       link: /getting-started
     - theme: alt
-      text: Read the Architecture
+      text: Read the Docs
       link: /architecture
 
 features:
