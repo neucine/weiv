@@ -8,6 +8,11 @@ on:
         required: true
         type: boolean
         default: false
+      upload_release_asset:
+        description: "Upload the Windows .exe to the GitHub release"
+        required: true
+        type: boolean
+        default: true
       expected_version:
         description: "Optional package version guard (for example 0.1.0)"
         required: false
@@ -17,9 +22,10 @@ jobs:
   publish-windows-binary:
     runs-on: windows-latest
     permissions:
-      contents: read
+      contents: write
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
     defaults:
       run:
         shell: bash
@@ -51,6 +57,16 @@ jobs:
             exit 1
           fi
 
+      - name: Resolve release metadata
+        id: release_meta
+        run: |
+          version="$(node -p "require('./packages/weiv-win32-x64-msvc/package.json').version")"
+          tag="v${version}"
+          asset_name="weiv-win32-x64-msvc.exe"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
+
       - name: Build Rust parser backend
         run: cargo build --release --manifest-path libs/parser-backend/Cargo.toml
 
@@ -71,3 +87,19 @@ jobs:
       - name: Publish Windows npm package
         if: ${{ inputs.publish }}
         run: npm publish ./packages/weiv-win32-x64-msvc --access public
+
+      - name: Ensure GitHub release exists
+        if: ${{ inputs.upload_release_asset }}
+        run: |
+          gh release view "${{ steps.release_meta.outputs.tag }}" >/dev/null 2>&1 || \
+            gh release create "${{ steps.release_meta.outputs.tag }}" \
+              --target "$GITHUB_SHA" \
+              --title "${{ steps.release_meta.outputs.tag }}" \
+              --notes ""
+
+      - name: Upload Windows binary to GitHub release
+        if: ${{ inputs.upload_release_asset }}
+        run: |
+          gh release upload "${{ steps.release_meta.outputs.tag }}" \
+            "packages/weiv-win32-x64-msvc/bin/weiv.exe#${{ steps.release_meta.outputs.asset_name }}" \
+            --clobber
