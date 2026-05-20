@@ -35,23 +35,23 @@ before it should be treated as production-ready.
 
 ## Quick Start
 
-Try the included examples first:
+Install the published package:
 
 ```bash
-zig build run -- dev test/examples/todomvc/App.weiv
-zig build run -- dev test/examples/kanib/App.weiv
+npm i -D weivjs
 ```
 
-Then point it at your own root component:
+Then run the included CLI:
 
 ```bash
-zig build run -- dev path/to/App.weiv
+npx weiv --help
+npx weiv dev path/to/App.weiv
 ```
 
 If you want a static bundle instead of the dev server:
 
 ```bash
-zig build run -- compile emit app path/to/App.weiv ./dist
+npx weiv compile emit app path/to/App.weiv ./dist
 cd ./dist
 bun server.ts
 ```
@@ -71,7 +71,7 @@ See packaging details in [NPM Single-Package Distribution](./docs/npm-single-pac
 For tooling and machine-readable failure handling:
 
 ```bash
-zig build run -- --json-diagnostics compile emit js path/to/App.weiv
+npx weiv --json-diagnostics compile emit js path/to/App.weiv
 ```
 
 This emits canonical diagnostics JSON with:
@@ -87,7 +87,7 @@ This emits canonical diagnostics JSON with:
 - [Framework Vision](./docs/framework-vision.md)
 - [Current Architecture](./docs/architecture.md)
 - [Current Status](./docs/status.md)
-- [Next Stage Priorities](./docs/next-stage-priorities.md)
+- [NPM Single-Package Distribution](./docs/npm-single-package-distribution.md)
 
 ## Contributor Commands
 

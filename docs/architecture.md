@@ -1,16 +1,29 @@
 # Weiv Architecture
 
+## Purpose
+
+`weiv` is a frontend framework project intended to combine the strongest parts
+of several existing frontend approaches while avoiding the parts that feel
+ergonomically expensive.
+
+The design motivation is:
+
+- keep template, script, and style clearly separated
+- avoid JSX as the primary UI authoring model
+- avoid making explicit reactive wrappers the default way to write app code
+- use compilation aggressively where it improves ergonomics and runtime cost
+- preserve strong TypeScript support
+- keep the runtime small and understandable
+
+`weiv` is trying to be a practical, high-ergonomics frontend framework for
+application developers.
+
 ## Direction
 
 `weiv` is a compiler-first frontend framework.
 
 The normalized vocabulary for this model lives in
 [Terminology](./terminology.md).
-
-The next implementation-focused upgrade for script-side precision is documented
-in [AST Script Analysis Plan](./archive/ast-script-analysis-plan.md).
-The current next-direction for cross-component/shared state is documented in
-[Shared Observable State Design](./archive/shared-observable-state-design.md).
 
 The current direction is:
 
@@ -41,6 +54,37 @@ The intended state split is:
 - local owned state stays simple and compiler-first
 - shared state beyond the component boundary should move through a Weiv-owned
   observable runtime contract
+
+## Core Principles
+
+### Template, Script, Style Separation
+
+Single-file components are a first-class product choice. The framework centers
+template-first authoring with ordinary TypeScript and ordinary CSS.
+
+### Ordinary State First
+
+The default component state model should feel like ordinary TypeScript
+variables, object fields, and functions. Advanced runtime primitives can exist,
+but they should not become the everyday happy path.
+
+### Compiler First, Runtime Second
+
+Whenever a concern can be solved at compile time without making the mental
+model confusing, that should be preferred. The runtime should stay focused on
+mounting, lifecycle, change propagation, and scheduling rather than becoming a
+dumping ground for every abstraction.
+
+### TypeScript Native
+
+TypeScript is a design input, not a retrofit. That includes component prop
+typing, event payload typing, template-to-script validation, editor tooling,
+and diagnostics.
+
+### Explicit Boundaries Over Magic
+
+Weiv can compile aggressively without becoming mysterious. Rules should stay
+learnable, explainable, and inspectable.
 
 ## Component Syntax
 

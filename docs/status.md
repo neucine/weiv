@@ -8,12 +8,6 @@ direct-DOM browser path.
 The current vocabulary for this architecture is documented in
 [Terminology](./terminology.md).
 
-The current direction for the next script-side precision upgrade is documented
-in [AST Script Analysis Plan](./archive/ast-script-analysis-plan.md).
-The current active next-direction for cross-component/shared state is
-documented in [Shared Observable State Design](./archive/shared-observable-state-design.md).
-The next diagnostics collection direction is documented in
-[Compiler Diagnostics Architecture](./archive/compiler-diagnostics-architecture.md).
 The current direct-browser timing flow is documented in
 [Runtime Scheduling](./runtime-scheduling.md).
 

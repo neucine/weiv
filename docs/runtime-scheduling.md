@@ -169,10 +169,10 @@ and avoid trying to warn on every generic JS reference pitfall.
 
 The concrete implementation lives primarily in:
 
-- [helpers.zig](../src/compiler/emit/browser/direct_component_js/helpers.zig)
-- [direct_component_js.zig](../src/compiler/emit/browser/direct_component_js.zig)
-- [setup.zig](../src/compiler/emit/browser/direct_component_js/setup.zig)
-- [node_codegen.zig](../src/compiler/emit/browser/direct_component_js/node_codegen.zig)
+- `src/compiler/emit/browser/emit_sfc/helpers.zig`
+- `src/compiler/emit/browser/emit_sfc.zig`
+- `src/compiler/emit/browser/emit_sfc/setup.zig`
+- `src/compiler/emit/browser/emit_sfc/node_codegen.zig`
 
 ## Future Change Questions
 
