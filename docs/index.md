@@ -4,7 +4,7 @@ layout: home
 hero:
   name: ""
   text: "Frontend, with room to breathe."
-  tagline: "A compiler-first UI framework for single-file components, direct DOM updates, and a tiny optional runtime."
+  tagline: "A compiler-first UI framework for single-file components, direct DOM updates, and a near-zero optional runtime."
   image:
     src: /assets/weiv.png
     alt: Weiv
@@ -21,10 +21,10 @@ features:
     details: Keep authoring in `.weiv` single-file components and let compilation own the heavy lifting.
   - title: Direct DOM
     details: Emit targeted DOM programs instead of carrying a framework-wide VDOM layer at runtime.
-  - title: TypeScript Without JSX
-    details: Keep template, script, and style separate while staying friendly to normal TypeScript authoring.
-  - title: Small Runtime Surface
-    details: Use no runtime by default, then opt into focused helpers for observables and routing when needed.
+  - title: Reactivity Without Ceremony
+    details: Keep local state effortless and close to the component, without extra wiring or framework ceremony. Reach for explicit shared state only when truly needed.
+  - title: Near-Zero Runtime
+    details: Keep runtime cost close to zero by default. Add the helper layer only for features that benefit from it, such as observables or routing.
 ---
 
 # Why Weiv
