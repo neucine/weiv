@@ -16,6 +16,9 @@ pub fn build(b: *std.Build) void {
     exe.linkLibC();
     exe.addLibraryPath(b.path("libs/parser-backend/target/release"));
     exe.linkSystemLibrary("weiv_parser_backend");
+    if (target.result.os.tag == .windows) {
+        exe.bundle_compiler_rt = false;
+    }
 
     if (target.result.os.tag == .macos) {
         exe.linkFramework("CoreFoundation");
@@ -54,6 +57,9 @@ pub fn build(b: *std.Build) void {
     tests.linkLibC();
     tests.addLibraryPath(b.path("libs/parser-backend/target/release"));
     tests.linkSystemLibrary("weiv_parser_backend");
+    if (target.result.os.tag == .windows) {
+        tests.bundle_compiler_rt = false;
+    }
     if (target.result.os.tag == .macos) {
         tests.linkFramework("CoreFoundation");
         tests.linkFramework("Security");
