@@ -339,8 +339,8 @@ fn runAnalyzeScript(path: []const u8, allocator: std.mem.Allocator) !void {
     };
     defer allocator.free(analysis_json);
 
-    try std.io.getStdOut().writeAll(analysis_json);
-    try std.io.getStdOut().writeAll("\n");
+    try std.fs.File.stdout().writeAll(analysis_json);
+    try std.fs.File.stdout().writeAll("\n");
 }
 
 fn runAnalyzeComponent(path: []const u8, allocator: std.mem.Allocator, json: bool) !void {
@@ -380,7 +380,7 @@ fn runInspectBrowserPlan(path: []const u8, allocator: std.mem.Allocator) !void {
 
     const formatted = try browser_plan.debug.formatDocument(&plan, allocator);
     defer allocator.free(formatted);
-    try std.io.getStdOut().writeAll(formatted);
+    try std.fs.File.stdout().writeAll(formatted);
 }
 
 fn runInspectInvalidationGraph(path: []const u8, allocator: std.mem.Allocator) !void {
@@ -398,7 +398,7 @@ fn runInspectInvalidationGraph(path: []const u8, allocator: std.mem.Allocator) !
         return error.Reported;
     };
     defer allocator.free(formatted);
-    try std.io.getStdOut().writeAll(formatted);
+    try std.fs.File.stdout().writeAll(formatted);
 }
 
 fn runEmitJs(path: []const u8, allocator: std.mem.Allocator) !void {
@@ -414,7 +414,7 @@ fn runEmitJs(path: []const u8, allocator: std.mem.Allocator) !void {
         return error.Reported;
     };
     defer allocator.free(js);
-    try std.io.getStdOut().writeAll(js);
+    try std.fs.File.stdout().writeAll(js);
 }
 
 fn runEmitCss(path: []const u8, allocator: std.mem.Allocator) !void {
@@ -430,7 +430,7 @@ fn runEmitCss(path: []const u8, allocator: std.mem.Allocator) !void {
         return error.Reported;
     };
     defer allocator.free(css);
-    try std.io.getStdOut().writeAll(css);
+    try std.fs.File.stdout().writeAll(css);
 }
 
 fn runEmitApp(root_path: []const u8, out_dir: []const u8, allocator: std.mem.Allocator) !void {
@@ -461,9 +461,9 @@ fn runValidateApp(root_path: []const u8, allocator: std.mem.Allocator, json: boo
     if (json) {
         const formatted = try formatAppValidationDiagnosticsJson(root_path, validation.diagnostics, allocator);
         defer allocator.free(formatted);
-        try std.io.getStdOut().writeAll(formatted);
+        try std.fs.File.stdout().writeAll(formatted);
     } else if (validation.diagnostics.len == 0) {
-        try std.io.getStdOut().writeAll("app validation ok\n");
+        try std.fs.File.stdout().writeAll("app validation ok\n");
     } else {
         try printAppValidationDiagnostics(root_path, validation.diagnostics);
     }
@@ -474,7 +474,7 @@ fn runValidateApp(root_path: []const u8, allocator: std.mem.Allocator, json: boo
 }
 
 fn printUsage() !void {
-    try std.io.getStdErr().writeAll(
+    try std.fs.File.stderr().writeAll(
         \\Usage:
         \\  weiv --json-diagnostics <command...>
         \\  weiv inspect ir <path>
@@ -550,14 +550,14 @@ fn printCliStageError(
 
 fn printComponentBuildFailure(action: []const u8, path: []const u8, report: component.ComponentBuildReport) !void {
     if (json_diagnostics_mode) {
-        var stderr = std.io.getStdErr();
+        var stderr = std.fs.File.stderr();
         const formatted = try formatComponentBuildReportJson(report, std.heap.page_allocator);
         defer std.heap.page_allocator.free(formatted);
         try stderr.writeAll(formatted);
         return;
     }
 
-    var stderr = std.io.getStdErr();
+    var stderr = std.fs.File.stderr();
     var buffer: [1024]u8 = undefined;
     var writer = stderr.writer(&buffer);
     const formatted = try formatComponentBuildReport(report, std.heap.page_allocator);
@@ -573,14 +573,14 @@ fn printComponentDiagnosticsFailure(
     diagnostics: []const compiler_diagnostics.Diagnostic,
 ) !void {
     if (json_diagnostics_mode) {
-        var stderr = std.io.getStdErr();
+        var stderr = std.fs.File.stderr();
         const formatted = try formatFailureDiagnosticsJson(action, path, diagnostics, std.heap.page_allocator);
         defer std.heap.page_allocator.free(formatted);
         try stderr.writeAll(formatted);
         return;
     }
 
-    var stderr = std.io.getStdErr();
+    var stderr = std.fs.File.stderr();
     var buffer: [1024]u8 = undefined;
     var writer = stderr.writer(&buffer);
     try writer.interface.print("weiv {s} failed for {s}\n", .{ action, path });
@@ -654,14 +654,14 @@ pub fn formatAppValidationDiagnosticsJson(
 
 fn printAppValidationDiagnostics(root_path: []const u8, diagnostics: []const compiler_diagnostics.Diagnostic) !void {
     if (json_diagnostics_mode) {
-        var stderr = std.io.getStdErr();
+        var stderr = std.fs.File.stderr();
         const formatted = try formatAppValidationDiagnosticsJson(root_path, diagnostics, std.heap.page_allocator);
         defer std.heap.page_allocator.free(formatted);
         try stderr.writeAll(formatted);
         return;
     }
 
-    var stderr = std.io.getStdErr();
+    var stderr = std.fs.File.stderr();
     const formatted = try formatAppValidationDiagnostics(root_path, diagnostics, std.heap.page_allocator);
     defer std.heap.page_allocator.free(formatted);
     try stderr.writeAll(formatted);
@@ -1215,14 +1215,14 @@ fn escapeWarningGuidance(line: []const u8) []const u8 {
 }
 
 fn printComponentAnalysis(model: component.ComponentModel) !void {
-    var stdout = std.io.getStdOut();
+    var stdout = std.fs.File.stdout();
     const formatted = try formatComponentAnalysisReport(model, std.heap.page_allocator);
     defer std.heap.page_allocator.free(formatted);
     try stdout.writeAll(formatted);
 }
 
 fn printComponentAnalysisReport(report: component.ComponentBuildReport) !void {
-    var stdout = std.io.getStdOut();
+    var stdout = std.fs.File.stdout();
     const formatted = try formatComponentBuildReport(report, std.heap.page_allocator);
     defer std.heap.page_allocator.free(formatted);
     try stdout.writeAll(formatted);
@@ -1256,7 +1256,7 @@ pub fn formatComponentBuildReportJson(report: component.ComponentBuildReport, al
 }
 
 fn printComponentAnalysisJson(report: component.ComponentBuildReport) !void {
-    var stdout = std.io.getStdOut();
+    var stdout = std.fs.File.stdout();
     const formatted = try formatComponentBuildReportJson(report, std.heap.page_allocator);
     defer std.heap.page_allocator.free(formatted);
     try stdout.writeAll(formatted);
@@ -1316,7 +1316,7 @@ fn printIndent(indent: usize, writer: anytype) !void {
 }
 
 fn printIrDocument(document: @import("compiler/lower/ir.zig").Document) !void {
-    var stdout = std.io.getStdOut();
+    var stdout = std.fs.File.stdout();
     var buffer: [4096]u8 = undefined;
     var writer = stdout.writer(&buffer);
     try writer.interface.print("IR\n", .{});
