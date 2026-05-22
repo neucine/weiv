@@ -1,0 +1,31 @@
+{
+  "name": "@weivjs/ui-components",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Weiv-first UI components built on internal headless contracts",
+  "exports": {
+    ".": "./src/index.js",
+    "./WuiDialog.weiv": "./src/WuiDialog.weiv",
+    "./WuiDisclosure.weiv": "./src/WuiDisclosure.weiv",
+    "./WuiTabs.weiv": "./src/WuiTabs.weiv"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "package.json"
+  ],
+  "peerDependencies": {
+    "@weivjs/ui-theme-default": "^0.1.0"
+  },
+  "license": "MPL-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "weiv",
+    "ui",
+    "components",
+    "dialog",
+    "tabs"
+  ]
+}

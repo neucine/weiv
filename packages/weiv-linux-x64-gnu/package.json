@@ -11,15 +11,15 @@
     "bin/weiv"
   ],
   "description": "Weiv native binary for weiv-linux-x64-gnu",
-  "license": "MIT",
+  "license": "MPL-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/affon-ai/weiv.git"
+    "url": "git+https://github.com/neucine/weiv.git"
   },
   "bugs": {
-    "url": "https://github.com/affon-ai/weiv/issues"
+    "url": "https://github.com/neucine/weiv/issues"
   },
-  "homepage": "https://github.com/affon-ai/weiv#readme",
+  "homepage": "https://github.com/neucine/weiv#readme",
   "publishConfig": {
     "access": "public"
   }
