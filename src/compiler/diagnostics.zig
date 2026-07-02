@@ -1,4 +1,9 @@
 const std = @import("std");
+const parser = @import("parser/index.zig");
+const sir = @import("sema/sir.zig");
+
+const sfc = parser.sfc;
+const template = parser.template;
 
 pub const Severity = enum {
     @"error",
@@ -10,10 +15,10 @@ pub const Stage = enum {
     sfc_parse,
     template_parse,
     template_normalize,
-    script_analysis,
+    script_facts,
     binding,
     lowering,
-    browser_plan,
+    render_tree,
     emit,
     bundle,
 };
@@ -50,7 +55,7 @@ pub const DiagnosticBag = struct {
 
     pub fn init() DiagnosticBag {
         return .{
-            .diagnostics = .{},
+            .diagnostics = .empty,
         };
     }
 
@@ -122,10 +127,10 @@ pub fn stageLabel(stage: Stage) []const u8 {
         .sfc_parse => "sfc_parse",
         .template_parse => "template_parse",
         .template_normalize => "template_normalize",
-        .script_analysis => "script_analysis",
+        .script_facts => "script_facts",
         .binding => "binding",
         .lowering => "lowering",
-        .browser_plan => "browser_plan",
+        .render_tree => "render_tree",
         .emit => "emit",
         .bundle => "bundle",
     };
@@ -147,6 +152,183 @@ pub fn computeLocation(source: []const u8, span: Span) SourceLocation {
         .line = line,
         .column = column,
     };
+}
+
+pub fn appendSfcDiagnostic(
+    bag: *DiagnosticBag,
+    source_path: []const u8,
+    err: anyerror,
+    allocator: std.mem.Allocator,
+) !void {
+    const entry = switch (err) {
+        error.MissingTemplate => .{ "sfc.missing_template", "Missing <template> section" },
+        error.MissingScript => .{ "sfc.missing_script", "Missing <script lang=\"ts\"> section" },
+        error.DuplicateTemplate => .{ "sfc.duplicate_template", "Duplicate <template> section" },
+        error.DuplicateScript => .{ "sfc.duplicate_script", "Duplicate <script> section" },
+        error.DuplicateStyle => .{ "sfc.duplicate_style", "Duplicate <style> section" },
+        error.UnknownTopLevelSection => .{ "sfc.unknown_top_level_section", "Unknown top-level section; only template, script, and style are supported" },
+        error.InvalidScriptAttributes => .{ "sfc.invalid_script_attributes", "Only <script lang=\"ts\"> is supported" },
+        error.InvalidSectionOrder => .{ "sfc.invalid_section_order", "Sections must appear in template, script, style order" },
+        error.UnterminatedOpenTag => .{ "sfc.unterminated_open_tag", "Unterminated top-level open tag" },
+        error.UnterminatedCloseTag => .{ "sfc.unterminated_close_tag", "Unterminated top-level close tag" },
+        else => return err,
+    };
+    try bag.appendOwned(allocator, entry[0], .@"error", entry[1], .sfc_parse, source_path, null, null, true);
+}
+
+pub fn appendTemplateParseDiagnostic(
+    bag: *DiagnosticBag,
+    source: []const u8,
+    source_path: []const u8,
+    sfc_document: sfc.Document,
+    err: anyerror,
+    allocator: std.mem.Allocator,
+) !void {
+    const entry = switch (err) {
+        error.UnterminatedTag => .{ "template.unterminated_tag", "Unterminated template tag" },
+        error.UnexpectedCloseTag => .{ "template.unexpected_close_tag", "Closing tag appeared without a matching open tag" },
+        error.MismatchedCloseTag => .{ "template.mismatched_close_tag", "Closing tag does not match the currently open element" },
+        error.InvalidSlotOutlet => .{ "template.invalid_slot_outlet", "<slot> only supports an optional name attribute and no directives" },
+        error.InvalidDirective => .{ "template.invalid_directive", "Invalid template directive usage" },
+        error.UnterminatedInterpolation => .{ "template.unterminated_interpolation", "Unterminated interpolation" },
+        else => return err,
+    };
+    const absolute_span = sfc.Span{
+        .start = sfc_document.template.content_span.start,
+        .end = sfc_document.template.content_span.start + 1,
+    };
+    try bag.appendOwned(
+        allocator,
+        entry[0],
+        .@"error",
+        entry[1],
+        .template_parse,
+        source_path,
+        .{ .start = absolute_span.start, .end = absolute_span.end },
+        computeLocation(source, .{ .start = absolute_span.start, .end = absolute_span.end }),
+        true,
+    );
+}
+
+pub fn appendTemplateNormalizeDiagnostic(
+    bag: *DiagnosticBag,
+    source: []const u8,
+    source_path: []const u8,
+    sfc_document: sfc.Document,
+    template_document: template.Document,
+    err: anyerror,
+    allocator: std.mem.Allocator,
+) !void {
+    const entry = switch (err) {
+        error.UnexpectedElse => .{ "template.unexpected_else", "`else` must immediately follow a sibling element with `if`" },
+        else => return err,
+    };
+
+    const relative_span = template.debug.findFirstInvalidNormalizeSpan(template_document.nodes, err) orelse sfc.Span{ .start = 0, .end = 1 };
+
+    const absolute_span = Span{
+        .start = sfc_document.template.content_span.start + relative_span.start,
+        .end = sfc_document.template.content_span.start + relative_span.end,
+    };
+
+    try bag.appendOwned(
+        allocator,
+        entry[0],
+        .@"error",
+        entry[1],
+        .template_normalize,
+        source_path,
+        absolute_span,
+        computeLocation(source, absolute_span),
+        true,
+    );
+}
+
+pub fn appendLoweringDiagnostic(
+    bag: *DiagnosticBag,
+    source: []const u8,
+    source_path: []const u8,
+    sfc_document: sfc.Document,
+    normalized_template: template.NormalizedDocument,
+    err: anyerror,
+    allocator: std.mem.Allocator,
+) !void {
+    const entry = switch (err) {
+        error.InvalidSlotPlacement => .{ "template.invalid_slot_placement", "`slot:name` may only be used on direct children of a component usage" },
+        error.InvalidSlotTemplatePlacement => .{ "template.invalid_slot_template_placement", "<template> grouping is only valid inside a component usage when paired with slot:name" },
+        else => return err,
+    };
+
+    const relative_span = template.debug.findFirstInvalidLoweringSpan(normalized_template.nodes, err) orelse sfc.Span{ .start = 0, .end = 1 };
+    const absolute_span = Span{
+        .start = sfc_document.template.content_span.start + relative_span.start,
+        .end = sfc_document.template.content_span.start + relative_span.end,
+    };
+
+    try bag.appendOwned(
+        allocator,
+        entry[0],
+        .@"error",
+        entry[1],
+        .lowering,
+        source_path,
+        absolute_span,
+        computeLocation(source, absolute_span),
+        true,
+    );
+}
+
+pub fn appendScriptDiagnostics(
+    bag: *DiagnosticBag,
+    source: []const u8,
+    source_path: []const u8,
+    sfc_document: sfc.Document,
+    script: *const sir.ScriptFacts,
+    allocator: std.mem.Allocator,
+) !void {
+    for (script.diagnostics) |diagnostic| {
+        const absolute_span = Span{
+            .start = sfc_document.script.content_span.start + diagnostic.span_start,
+            .end = sfc_document.script.content_span.start + diagnostic.span_end,
+        };
+        try bag.appendOwned(
+            allocator,
+            diagnostic.code orelse "script.analysis",
+            severityFromString(diagnostic.severity),
+            diagnostic.message,
+            .script_facts,
+            source_path,
+            absolute_span,
+            computeLocation(source, absolute_span),
+            false,
+        );
+    }
+}
+
+pub fn appendBindingDiagnostics(
+    bag: *DiagnosticBag,
+    source: []const u8,
+    source_path: []const u8,
+    template_bindings: *const sir.TemplateBindings,
+    allocator: std.mem.Allocator,
+) !void {
+    for (template_bindings.diagnostics) |diagnostic| {
+        const span = Span{
+            .start = diagnostic.span.start,
+            .end = diagnostic.span.end,
+        };
+        try bag.appendOwned(
+            allocator,
+            diagnostic.kind,
+            severityFromString(diagnostic.severity),
+            diagnostic.message,
+            .binding,
+            source_path,
+            span,
+            computeLocation(source, span),
+            false,
+        );
+    }
 }
 
 pub fn writeTextDiagnostics(

@@ -1,12 +1,9 @@
 const std = @import("std");
 const cli = @import("cli.zig");
 
-pub fn main() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    const allocator = gpa.allocator();
-    cli.run(allocator) catch |err| {
+pub fn main(init: std.process.Init) void {
+    const allocator = init.gpa;
+    cli.run(allocator, init.io, init.minimal.args, init.environ_map) catch |err| {
         if (err == error.Reported) {
             std.process.exit(1);
         }

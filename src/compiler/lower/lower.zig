@@ -1,7 +1,7 @@
 const std = @import("std");
-const binding = @import("../analyze/binder.zig");
-const ir = @import("ir.zig");
-const template = @import("../parse/template/index.zig");
+const binding = @import("../sema/binder.zig");
+const lir = @import("lir.zig");
+const template = @import("../parser/template/index.zig");
 
 pub const LowerError = error{
     InvalidSlotPlacement,
@@ -10,17 +10,17 @@ pub const LowerError = error{
 
 pub fn lower(
     normalized_template: *const template.NormalizedDocument,
-    binding_result: *const binding.BindingResult,
+    template_bindings: *const binding.TemplateBindings,
     allocator: std.mem.Allocator,
-) anyerror!ir.Document {
-    _ = binding_result;
+) anyerror!lir.Document {
+    _ = template_bindings;
     return .{
         .nodes = try lowerNodes(normalized_template.nodes, allocator),
     };
 }
 
-fn lowerNodes(nodes: []const template.NormalizedNode, allocator: std.mem.Allocator) anyerror![]ir.Node {
-    var out = std.ArrayList(ir.Node){};
+fn lowerNodes(nodes: []const template.NormalizedNode, allocator: std.mem.Allocator) anyerror![]lir.Node {
+    var out = std.ArrayList(lir.Node).empty;
     defer out.deinit(allocator);
 
     for (nodes) |node| {
@@ -30,7 +30,7 @@ fn lowerNodes(nodes: []const template.NormalizedNode, allocator: std.mem.Allocat
     return try out.toOwnedSlice(allocator);
 }
 
-fn lowerNode(node: template.NormalizedNode, allocator: std.mem.Allocator) anyerror!ir.Node {
+fn lowerNode(node: template.NormalizedNode, allocator: std.mem.Allocator) anyerror!lir.Node {
     return switch (node) {
         .text => |text| .{
             .text = .{ .content = text.content },
@@ -98,8 +98,8 @@ fn lowerNode(node: template.NormalizedNode, allocator: std.mem.Allocator) anyerr
     };
 }
 
-fn lowerEffects(directives: []const template.Directive, allocator: std.mem.Allocator) anyerror![]ir.DirectiveEffect {
-    var out = std.ArrayList(ir.DirectiveEffect){};
+fn lowerEffects(directives: []const template.Directive, allocator: std.mem.Allocator) anyerror![]lir.DirectiveEffect {
+    var out = std.ArrayList(lir.DirectiveEffect).empty;
     defer out.deinit(allocator);
 
     for (directives) |directive| {
@@ -128,8 +128,8 @@ fn lowerEffects(directives: []const template.Directive, allocator: std.mem.Alloc
 fn lowerAttributes(
     attributes: []const template.Attribute,
     allocator: std.mem.Allocator,
-) anyerror![]ir.Attribute {
-    var out = try allocator.alloc(ir.Attribute, attributes.len);
+) anyerror![]lir.Attribute {
+    var out = try allocator.alloc(lir.Attribute, attributes.len);
     for (attributes, 0..) |attribute, idx| {
         out[idx] = .{
             .name = attribute.name,
@@ -147,8 +147,8 @@ fn isComponentTag(tag_name: []const u8) bool {
 fn lowerSlotProvisions(
     children: []const template.NormalizedNode,
     allocator: std.mem.Allocator,
-) anyerror![]ir.SlotProvision {
-    var out = std.ArrayList(ir.SlotProvision){};
+) anyerror![]lir.SlotProvision {
+    var out = std.ArrayList(lir.SlotProvision).empty;
     defer out.deinit(allocator);
 
     for (children) |child| {
@@ -161,7 +161,7 @@ fn lowerSlotProvisions(
 
         if (findSlotProvision(out.items, slot_name)) |idx| {
             const existing = out.items[idx];
-            const merged = try allocator.alloc(ir.Node, existing.children.len + lowered_children.len);
+            const merged = try allocator.alloc(lir.Node, existing.children.len + lowered_children.len);
             @memcpy(merged[0..existing.children.len], existing.children);
             @memcpy(merged[existing.children.len..], lowered_children);
             allocator.free(existing.children);
@@ -179,7 +179,7 @@ fn lowerSlotProvisions(
     return try out.toOwnedSlice(allocator);
 }
 
-fn lowerProjectedChildren(child: template.NormalizedNode, allocator: std.mem.Allocator) anyerror![]ir.Node {
+fn lowerProjectedChildren(child: template.NormalizedNode, allocator: std.mem.Allocator) anyerror![]lir.Node {
     return switch (child) {
         .element => |element| blk: {
             if (std.mem.eql(u8, element.tag_name, "template")) {
@@ -189,13 +189,13 @@ fn lowerProjectedChildren(child: template.NormalizedNode, allocator: std.mem.All
                 break :blk try lowerNodes(element.children, allocator);
             }
 
-            var single = try allocator.alloc(ir.Node, 1);
+            var single = try allocator.alloc(lir.Node, 1);
             errdefer allocator.free(single);
             single[0] = try lowerProjectedElement(element, allocator);
             return single;
         },
         else => {
-            var single = try allocator.alloc(ir.Node, 1);
+            var single = try allocator.alloc(lir.Node, 1);
             errdefer allocator.free(single);
             single[0] = try lowerNode(child, allocator);
             return single;
@@ -203,7 +203,7 @@ fn lowerProjectedChildren(child: template.NormalizedNode, allocator: std.mem.All
     };
 }
 
-fn lowerProjectedElement(element: template.normalized.ElementNode, allocator: std.mem.Allocator) anyerror!ir.Node {
+fn lowerProjectedElement(element: template.normalized.ElementNode, allocator: std.mem.Allocator) anyerror!lir.Node {
     const filtered_directives = try filterOutSlotAssign(element.directives, allocator);
     defer allocator.free(filtered_directives);
 
@@ -258,7 +258,7 @@ fn filterOutSlotAssign(
     directives: []const template.Directive,
     allocator: std.mem.Allocator,
 ) anyerror![]template.Directive {
-    var out = std.ArrayList(template.Directive){};
+    var out = std.ArrayList(template.Directive).empty;
     defer out.deinit(allocator);
 
     for (directives) |directive| {
@@ -271,7 +271,7 @@ fn filterOutSlotAssign(
     return try out.toOwnedSlice(allocator);
 }
 
-fn findSlotProvision(provisions: []const ir.SlotProvision, name: ?[]const u8) ?usize {
+fn findSlotProvision(provisions: []const lir.SlotProvision, name: ?[]const u8) ?usize {
     for (provisions, 0..) |provision, idx| {
         if (sameOptionalString(provision.name, name)) return idx;
     }
@@ -284,7 +284,7 @@ fn sameOptionalString(a: ?[]const u8, b: ?[]const u8) bool {
     return std.mem.eql(u8, a.?, b.?);
 }
 
-fn freeSlotProvisions(provisions: []ir.SlotProvision, allocator: std.mem.Allocator) void {
+fn freeSlotProvisions(provisions: []lir.SlotProvision, allocator: std.mem.Allocator) void {
     for (provisions) |*provision| {
         for (provision.children) |*child| child.deinit(allocator);
         allocator.free(provision.children);

@@ -1,16 +1,21 @@
 const std = @import("std");
-const component = @import("compiler/pipeline/index.zig");
+const browser_backend = @import("compiler/backend/browser/index.zig");
+const compiler_compile = @import("compiler/compile.zig");
+const component = @import("compiler/component_unit.zig");
 const compiler_diagnostics = @import("compiler/diagnostics.zig");
-const app_emit = @import("compiler/emit/browser/emit_app.zig");
-const emit_direct_js = @import("compiler/emit/browser/emit_sfc.zig");
-const style = @import("compiler/emit/browser/scoped_css.zig");
-const browser_plan = @import("compiler/lower/browser_plan/index.zig");
-const invalidation_graph = @import("compiler/lower/invalidation_graph/index.zig");
+const inspect = @import("compiler/inspect/index.zig");
+const parser = @import("compiler/parser/index.zig");
 const parser_backend = @import("ffi/parser_backend.zig");
+
+const app_emit = browser_backend.emit.app;
+const browser_render_tree = browser_backend.render_tree;
+const js_module = browser_backend.emit.js_module;
+const invalidation_graph = inspect.invalidation_graph;
+const style = browser_backend.emit.scoped_css;
 
 const LoadedComponent = struct {
     source: []u8,
-    model: component.ComponentModel,
+    model: component.ComponentUnit,
 
     fn deinit(self: *LoadedComponent, allocator: std.mem.Allocator) void {
         self.model.deinit(allocator);
@@ -38,8 +43,13 @@ var json_diagnostics_mode: bool = false;
 
 pub const CliReportedError = error{Reported};
 
-pub fn run(allocator: std.mem.Allocator) !void {
-    var args = try std.process.argsWithAllocator(allocator);
+pub fn run(
+    allocator: std.mem.Allocator,
+    process_io: std.Io,
+    process_args: std.process.Args,
+    environ_map: *const std.process.Environ.Map,
+) !void {
+    var args = try std.process.Args.Iterator.initAllocator(process_args, allocator);
     defer args.deinit();
 
     _ = args.next();
@@ -60,20 +70,20 @@ pub fn run(allocator: std.mem.Allocator) !void {
             try printUsage();
             return;
         };
-        if (std.mem.eql(u8, subcommand, "ir")) {
+        if (std.mem.eql(u8, subcommand, "lir") or std.mem.eql(u8, subcommand, "ir")) {
             const path = args.next() orelse {
                 try printUsage();
                 return;
             };
-            try runInspectIr(path, allocator);
+            try runInspectLir(path, allocator);
             return;
         }
-        if (std.mem.eql(u8, subcommand, "browser-plan")) {
+        if (std.mem.eql(u8, subcommand, "render-tree") or std.mem.eql(u8, subcommand, "browser-plan")) {
             const path = args.next() orelse {
                 try printUsage();
                 return;
             };
-            try runInspectBrowserPlan(path, allocator);
+            try runInspectRenderTree(path, allocator);
             return;
         }
         if (std.mem.eql(u8, subcommand, "invalidation-graph")) {
@@ -82,6 +92,134 @@ pub fn run(allocator: std.mem.Allocator) !void {
                 return;
             };
             try runInspectInvalidationGraph(path, allocator);
+            return;
+        }
+        try printUsage();
+        return;
+    }
+
+    if (std.mem.eql(u8, command, "analyze")) {
+        const phase = args.next() orelse {
+            try printUsage();
+            return;
+        };
+        if (std.mem.eql(u8, phase, "script")) {
+            const path = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            try runAnalyzeScript(path, allocator);
+            return;
+        }
+        if (std.mem.eql(u8, phase, "component")) {
+            const path = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            const json_flag = args.next();
+            try runAnalyzeComponent(path, allocator, json_flag != null and std.mem.eql(u8, json_flag.?, "--json"));
+            return;
+        }
+        try printUsage();
+        return;
+    }
+
+    if (std.mem.eql(u8, command, "validate")) {
+        const phase = args.next() orelse {
+            try printUsage();
+            return;
+        };
+        if (std.mem.eql(u8, phase, "app")) {
+            const root_path = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            const json_flag = args.next();
+            try runValidateApp(root_path, allocator, json_flag != null and std.mem.eql(u8, json_flag.?, "--json"));
+            return;
+        }
+        try printUsage();
+        return;
+    }
+
+    if (std.mem.eql(u8, command, "emit")) {
+        const phase = args.next() orelse {
+            try printUsage();
+            return;
+        };
+        if (std.mem.eql(u8, phase, "ast")) {
+            const path = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            const out_path = args.next();
+            try runEmitAst(path, out_path, allocator);
+            return;
+        }
+        if (std.mem.eql(u8, phase, "sir")) {
+            const path = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            const out_path = args.next();
+            try runEmitSir(path, out_path, allocator);
+            return;
+        }
+        if (std.mem.eql(u8, phase, "lir")) {
+            const path = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            const out_path = args.next();
+            try runEmitLir(path, out_path, allocator);
+            return;
+        }
+        if (std.mem.eql(u8, phase, "render-tree") or std.mem.eql(u8, phase, "browser-plan")) {
+            const path = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            const out_path = args.next();
+            try runEmitRenderTree(path, out_path, allocator);
+            return;
+        }
+        if (std.mem.eql(u8, phase, "invalidation-graph")) {
+            const path = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            const out_path = args.next();
+            try runEmitInvalidationGraph(path, out_path, allocator);
+            return;
+        }
+        if (std.mem.eql(u8, phase, "js")) {
+            const path = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            const out_path = args.next();
+            try runEmitJs(path, out_path, allocator);
+            return;
+        }
+        if (std.mem.eql(u8, phase, "css")) {
+            const path = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            const out_path = args.next();
+            try runEmitCss(path, out_path, allocator);
+            return;
+        }
+        if (std.mem.eql(u8, phase, "app")) {
+            const root_path = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            const out_dir = args.next() orelse {
+                try printUsage();
+                return;
+            };
+            try runEmitApp(root_path, out_dir, allocator);
             return;
         }
         try printUsage();
@@ -143,12 +281,58 @@ pub fn run(allocator: std.mem.Allocator) !void {
                 try printUsage();
                 return;
             };
+            if (std.mem.eql(u8, phase, "ast")) {
+                const path = args.next() orelse {
+                    try printUsage();
+                    return;
+                };
+                const out_path = args.next();
+                try runEmitAst(path, out_path, allocator);
+                return;
+            }
+            if (std.mem.eql(u8, phase, "sir")) {
+                const path = args.next() orelse {
+                    try printUsage();
+                    return;
+                };
+                const out_path = args.next();
+                try runEmitSir(path, out_path, allocator);
+                return;
+            }
+            if (std.mem.eql(u8, phase, "lir")) {
+                const path = args.next() orelse {
+                    try printUsage();
+                    return;
+                };
+                const out_path = args.next();
+                try runEmitLir(path, out_path, allocator);
+                return;
+            }
+            if (std.mem.eql(u8, phase, "render-tree") or std.mem.eql(u8, phase, "browser-plan")) {
+                const path = args.next() orelse {
+                    try printUsage();
+                    return;
+                };
+                const out_path = args.next();
+                try runEmitRenderTree(path, out_path, allocator);
+                return;
+            }
+            if (std.mem.eql(u8, phase, "invalidation-graph")) {
+                const path = args.next() orelse {
+                    try printUsage();
+                    return;
+                };
+                const out_path = args.next();
+                try runEmitInvalidationGraph(path, out_path, allocator);
+                return;
+            }
             if (std.mem.eql(u8, phase, "js")) {
                 const path = args.next() orelse {
                     try printUsage();
                     return;
                 };
-                try runEmitJs(path, allocator);
+                const out_path = args.next();
+                try runEmitJs(path, out_path, allocator);
                 return;
             }
             if (std.mem.eql(u8, phase, "css")) {
@@ -156,7 +340,8 @@ pub fn run(allocator: std.mem.Allocator) !void {
                     try printUsage();
                     return;
                 };
-                try runEmitCss(path, allocator);
+                const out_path = args.next();
+                try runEmitCss(path, out_path, allocator);
                 return;
             }
             if (std.mem.eql(u8, phase, "app")) {
@@ -176,7 +361,7 @@ pub fn run(allocator: std.mem.Allocator) !void {
         }
 
         const root_path = maybe_subcommand;
-        const out_dir = args.next() orelse ".zig-cache/weiv-compile-out";
+        const out_dir = args.next() orelse "dist";
         try runEmitApp(root_path, out_dir, allocator);
         return;
     }
@@ -200,21 +385,29 @@ pub fn run(allocator: std.mem.Allocator) !void {
         return;
     }
 
-    if (std.mem.eql(u8, command, "inspect-ir") or std.mem.eql(u8, command, "dump-ir")) {
+    if (std.mem.eql(u8, command, "inspect-lir") or
+        std.mem.eql(u8, command, "dump-lir") or
+        std.mem.eql(u8, command, "inspect-ir") or
+        std.mem.eql(u8, command, "dump-ir"))
+    {
         const path = args.next() orelse {
             try printUsage();
             return;
         };
-        try runInspectIr(path, allocator);
+        try runInspectLir(path, allocator);
         return;
     }
 
-    if (std.mem.eql(u8, command, "inspect-browser-plan") or std.mem.eql(u8, command, "dump-browser-plan")) {
+    if (std.mem.eql(u8, command, "inspect-render-tree") or
+        std.mem.eql(u8, command, "dump-render-tree") or
+        std.mem.eql(u8, command, "inspect-browser-plan") or
+        std.mem.eql(u8, command, "dump-browser-plan"))
+    {
         const path = args.next() orelse {
             try printUsage();
             return;
         };
-        try runInspectBrowserPlan(path, allocator);
+        try runInspectRenderTree(path, allocator);
         return;
     }
 
@@ -234,7 +427,8 @@ pub fn run(allocator: std.mem.Allocator) !void {
             try printUsage();
             return;
         };
-        try runEmitJs(path, allocator);
+        const out_path = args.next();
+        try runEmitJs(path, out_path, allocator);
         return;
     }
 
@@ -243,7 +437,8 @@ pub fn run(allocator: std.mem.Allocator) !void {
             try printUsage();
             return;
         };
-        try runEmitCss(path, allocator);
+        const out_path = args.next();
+        try runEmitCss(path, out_path, allocator);
         return;
     }
 
@@ -275,9 +470,9 @@ pub fn run(allocator: std.mem.Allocator) !void {
             try printUsage();
             return;
         };
-        const out_dir = args.next() orelse ".zig-cache/weiv-dev-direct";
+        const out_dir = args.next() orelse "dist";
         try runEmitApp(root_path, out_dir, allocator);
-        try runDevServer(root_path, out_dir, allocator);
+        try runDevServer(root_path, out_dir, allocator, process_io, environ_map);
         return;
     }
 
@@ -285,25 +480,25 @@ pub fn run(allocator: std.mem.Allocator) !void {
 }
 
 fn loadComponent(path: []const u8, allocator: std.mem.Allocator) !LoadedComponent {
-    const source = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch |err| {
+    const source = std.Io.Dir.cwd().readFileAlloc(std.Io.Threaded.global_single_threaded.io(), path, allocator, .limited(1024 * 1024)) catch |err| {
         try printCliStageError("read component", path, .sfc_parse, "cli.read_failed", err, allocator);
         return error.Reported;
     };
     errdefer allocator.free(source);
 
-    var report = component.buildReport(source, path, allocator) catch |err| {
-        try printCliStageError("build component", path, .lowering, "component.build_failed", err, allocator);
+    var report = compiler_compile.compileReport(source, path, allocator) catch |err| {
+        try printCliStageError("compile component", path, .lowering, "component.compile_failed", err, allocator);
         return error.Reported;
     };
     defer report.deinit(allocator);
 
     if (hasFatalDiagnostics(report.diagnostics)) {
-        try printComponentBuildFailure("build component", path, report);
+        try printComponentCompileFailure("compile component", path, report);
         return error.Reported;
     }
 
-    var model = report.intoComponentModel() catch |err| {
-        try printCliStageError("build component", path, .lowering, "component.model_conversion_failed", err, allocator);
+    var model = report.intoComponentUnit() catch |err| {
+        try printCliStageError("compile component", path, .lowering, "component.model_conversion_failed", err, allocator);
         return error.Reported;
     };
     errdefer model.deinit(allocator);
@@ -316,8 +511,8 @@ fn loadComponent(path: []const u8, allocator: std.mem.Allocator) !LoadedComponen
     report.template_document = null;
     report.normalized_template = null;
     report.script = null;
-    report.binding_result = null;
-    report.ir_document = null;
+    report.template_bindings = null;
+    report.lir_document = null;
     report.halted_after = null;
 
     return .{
@@ -327,31 +522,31 @@ fn loadComponent(path: []const u8, allocator: std.mem.Allocator) !LoadedComponen
 }
 
 fn runAnalyzeScript(path: []const u8, allocator: std.mem.Allocator) !void {
-    const source = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch |err| {
-        try printCliStageError("analyze script", path, .script_analysis, "cli.read_failed", err, allocator);
+    const source = std.Io.Dir.cwd().readFileAlloc(std.Io.Threaded.global_single_threaded.io(), path, allocator, .limited(1024 * 1024)) catch |err| {
+        try printCliStageError("analyze script", path, .script_facts, "cli.read_failed", err, allocator);
         return error.Reported;
     };
     defer allocator.free(source);
 
     const analysis_json = parser_backend.analyzeScriptRaw(source, path, allocator) catch |err| {
-        try printCliStageError("analyze script", path, .script_analysis, "script.backend_failure", err, allocator);
+        try printCliStageError("analyze script", path, .script_facts, "script.backend_failure", err, allocator);
         return error.Reported;
     };
     defer allocator.free(analysis_json);
 
-    try std.fs.File.stdout().writeAll(analysis_json);
-    try std.fs.File.stdout().writeAll("\n");
+    try std.Io.File.stdout().writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), analysis_json);
+    try std.Io.File.stdout().writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), "\n");
 }
 
 fn runAnalyzeComponent(path: []const u8, allocator: std.mem.Allocator, json: bool) !void {
-    const source = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch |err| {
+    const source = std.Io.Dir.cwd().readFileAlloc(std.Io.Threaded.global_single_threaded.io(), path, allocator, .limited(1024 * 1024)) catch |err| {
         try printCliStageError("read component", path, .sfc_parse, "cli.read_failed", err, allocator);
         return error.Reported;
     };
     defer allocator.free(source);
 
-    var report = component.buildReport(source, path, allocator) catch |err| {
-        try printCliStageError("analyze component", path, .lowering, "component.build_failed", err, allocator);
+    var report = compiler_compile.compileReport(source, path, allocator) catch |err| {
+        try printCliStageError("analyze component", path, .lowering, "component.compile_failed", err, allocator);
         return error.Reported;
     };
     defer report.deinit(allocator);
@@ -362,46 +557,147 @@ fn runAnalyzeComponent(path: []const u8, allocator: std.mem.Allocator, json: boo
     }
 }
 
-fn runInspectIr(path: []const u8, allocator: std.mem.Allocator) !void {
+fn runInspectLir(path: []const u8, allocator: std.mem.Allocator) !void {
     var loaded = try loadComponent(path, allocator);
     defer loaded.deinit(allocator);
-    try printIrDocument(loaded.model.ir_document);
+    const formatted = try inspect.lir.formatDocument(loaded.model.lir_document, allocator);
+    defer allocator.free(formatted);
+    try std.Io.File.stdout().writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
 }
 
-fn runInspectBrowserPlan(path: []const u8, allocator: std.mem.Allocator) !void {
+fn runInspectRenderTree(path: []const u8, allocator: std.mem.Allocator) !void {
     var loaded = try loadComponent(path, allocator);
     defer loaded.deinit(allocator);
 
-    var plan = browser_plan.lower(&loaded.model.ir_document, allocator) catch |err| {
-        try printCliStageError("inspect browser-plan", path, .browser_plan, "browser_plan.lower_failed", err, allocator);
+    var render_tree = browser_render_tree.lower(&loaded.model.lir_document, allocator) catch |err| {
+        try printCliStageError("inspect render-tree", path, .render_tree, "render_tree.lower_failed", err, allocator);
         return error.Reported;
     };
-    defer plan.deinit(allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try browser_plan.debug.formatDocument(&plan, allocator);
+    const formatted = try browser_render_tree.debug.formatDocument(&render_tree, allocator);
     defer allocator.free(formatted);
-    try std.fs.File.stdout().writeAll(formatted);
+    try std.Io.File.stdout().writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
 }
 
 fn runInspectInvalidationGraph(path: []const u8, allocator: std.mem.Allocator) !void {
     var loaded = try loadComponent(path, allocator);
     defer loaded.deinit(allocator);
 
-    var plan = browser_plan.lower(&loaded.model.ir_document, allocator) catch |err| {
-        try printCliStageError("inspect invalidation-graph", path, .browser_plan, "browser_plan.lower_failed", err, allocator);
+    var render_tree = browser_render_tree.lower(&loaded.model.lir_document, allocator) catch |err| {
+        try printCliStageError("inspect invalidation-graph", path, .render_tree, "render_tree.lower_failed", err, allocator);
         return error.Reported;
     };
-    defer plan.deinit(allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = invalidation_graph.formatDocument(&loaded.model, &plan, allocator) catch |err| {
+    const formatted = invalidation_graph.formatDocument(&loaded.model, &render_tree, allocator) catch |err| {
         try printCliStageError("inspect invalidation-graph", path, .lowering, "invalidation_graph.format_failed", err, allocator);
         return error.Reported;
     };
     defer allocator.free(formatted);
-    try std.fs.File.stdout().writeAll(formatted);
+    try std.Io.File.stdout().writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
 }
 
-fn runEmitJs(path: []const u8, allocator: std.mem.Allocator) !void {
+fn runEmitAst(path: []const u8, out_path: ?[]const u8, allocator: std.mem.Allocator) !void {
+    const source = std.Io.Dir.cwd().readFileAlloc(std.Io.Threaded.global_single_threaded.io(), path, allocator, .limited(1024 * 1024)) catch |err| {
+        try printCliStageError("emit ast", path, .sfc_parse, "cli.read_failed", err, allocator);
+        return error.Reported;
+    };
+    defer allocator.free(source);
+
+    const formatted = inspect.ast.formatSource(source, path, allocator) catch |err| {
+        try printCliStageError("emit ast", path, .template_parse, "ast.emit_failed", err, allocator);
+        return error.Reported;
+    };
+    defer allocator.free(formatted);
+    try writeOutput(out_path, formatted);
+}
+
+fn runEmitSir(path: []const u8, out_path: ?[]const u8, allocator: std.mem.Allocator) !void {
+    const source = std.Io.Dir.cwd().readFileAlloc(std.Io.Threaded.global_single_threaded.io(), path, allocator, .limited(1024 * 1024)) catch |err| {
+        try printCliStageError("emit sir", path, .sfc_parse, "cli.read_failed", err, allocator);
+        return error.Reported;
+    };
+    defer allocator.free(source);
+
+    var report = compiler_compile.compileReport(source, path, allocator) catch |err| {
+        try printCliStageError("emit sir", path, .binding, "component.compile_failed", err, allocator);
+        return error.Reported;
+    };
+    defer report.deinit(allocator);
+
+    if (report.script == null or report.template_bindings == null) {
+        try printComponentCompileFailure("emit sir", path, report);
+        return error.Reported;
+    }
+
+    const script = if (report.script) |*value| value else unreachable;
+    const template_bindings = if (report.template_bindings) |*value| value else unreachable;
+    const formatted = try inspect.sir.formatData(path, script, template_bindings, allocator);
+    defer allocator.free(formatted);
+    try writeOutput(out_path, formatted);
+}
+
+fn runEmitLir(path: []const u8, out_path: ?[]const u8, allocator: std.mem.Allocator) !void {
+    var loaded = try loadComponent(path, allocator);
+    defer loaded.deinit(allocator);
+
+    const formatted = try inspect.lir.formatDocument(loaded.model.lir_document, allocator);
+    defer allocator.free(formatted);
+    try writeOutput(out_path, formatted);
+}
+
+fn runEmitRenderTree(path: []const u8, out_path: ?[]const u8, allocator: std.mem.Allocator) !void {
+    var loaded = try loadComponent(path, allocator);
+    defer loaded.deinit(allocator);
+
+    var render_tree = browser_render_tree.lower(&loaded.model.lir_document, allocator) catch |err| {
+        try printCliStageError("emit render-tree", path, .render_tree, "render_tree.lower_failed", err, allocator);
+        return error.Reported;
+    };
+    defer render_tree.deinit(allocator);
+
+    const formatted = try browser_render_tree.debug.formatDocument(&render_tree, allocator);
+    defer allocator.free(formatted);
+    try writeOutput(out_path, formatted);
+}
+
+fn runEmitInvalidationGraph(path: []const u8, out_path: ?[]const u8, allocator: std.mem.Allocator) !void {
+    var loaded = try loadComponent(path, allocator);
+    defer loaded.deinit(allocator);
+
+    var render_tree = browser_render_tree.lower(&loaded.model.lir_document, allocator) catch |err| {
+        try printCliStageError("emit invalidation-graph", path, .render_tree, "render_tree.lower_failed", err, allocator);
+        return error.Reported;
+    };
+    defer render_tree.deinit(allocator);
+
+    const formatted = invalidation_graph.formatDocument(&loaded.model, &render_tree, allocator) catch |err| {
+        try printCliStageError("emit invalidation-graph", path, .lowering, "invalidation_graph.format_failed", err, allocator);
+        return error.Reported;
+    };
+    defer allocator.free(formatted);
+    try writeOutput(out_path, formatted);
+}
+
+fn writeOutput(path: ?[]const u8, data: []const u8) !void {
+    const output_path = path orelse {
+        try std.Io.File.stdout().writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), data);
+        return;
+    };
+    try writeOutputFile(output_path, data);
+}
+
+fn writeOutputFile(path: []const u8, data: []const u8) !void {
+    if (std.fs.path.dirname(path)) |dirname| {
+        if (dirname.len > 0 and !std.mem.eql(u8, dirname, ".")) {
+            try std.Io.Dir.cwd().createDirPath(std.Io.Threaded.global_single_threaded.io(), dirname);
+        }
+    }
+    try std.Io.Dir.cwd().writeFile(std.Io.Threaded.global_single_threaded.io(), .{ .sub_path = path, .data = data });
+}
+
+fn runEmitJs(path: []const u8, out_path: ?[]const u8, allocator: std.mem.Allocator) !void {
     var loaded = try loadComponent(path, allocator);
     defer loaded.deinit(allocator);
 
@@ -409,15 +705,21 @@ fn runEmitJs(path: []const u8, allocator: std.mem.Allocator) !void {
         return error.Reported;
     }
 
-    const js = emit_direct_js.emitModule(&loaded.model, allocator) catch |err| {
+    var browser_component_model = browser_backend.component.build(&loaded.model, allocator) catch |err| {
+        try printCliStageError("emit js", path, .render_tree, "browser_component.build_failed", err, allocator);
+        return error.Reported;
+    };
+    defer browser_component_model.deinit(allocator);
+
+    const js = js_module.emitModule(&browser_component_model, allocator) catch |err| {
         try printCliStageError("emit js", path, .emit, "emit.js_failed", err, allocator);
         return error.Reported;
     };
     defer allocator.free(js);
-    try std.fs.File.stdout().writeAll(js);
+    try writeOutput(out_path, js);
 }
 
-fn runEmitCss(path: []const u8, allocator: std.mem.Allocator) !void {
+fn runEmitCss(path: []const u8, out_path: ?[]const u8, allocator: std.mem.Allocator) !void {
     var loaded = try loadComponent(path, allocator);
     defer loaded.deinit(allocator);
 
@@ -430,7 +732,7 @@ fn runEmitCss(path: []const u8, allocator: std.mem.Allocator) !void {
         return error.Reported;
     };
     defer allocator.free(css);
-    try std.fs.File.stdout().writeAll(css);
+    try writeOutput(out_path, css);
 }
 
 fn runEmitApp(root_path: []const u8, out_dir: []const u8, allocator: std.mem.Allocator) !void {
@@ -461,9 +763,9 @@ fn runValidateApp(root_path: []const u8, allocator: std.mem.Allocator, json: boo
     if (json) {
         const formatted = try formatAppValidationDiagnosticsJson(root_path, validation.diagnostics, allocator);
         defer allocator.free(formatted);
-        try std.fs.File.stdout().writeAll(formatted);
+        try std.Io.File.stdout().writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
     } else if (validation.diagnostics.len == 0) {
-        try std.fs.File.stdout().writeAll("app validation ok\n");
+        try std.Io.File.stdout().writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), "app validation ok\n");
     } else {
         try printAppValidationDiagnostics(root_path, validation.diagnostics);
     }
@@ -474,34 +776,41 @@ fn runValidateApp(root_path: []const u8, allocator: std.mem.Allocator, json: boo
 }
 
 fn printUsage() !void {
-    try std.fs.File.stderr().writeAll(
+    try std.Io.File.stderr().writeStreamingAll(std.Io.Threaded.global_single_threaded.io(),
         \\Usage:
         \\  weiv --json-diagnostics <command...>
-        \\  weiv inspect ir <path>
-        \\  weiv inspect browser-plan <path>
-        \\  weiv inspect invalidation-graph <path>
+        \\  weiv analyze script <path>
+        \\  weiv analyze component <path> [--json]
+        \\  weiv validate app <root.weiv> [--json]
+        \\  weiv emit ast <path> [out-file]
+        \\  weiv emit sir <path> [out-file]
+        \\  weiv emit lir <path> [out-file]
+        \\  weiv emit render-tree <path> [out-file]
+        \\  weiv emit invalidation-graph <path> [out-file]
+        \\  weiv emit js <path> [out-file]
+        \\  weiv emit css <path> [out-file]
+        \\  weiv emit app <root.weiv> <out-dir>
         \\  weiv compile <root.weiv> [out-dir]
-        \\  weiv compile analyze script <path>
-        \\  weiv compile analyze component <path>
-        \\  weiv compile validate app <root.weiv> [--json]
-        \\  weiv compile emit js <path>
-        \\  weiv compile emit css <path>
-        \\  weiv compile emit app <root.weiv> <out-dir>
         \\  weiv dev <root.weiv> [out-dir]
         \\
         \\Compatibility / internal:
+        \\  weiv compile analyze script <path>
+        \\  weiv compile analyze component <path>
+        \\  weiv compile validate app <root.weiv> [--json]
+        \\  weiv compile emit ast <path> [out-file]
+        \\  weiv compile emit sir <path> [out-file]
+        \\  weiv compile emit lir <path> [out-file]
+        \\  weiv compile emit render-tree <path> [out-file]
+        \\  weiv compile emit invalidation-graph <path> [out-file]
+        \\  weiv compile emit js <path> [out-file]
+        \\  weiv compile emit css <path> [out-file]
+        \\  weiv compile emit app <root.weiv> <out-dir>
         \\  weiv analyze-script <path>
         \\  weiv analyze-component <path>
-        \\  weiv inspect-ir <path>
-        \\  weiv inspect-browser-plan <path>
-        \\  weiv inspect-invalidation-graph <path>
-        \\  weiv emit-js <path>
-        \\  weiv emit-css <path>
+        \\  weiv emit-js <path> [out-file]
+        \\  weiv emit-css <path> [out-file]
         \\  weiv emit-app <root.weiv> <out-dir>
         \\  weiv validate-app <root.weiv> [--json]
-        \\  weiv dump-ir <path>
-        \\  weiv dump-browser-plan <path>
-        \\  weiv dump-invalidation-graph <path>
         \\
     );
 }
@@ -548,23 +857,23 @@ fn printCliStageError(
     try printComponentDiagnosticsFailure(action, source_path, diagnostics);
 }
 
-fn printComponentBuildFailure(action: []const u8, path: []const u8, report: component.ComponentBuildReport) !void {
+fn printComponentCompileFailure(action: []const u8, path: []const u8, report: component.ComponentCompileReport) !void {
     if (json_diagnostics_mode) {
-        var stderr = std.fs.File.stderr();
-        const formatted = try formatComponentBuildReportJson(report, std.heap.page_allocator);
+        var stderr = std.Io.File.stderr();
+        const formatted = try formatComponentCompileReportJson(report, std.heap.page_allocator);
         defer std.heap.page_allocator.free(formatted);
-        try stderr.writeAll(formatted);
+        try stderr.writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
         return;
     }
 
-    var stderr = std.fs.File.stderr();
+    var stderr = std.Io.File.stderr();
     var buffer: [1024]u8 = undefined;
-    var writer = stderr.writer(&buffer);
-    const formatted = try formatComponentBuildReport(report, std.heap.page_allocator);
+    var writer = stderr.writer(std.Io.Threaded.global_single_threaded.io(), &buffer);
+    const formatted = try formatComponentCompileReport(report, std.heap.page_allocator);
     defer std.heap.page_allocator.free(formatted);
     try writer.interface.print("weiv {s} failed for {s}\n", .{ action, path });
     try writer.interface.flush();
-    try stderr.writeAll(formatted);
+    try stderr.writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
 }
 
 fn printComponentDiagnosticsFailure(
@@ -573,26 +882,26 @@ fn printComponentDiagnosticsFailure(
     diagnostics: []const compiler_diagnostics.Diagnostic,
 ) !void {
     if (json_diagnostics_mode) {
-        var stderr = std.fs.File.stderr();
+        var stderr = std.Io.File.stderr();
         const formatted = try formatFailureDiagnosticsJson(action, path, diagnostics, std.heap.page_allocator);
         defer std.heap.page_allocator.free(formatted);
-        try stderr.writeAll(formatted);
+        try stderr.writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
         return;
     }
 
-    var stderr = std.fs.File.stderr();
+    var stderr = std.Io.File.stderr();
     var buffer: [1024]u8 = undefined;
-    var writer = stderr.writer(&buffer);
+    var writer = stderr.writer(std.Io.Threaded.global_single_threaded.io(), &buffer);
     try writer.interface.print("weiv {s} failed for {s}\n", .{ action, path });
     try writer.interface.flush();
 
-    var out = std.ArrayList(u8){};
-    defer out.deinit(std.heap.page_allocator);
-    const out_writer = out.writer(std.heap.page_allocator);
+    var out = std.Io.Writer.Allocating.init(std.heap.page_allocator);
+    defer out.deinit();
+    const out_writer = &out.writer;
     try compiler_diagnostics.writeTextDiagnostics(out_writer, diagnostics, "  ");
-    const formatted = try out.toOwnedSlice(std.heap.page_allocator);
+    const formatted = try out.toOwnedSlice();
     defer std.heap.page_allocator.free(formatted);
-    try stderr.writeAll(formatted);
+    try stderr.writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
 }
 
 fn printStyleEmitDiagnostics(
@@ -623,14 +932,14 @@ pub fn formatAppValidationDiagnostics(
     diagnostics: []const compiler_diagnostics.Diagnostic,
     allocator: std.mem.Allocator,
 ) ![]u8 {
-    var out = std.ArrayList(u8){};
-    defer out.deinit(allocator);
-    const writer = out.writer(allocator);
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    const writer = &out.writer;
 
     try writer.print("weiv validate app failed for {s}\n", .{root_path});
     try compiler_diagnostics.writeTextDiagnostics(writer, diagnostics, "  ");
 
-    return out.toOwnedSlice(allocator);
+    return out.toOwnedSlice();
 }
 
 pub fn formatAppValidationDiagnosticsJson(
@@ -638,9 +947,9 @@ pub fn formatAppValidationDiagnosticsJson(
     diagnostics: []const compiler_diagnostics.Diagnostic,
     allocator: std.mem.Allocator,
 ) ![]u8 {
-    var out = std.ArrayList(u8){};
-    defer out.deinit(allocator);
-    const writer = out.writer(allocator);
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    const writer = &out.writer;
 
     try writer.writeAll("{\n");
     try writer.print("  \"rootPath\": {f},\n", .{std.json.fmt(root_path, .{})});
@@ -649,22 +958,22 @@ pub fn formatAppValidationDiagnosticsJson(
     try compiler_diagnostics.writeJsonDiagnostics(writer, diagnostics, "    ");
     try writer.writeAll("  ]\n");
     try writer.writeAll("}\n");
-    return out.toOwnedSlice(allocator);
+    return out.toOwnedSlice();
 }
 
 fn printAppValidationDiagnostics(root_path: []const u8, diagnostics: []const compiler_diagnostics.Diagnostic) !void {
     if (json_diagnostics_mode) {
-        var stderr = std.fs.File.stderr();
+        var stderr = std.Io.File.stderr();
         const formatted = try formatAppValidationDiagnosticsJson(root_path, diagnostics, std.heap.page_allocator);
         defer std.heap.page_allocator.free(formatted);
-        try stderr.writeAll(formatted);
+        try stderr.writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
         return;
     }
 
-    var stderr = std.fs.File.stderr();
+    var stderr = std.Io.File.stderr();
     const formatted = try formatAppValidationDiagnostics(root_path, diagnostics, std.heap.page_allocator);
     defer std.heap.page_allocator.free(formatted);
-    try stderr.writeAll(formatted);
+    try stderr.writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
 }
 
 fn formatFailureDiagnosticsJson(
@@ -673,9 +982,9 @@ fn formatFailureDiagnosticsJson(
     diagnostics: []const compiler_diagnostics.Diagnostic,
     allocator: std.mem.Allocator,
 ) ![]u8 {
-    var out = std.ArrayList(u8){};
-    defer out.deinit(allocator);
-    const writer = out.writer(allocator);
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    const writer = &out.writer;
 
     try writer.writeAll("{\n");
     try writer.print("  \"action\": {f},\n", .{std.json.fmt(action, .{})});
@@ -685,7 +994,7 @@ fn formatFailureDiagnosticsJson(
     try compiler_diagnostics.writeJsonDiagnostics(writer, diagnostics, "    ");
     try writer.writeAll("  ]\n");
     try writer.writeAll("}\n");
-    return out.toOwnedSlice(allocator);
+    return out.toOwnedSlice();
 }
 
 pub fn formatCliFailureDiagnosticsJson(
@@ -697,15 +1006,21 @@ pub fn formatCliFailureDiagnosticsJson(
     return formatFailureDiagnosticsJson(action, source_path, diagnostics, allocator);
 }
 
-fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.Allocator) !void {
+fn runDevServer(
+    root_path: []const u8,
+    out_dir: []const u8,
+    allocator: std.mem.Allocator,
+    process_io: std.Io,
+    parent_environ_map: *const std.process.Environ.Map,
+) !void {
     printDevInfo("session.start", "root={s} out={s}", .{ root_path, out_dir });
     printDevInfo("watch.starting", "starting watch/rebuild loop", .{});
 
-    const root_abs_path = try std.fs.cwd().realpathAlloc(allocator, root_path);
+    const root_abs_path = try std.Io.Dir.cwd().realPathFileAlloc(std.Io.Threaded.global_single_threaded.io(), root_path, allocator);
     defer allocator.free(root_abs_path);
     const watch_root_dir = std.fs.path.dirname(root_abs_path) orelse return error.InvalidRootPath;
 
-    const out_abs_path = try std.fs.cwd().realpathAlloc(allocator, out_dir);
+    const out_abs_path = try std.Io.Dir.cwd().realPathFileAlloc(std.Io.Threaded.global_single_threaded.io(), out_dir, allocator);
     defer allocator.free(out_abs_path);
 
     const ignore_dir = if (std.mem.startsWith(u8, out_abs_path, watch_root_dir) and
@@ -735,8 +1050,7 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
 
     printDevInfo("server.starting", "starting Bun preview server", .{});
 
-    var child = std.process.Child.init(&.{ "bun", "--hot", "server.ts" }, allocator);
-    var env_map = try std.process.getEnvMap(allocator);
+    var env_map = try parent_environ_map.clone(allocator);
     defer env_map.deinit();
 
     if (env_map.get("PORT")) |port| {
@@ -746,16 +1060,17 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
         printDevInfo("server.port", "port=auto source=ephemeral", .{});
     }
 
-    child.env_map = &env_map;
-    child.cwd = out_dir;
-    child.stdin_behavior = .Inherit;
-    child.stdout_behavior = .Inherit;
-    child.stderr_behavior = .Inherit;
-
-    try child.spawn();
-    const term = try child.wait();
+    var child = try std.process.spawn(process_io, .{
+        .argv = &.{ "bun", "--hot", "server.ts" },
+        .cwd = .{ .path = out_dir },
+        .environ_map = &env_map,
+        .stdin = .inherit,
+        .stdout = .inherit,
+        .stderr = .inherit,
+    });
+    const term = try child.wait(process_io);
     switch (term) {
-        .Exited => |code| {
+        .exited => |code| {
             if (code == 130 or code == 143) {
                 printDevInfo("server.stop", "preview server stopped gracefully", .{});
                 return;
@@ -767,7 +1082,7 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
                 return error.ChildProcessFailed;
             }
         },
-        .Signal => |sig| {
+        .signal => |sig| {
             if (sig == std.posix.SIG.INT or sig == std.posix.SIG.TERM) {
                 printDevInfo("server.stop", "preview server stopped gracefully", .{});
                 return;
@@ -777,7 +1092,7 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
             printCliDevMessage("dev server", root_path, .bundle, "dev.server_signal", sig_msg) catch {};
             return error.ChildProcessFailed;
         },
-        .Stopped => |sig| {
+        .stopped => |sig| {
             if (sig == std.posix.SIG.INT or sig == std.posix.SIG.TERM) {
                 printDevInfo("server.stop", "preview server stopped gracefully", .{});
                 return;
@@ -787,7 +1102,7 @@ fn runDevServer(root_path: []const u8, out_dir: []const u8, allocator: std.mem.A
             printCliDevMessage("dev server", root_path, .bundle, "dev.server_stopped_signal", sig_msg) catch {};
             return error.ChildProcessFailed;
         },
-        .Unknown => |status| {
+        .unknown => |status| {
             const status_msg = std.fmt.allocPrint(allocator, "ChildUnknownStatus({d})", .{status}) catch "ChildUnknownStatus(alloc-failed)";
             defer if (!std.mem.eql(u8, status_msg, "ChildUnknownStatus(alloc-failed)")) allocator.free(status_msg);
             printCliDevMessage("dev server", root_path, .bundle, "dev.server_unknown_status", status_msg) catch {};
@@ -807,9 +1122,13 @@ fn devWatchLoop(context: *DevWatcherContext) void {
     var last_scan_error_log_ns: i128 = 0;
 
     while (!context.state.stop.load(.acquire)) {
-        std.Thread.sleep(context.watch_poll_ms * std.time.ns_per_ms);
+        std.Io.sleep(
+            std.Io.Threaded.global_single_threaded.io(),
+            .fromMilliseconds(@intCast(context.watch_poll_ms)),
+            .awake,
+        ) catch {};
         const next_fingerprint = computeWatchFingerprint(context.watch_root_dir, context.ignore_dir, allocator) catch |err| {
-            const now_ns = std.time.nanoTimestamp();
+            const now_ns = monotonicNowNs();
             if (last_scan_error_log_ns == 0 or now_ns - last_scan_error_log_ns >= 5 * std.time.ns_per_s) {
                 printCliStageError("dev watch scan", context.root_path, .bundle, "dev.watch_scan_failed", err, allocator) catch {};
                 last_scan_error_log_ns = now_ns;
@@ -825,16 +1144,16 @@ fn devWatchLoop(context: *DevWatcherContext) void {
             }
             if (next_fingerprint != expected) {
                 pending_fingerprint = next_fingerprint;
-                pending_since_ns = std.time.nanoTimestamp();
+                pending_since_ns = monotonicNowNs();
                 continue;
             }
-            if (std.time.nanoTimestamp() - pending_since_ns < context.rebuild_debounce_ms * std.time.ns_per_ms) {
+            if (monotonicNowNs() - pending_since_ns < context.rebuild_debounce_ms * std.time.ns_per_ms) {
                 continue;
             }
         } else {
             if (next_fingerprint == last_handled_fingerprint) continue;
             pending_fingerprint = next_fingerprint;
-            pending_since_ns = std.time.nanoTimestamp();
+            pending_since_ns = monotonicNowNs();
             printDevInfo("watch.change_detected", "waiting for files to settle", .{});
             continue;
         }
@@ -856,6 +1175,10 @@ fn devWatchLoop(context: *DevWatcherContext) void {
         last_handled_fingerprint = next_fingerprint;
         pending_fingerprint = null;
     }
+}
+
+fn monotonicNowNs() i128 {
+    return @intCast(std.Io.Clock.awake.now(std.Io.Threaded.global_single_threaded.io()).toNanoseconds());
 }
 
 fn printDevInfo(comptime event: []const u8, comptime fmt: []const u8, args: anytype) void {
@@ -895,19 +1218,19 @@ fn computeWatchFingerprint(
     ignore_dir: ?[]const u8,
     allocator: std.mem.Allocator,
 ) !u64 {
-    var dir = try std.fs.openDirAbsolute(root_dir_path, .{ .iterate = true });
-    defer dir.close();
+    var dir = try std.Io.Dir.openDirAbsolute(std.Io.Threaded.global_single_threaded.io(), root_dir_path, .{ .iterate = true });
+    defer dir.close(std.Io.Threaded.global_single_threaded.io());
 
     var walker = try dir.walk(allocator);
     defer walker.deinit();
 
     var hasher = std.hash.Wyhash.init(0);
-    while (try walker.next()) |entry| {
+    while (try walker.next(std.Io.Threaded.global_single_threaded.io())) |entry| {
         if (entry.kind != .file) continue;
         if (shouldIgnoreWatchedPath(root_dir_path, entry.path, ignore_dir, allocator)) continue;
         if (!isWatchRelevantFile(entry.path)) continue;
 
-        const stat = try dir.statFile(entry.path);
+        const stat = try dir.statFile(std.Io.Threaded.global_single_threaded.io(), entry.path, .{});
         hasher.update(entry.path);
         hasher.update(std.mem.asBytes(&stat.size));
         hasher.update(std.mem.asBytes(&stat.mtime));
@@ -943,15 +1266,17 @@ fn isWatchRelevantFile(path: []const u8) bool {
 }
 
 fn readDevTimingEnvU64(name: []const u8, default_value: u64) u64 {
-    const value = std.process.getEnvVarOwned(std.heap.page_allocator, name) catch return default_value;
-    defer std.heap.page_allocator.free(value);
+    const name_z = std.heap.page_allocator.dupeZ(u8, name) catch return default_value;
+    defer std.heap.page_allocator.free(name_z);
+    const raw_value = std.c.getenv(name_z.ptr) orelse return default_value;
+    const value = std.mem.span(raw_value);
     return std.fmt.parseUnsigned(u64, value, 10) catch default_value;
 }
 
-pub fn formatComponentAnalysisReport(model: component.ComponentModel, allocator: std.mem.Allocator) ![]u8 {
-    var out = std.ArrayList(u8){};
-    defer out.deinit(allocator);
-    const writer = out.writer(allocator);
+pub fn formatComponentAnalysisReport(model: component.ComponentUnit, allocator: std.mem.Allocator) ![]u8 {
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    const writer = &out.writer;
 
     try writer.print("SFC sections\n", .{});
     try writer.print("  template: {d}..{d}\n", .{ model.sfc_document.template.content_span.start, model.sfc_document.template.content_span.end });
@@ -964,7 +1289,7 @@ pub fn formatComponentAnalysisReport(model: component.ComponentModel, allocator:
 
     try writer.print("Template AST\n  root nodes: {d}\n", .{model.template_document.nodes.len});
     try writer.print("Normalized template\n", .{});
-    try printNormalizedNodes(model.normalized_template.nodes, 1, &writer);
+    try printNormalizedNodes(model.normalized_template.nodes, 1, writer);
     try writer.print("Script analysis\n  ok: {any}\n", .{model.script.ok});
     if (model.script.props) |props| {
         try writer.print("  props export: {any}\n", .{props.has_props_export});
@@ -1000,12 +1325,12 @@ pub fn formatComponentAnalysisReport(model: component.ComponentModel, allocator:
             });
         }
     }
-    try writer.print("Binding phase\n  component refs: {d}\n", .{model.binding_result.component_refs.len});
-    for (model.binding_result.component_refs) |component_ref| {
+    try writer.print("Binding phase\n  component refs: {d}\n", .{model.template_bindings.component_refs.len});
+    for (model.template_bindings.component_refs) |component_ref| {
         try writer.print("    - {s} resolved={any}\n", .{ component_ref.tag_name, component_ref.resolved });
     }
-    try writer.print("  binding diagnostics: {d}\n", .{model.binding_result.diagnostics.len});
-    for (model.binding_result.diagnostics) |diagnostic| {
+    try writer.print("  binding diagnostics: {d}\n", .{model.template_bindings.diagnostics.len});
+    for (model.template_bindings.diagnostics) |diagnostic| {
         try writer.print("    - {s} {s}: {s} — {s} [{d}..{d}]\n", .{
             diagnostic.severity,
             diagnostic.kind,
@@ -1015,15 +1340,15 @@ pub fn formatComponentAnalysisReport(model: component.ComponentModel, allocator:
             diagnostic.span.end,
         });
     }
-    try appendProxyStateSummary(&model, &writer, allocator);
+    try appendProxyStateSummary(&model, writer, allocator);
 
-    return out.toOwnedSlice(allocator);
+    return out.toOwnedSlice();
 }
 
-pub fn formatComponentBuildReport(report: component.ComponentBuildReport, allocator: std.mem.Allocator) ![]u8 {
-    var out = std.ArrayList(u8){};
-    defer out.deinit(allocator);
-    const writer = out.writer(allocator);
+pub fn formatComponentCompileReport(report: component.ComponentCompileReport, allocator: std.mem.Allocator) ![]u8 {
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    const writer = &out.writer;
 
     if (report.sfc_document) |sfc_document| {
         try writer.print("SFC sections\n", .{});
@@ -1042,7 +1367,7 @@ pub fn formatComponentBuildReport(report: component.ComponentBuildReport, alloca
 
     if (report.normalized_template) |normalized_template| {
         try writer.print("Normalized template\n", .{});
-        try printNormalizedNodes(normalized_template.nodes, 1, &writer);
+        try printNormalizedNodes(normalized_template.nodes, 1, writer);
     }
 
     if (report.script) |script| {
@@ -1083,13 +1408,13 @@ pub fn formatComponentBuildReport(report: component.ComponentBuildReport, alloca
         }
     }
 
-    if (report.binding_result) |binding_result| {
-        try writer.print("Binding phase\n  component refs: {d}\n", .{binding_result.component_refs.len});
-        for (binding_result.component_refs) |component_ref| {
+    if (report.template_bindings) |template_bindings| {
+        try writer.print("Binding phase\n  component refs: {d}\n", .{template_bindings.component_refs.len});
+        for (template_bindings.component_refs) |component_ref| {
             try writer.print("    - {s} resolved={any}\n", .{ component_ref.tag_name, component_ref.resolved });
         }
-        try writer.print("  binding diagnostics: {d}\n", .{binding_result.diagnostics.len});
-        for (binding_result.diagnostics) |diagnostic| {
+        try writer.print("  binding diagnostics: {d}\n", .{template_bindings.diagnostics.len});
+        for (template_bindings.diagnostics) |diagnostic| {
             try writer.print("    - {s} {s}: {s} — {s} [{d}..{d}]\n", .{
                 diagnostic.severity,
                 diagnostic.kind,
@@ -1104,38 +1429,38 @@ pub fn formatComponentBuildReport(report: component.ComponentBuildReport, alloca
     try writer.print("Compiler diagnostics\n  total: {d}\n", .{report.diagnostics.len});
     try compiler_diagnostics.writeTextDiagnostics(writer, report.diagnostics, "    - ");
 
-    if (report.ir_document != null and report.binding_result != null) {
-        const success_model = component.ComponentModel{
+    if (report.lir_document != null and report.template_bindings != null) {
+        const success_model = component.ComponentUnit{
             .source_path = report.source_path,
             .sfc_document = report.sfc_document.?,
             .template_document = report.template_document.?,
             .normalized_template = report.normalized_template.?,
             .script = report.script.?,
-            .binding_result = report.binding_result.?,
-            .ir_document = report.ir_document.?,
+            .template_bindings = report.template_bindings.?,
+            .lir_document = report.lir_document.?,
         };
-        try appendProxyStateSummary(&success_model, &writer, allocator);
+        try appendProxyStateSummary(&success_model, writer, allocator);
     } else if (report.halted_after) |halted_after| {
         try writer.print("Pipeline halt\n  halted after: {s}\n", .{compiler_diagnostics.stageLabel(halted_after)});
     }
 
-    return out.toOwnedSlice(allocator);
+    return out.toOwnedSlice();
 }
 
 fn appendProxyStateSummary(
-    model: *const component.ComponentModel,
+    model: *const component.ComponentUnit,
     writer: anytype,
     allocator: std.mem.Allocator,
 ) !void {
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(model, &render_tree, allocator);
     defer allocator.free(formatted);
 
-    var tracked_root_lines = std.ArrayList([]const u8){};
+    var tracked_root_lines = std.ArrayList([]const u8).empty;
     defer tracked_root_lines.deinit(allocator);
-    var escape_warning_lines = std.ArrayList([]const u8){};
+    var escape_warning_lines = std.ArrayList([]const u8).empty;
     defer escape_warning_lines.deinit(allocator);
     var imported_root_count: usize = 0;
     var prop_root_count: usize = 0;
@@ -1214,24 +1539,24 @@ fn escapeWarningGuidance(line: []const u8) []const u8 {
     return "keep tracked state on its canonical surface and avoid raw or escaping mutation paths";
 }
 
-fn printComponentAnalysis(model: component.ComponentModel) !void {
-    var stdout = std.fs.File.stdout();
+fn printComponentAnalysis(model: component.ComponentUnit) !void {
+    var stdout = std.Io.File.stdout();
     const formatted = try formatComponentAnalysisReport(model, std.heap.page_allocator);
     defer std.heap.page_allocator.free(formatted);
-    try stdout.writeAll(formatted);
+    try stdout.writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
 }
 
-fn printComponentAnalysisReport(report: component.ComponentBuildReport) !void {
-    var stdout = std.fs.File.stdout();
-    const formatted = try formatComponentBuildReport(report, std.heap.page_allocator);
+fn printComponentAnalysisReport(report: component.ComponentCompileReport) !void {
+    var stdout = std.Io.File.stdout();
+    const formatted = try formatComponentCompileReport(report, std.heap.page_allocator);
     defer std.heap.page_allocator.free(formatted);
-    try stdout.writeAll(formatted);
+    try stdout.writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
 }
 
-pub fn formatComponentBuildReportJson(report: component.ComponentBuildReport, allocator: std.mem.Allocator) ![]u8 {
-    var out = std.ArrayList(u8){};
-    defer out.deinit(allocator);
-    const writer = out.writer(allocator);
+pub fn formatComponentCompileReportJson(report: component.ComponentCompileReport, allocator: std.mem.Allocator) ![]u8 {
+    var out = std.Io.Writer.Allocating.init(allocator);
+    defer out.deinit();
+    const writer = &out.writer;
 
     try writer.writeAll("{\n");
     try writer.print("  \"sourcePath\": {f},\n", .{std.json.fmt(report.source_path, .{})});
@@ -1245,24 +1570,24 @@ pub fn formatComponentBuildReportJson(report: component.ComponentBuildReport, al
     try writer.print("    \"template\": {any},\n", .{report.template_document != null});
     try writer.print("    \"normalizedTemplate\": {any},\n", .{report.normalized_template != null});
     try writer.print("    \"script\": {any},\n", .{report.script != null});
-    try writer.print("    \"binding\": {any},\n", .{report.binding_result != null});
-    try writer.print("    \"ir\": {any}\n", .{report.ir_document != null});
+    try writer.print("    \"binding\": {any},\n", .{report.template_bindings != null});
+    try writer.print("    \"lir\": {any}\n", .{report.lir_document != null});
     try writer.writeAll("  },\n");
     try writer.writeAll("  \"diagnostics\": [\n");
     try compiler_diagnostics.writeJsonDiagnostics(writer, report.diagnostics, "    ");
     try writer.writeAll("  ]\n");
     try writer.writeAll("}\n");
-    return out.toOwnedSlice(allocator);
+    return out.toOwnedSlice();
 }
 
-fn printComponentAnalysisJson(report: component.ComponentBuildReport) !void {
-    var stdout = std.fs.File.stdout();
-    const formatted = try formatComponentBuildReportJson(report, std.heap.page_allocator);
+fn printComponentAnalysisJson(report: component.ComponentCompileReport) !void {
+    var stdout = std.Io.File.stdout();
+    const formatted = try formatComponentCompileReportJson(report, std.heap.page_allocator);
     defer std.heap.page_allocator.free(formatted);
-    try stdout.writeAll(formatted);
+    try stdout.writeStreamingAll(std.Io.Threaded.global_single_threaded.io(), formatted);
 }
 
-fn printNormalizedNodes(nodes: []const @import("compiler/parse/template/index.zig").NormalizedNode, indent: usize, writer: anytype) !void {
+fn printNormalizedNodes(nodes: []const parser.template.NormalizedNode, indent: usize, writer: anytype) !void {
     for (nodes) |node| {
         try printIndent(indent, writer);
         switch (node) {
@@ -1312,83 +1637,5 @@ fn printIndent(indent: usize, writer: anytype) !void {
     var i: usize = 0;
     while (i < indent) : (i += 1) {
         try writer.writeAll("  ");
-    }
-}
-
-fn printIrDocument(document: @import("compiler/lower/ir.zig").Document) !void {
-    var stdout = std.fs.File.stdout();
-    var buffer: [4096]u8 = undefined;
-    var writer = stdout.writer(&buffer);
-    try writer.interface.print("IR\n", .{});
-    try printIrNodes(document.nodes, 1, &writer.interface);
-    try writer.interface.flush();
-}
-
-fn printIrNodes(nodes: []const @import("compiler/lower/ir.zig").Node, indent: usize, writer: anytype) !void {
-    for (nodes) |node| {
-        try printIndent(indent, writer);
-        switch (node) {
-            .text => |text| try writer.print("text `{s}`\n", .{text.content}),
-            .interpolation => |interp| try writer.print("interpolation `{s}`\n", .{interp.expression}),
-            .slot_outlet => |slot_outlet| {
-                if (slot_outlet.name) |name| {
-                    try writer.print("slot name=\"{s}\"\n", .{name});
-                } else {
-                    try writer.print("slot <default>\n", .{});
-                }
-                try printIrNodes(slot_outlet.fallback_children, indent + 1, writer);
-            },
-            .component => |component_node| {
-                try writer.print("component <{s}>\n", .{component_node.tag_name});
-                try printIrEffects(component_node.effects, indent + 1, writer);
-                for (component_node.slot_provisions) |slot_provision| {
-                    try printIndent(indent + 1, writer);
-                    if (slot_provision.name) |name| {
-                        try writer.print("slot provision {s}\n", .{name});
-                    } else {
-                        try writer.print("slot provision <default>\n", .{});
-                    }
-                    try printIrNodes(slot_provision.children, indent + 2, writer);
-                }
-            },
-            .element => |element| {
-                try writer.print("element <{s}>\n", .{element.tag_name});
-                for (element.attributes) |attribute| {
-                    try printIndent(indent + 1, writer);
-                    if (attribute.value) |value| {
-                        try writer.print("attr {s}=\"{s}\"\n", .{ attribute.name, value });
-                    } else {
-                        try writer.print("attr {s}\n", .{attribute.name});
-                    }
-                }
-                try printIrEffects(element.effects, indent + 1, writer);
-                try printIrNodes(element.children, indent + 1, writer);
-            },
-            .conditional => |conditional| {
-                try writer.print("conditional if=\"{s}\"\n", .{conditional.condition});
-                try printIndent(indent + 1, writer);
-                try writer.print("consequent\n", .{});
-                try printIrNodes(conditional.consequent, indent + 2, writer);
-                if (conditional.alternate.len > 0) {
-                    try printIndent(indent + 1, writer);
-                    try writer.print("alternate\n", .{});
-                    try printIrNodes(conditional.alternate, indent + 2, writer);
-                }
-            },
-            .for_loop => |for_loop| {
-                try writer.print("for {s} in {s}\n", .{ for_loop.item_name, for_loop.iterable_expr });
-                try printIrNodes(for_loop.body, indent + 1, writer);
-            },
-        }
-    }
-}
-
-fn printIrEffects(effects: []const @import("compiler/lower/ir.zig").DirectiveEffect, indent: usize, writer: anytype) !void {
-    for (effects) |effect| {
-        try printIndent(indent, writer);
-        switch (effect) {
-            .bind => |bind_dir| try writer.print("bind {s} <- {s}\n", .{ bind_dir.target_name, bind_dir.expression }),
-            .event => |event_dir| try writer.print("event {s} -> {s}\n", .{ event_dir.event_name, event_dir.expression }),
-        }
     }
 }

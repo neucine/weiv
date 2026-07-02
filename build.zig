@@ -13,22 +13,22 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    exe.linkLibC();
-    exe.addLibraryPath(b.path("libs/parser-backend/target/release"));
-    exe.linkSystemLibrary("weiv_parser_backend");
+    exe.root_module.linkSystemLibrary("c", .{});
+    exe.root_module.addLibraryPath(b.path("libs/parser-backend/target/release"));
+    exe.root_module.linkSystemLibrary("weiv_parser_backend", .{});
     if (target.result.os.tag == .windows) {
         exe.bundle_compiler_rt = false;
-        exe.linkSystemLibrary("ws2_32");
-        exe.linkSystemLibrary("userenv");
-        exe.addCSourceFile(.{
+        exe.root_module.linkSystemLibrary("ws2_32", .{});
+        exe.root_module.linkSystemLibrary("userenv", .{});
+        exe.root_module.addCSourceFile(.{
             .file = b.path("src/windows_shims.c"),
         });
     }
 
     if (target.result.os.tag == .macos) {
-        exe.linkFramework("CoreFoundation");
-        exe.linkFramework("Security");
-        exe.linkSystemLibrary("iconv");
+        exe.root_module.linkFramework("CoreFoundation", .{});
+        exe.root_module.linkFramework("Security", .{});
+        exe.root_module.linkSystemLibrary("iconv", .{});
     }
 
     const build_parser_backend = b.addSystemCommand(&.{
@@ -59,21 +59,21 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    tests.linkLibC();
-    tests.addLibraryPath(b.path("libs/parser-backend/target/release"));
-    tests.linkSystemLibrary("weiv_parser_backend");
+    tests.root_module.linkSystemLibrary("c", .{});
+    tests.root_module.addLibraryPath(b.path("libs/parser-backend/target/release"));
+    tests.root_module.linkSystemLibrary("weiv_parser_backend", .{});
     if (target.result.os.tag == .windows) {
         tests.bundle_compiler_rt = false;
-        tests.linkSystemLibrary("ws2_32");
-        tests.linkSystemLibrary("userenv");
-        tests.addCSourceFile(.{
+        tests.root_module.linkSystemLibrary("ws2_32", .{});
+        tests.root_module.linkSystemLibrary("userenv", .{});
+        tests.root_module.addCSourceFile(.{
             .file = b.path("src/windows_shims.c"),
         });
     }
     if (target.result.os.tag == .macos) {
-        tests.linkFramework("CoreFoundation");
-        tests.linkFramework("Security");
-        tests.linkSystemLibrary("iconv");
+        tests.root_module.linkFramework("CoreFoundation", .{});
+        tests.root_module.linkFramework("Security", .{});
+        tests.root_module.linkSystemLibrary("iconv", .{});
     }
     tests.step.dependOn(&build_parser_backend.step);
 

@@ -1,18 +1,31 @@
 const std = @import("std");
-const app_emit = @import("compiler/emit/browser/emit_app.zig");
+const browser_backend = @import("compiler/backend/browser/index.zig");
+const compiler_compile = @import("compiler/compile.zig");
 const compiler_diagnostics = @import("compiler/diagnostics.zig");
-const component = @import("compiler/pipeline/index.zig");
-const browser_plan = @import("compiler/lower/browser_plan/index.zig");
-const invalidation_graph = @import("compiler/lower/invalidation_graph/index.zig");
-const emit_direct_js = @import("compiler/emit/browser/emit_sfc.zig");
-const style = @import("compiler/emit/browser/scoped_css.zig");
-const directives = @import("compiler/parse/template/directives.zig");
-const ast = @import("compiler/parse/template/ast.zig");
-const sfc = @import("compiler/parse/sfc.zig");
+const component = @import("compiler/component_unit.zig");
+const inspect = @import("compiler/inspect/index.zig");
+const lower = @import("compiler/lower/index.zig");
+const parser = @import("compiler/parser/index.zig");
 const cli = @import("cli.zig");
 
-test "classic todo app components build through current pipeline" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const app_emit = browser_backend.emit.app;
+const ast = parser.template.ast;
+const browser_component = browser_backend.component;
+const browser_render_tree = browser_backend.render_tree;
+const directives = parser.template.directives;
+const js_module = browser_backend.emit.js_module;
+const invalidation_graph = inspect.invalidation_graph;
+const sfc = parser.sfc;
+const style = browser_backend.emit.scoped_css;
+
+fn emitComponentJs(model: *const component.ComponentUnit, allocator: std.mem.Allocator) ![]u8 {
+    var browser_component_model = try browser_component.build(model, allocator);
+    defer browser_component_model.deinit(allocator);
+    return try js_module.emitModule(&browser_component_model, allocator);
+}
+
+test "classic todo app components build through current component pipeline" {
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -39,8 +52,8 @@ test "classic todo app components build through current pipeline" {
     );
 }
 
-test "todomvc verification app components build through current pipeline" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+test "todomvc verification app components build through current component pipeline" {
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -88,8 +101,8 @@ test "todomvc verification app components build through current pipeline" {
     );
 }
 
-test "kanib app components build through current pipeline" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+test "kanib app components build through current component pipeline" {
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -172,20 +185,20 @@ test "kanib app components build through current pipeline" {
     );
 }
 
-test "classic todo app app component lowers to expected IR shape" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+test "classic todo app app component lowers to expected LIR shape" {
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/classic-todo/App.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/classic-todo/App.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/classic-todo/App.weiv", allocator);
     defer model.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
+    try std.testing.expectEqual(@as(usize, 1), model.lir_document.nodes.len);
 
-    switch (model.ir_document.nodes[0]) {
+    switch (model.lir_document.nodes[0]) {
         .element => |root| {
             try std.testing.expect(std.mem.eql(u8, root.tag_name, "main"));
             try std.testing.expectEqual(@as(usize, 1), root.children.len);
@@ -219,17 +232,17 @@ test "classic todo app app component lowers to expected IR shape" {
 }
 
 test "basic counter direct browser module emits create/update DOM contract" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/basic/basic-counter.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/basic/basic-counter.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/basic/basic-counter.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "function createDom(instance)") != null);
@@ -275,7 +288,7 @@ test "basic counter direct browser module emits create/update DOM contract" {
 }
 
 test "direct browser modules compile simple callback-argument expressions directly" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -291,10 +304,10 @@ test "direct browser modules compile simple callback-argument expressions direct
         \\</script>
     ;
 
-    var model = try component.build(source, "inline-evaluate-fallback.weiv", allocator);
+    var model = try compiler_compile.compile(source, "inline-evaluate-fallback.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "function evaluate(") == null);
@@ -303,7 +316,7 @@ test "direct browser modules compile simple callback-argument expressions direct
 }
 
 test "direct browser modules compile block-bodied callback-argument expressions directly" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -319,10 +332,10 @@ test "direct browser modules compile block-bodied callback-argument expressions 
         \\</script>
     ;
 
-    var model = try component.build(source, "inline-block-callback-evaluate-fallback.weiv", allocator);
+    var model = try compiler_compile.compile(source, "inline-block-callback-evaluate-fallback.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "function evaluate(") == null);
@@ -331,7 +344,7 @@ test "direct browser modules compile block-bodied callback-argument expressions 
 }
 
 test "direct browser modules compile bracket-access expressions directly" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -348,10 +361,10 @@ test "direct browser modules compile bracket-access expressions directly" {
         \\</script>
     ;
 
-    var model = try component.build(source, "inline-bracket-access.weiv", allocator);
+    var model = try compiler_compile.compile(source, "inline-bracket-access.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "function evaluate(") == null);
@@ -360,7 +373,7 @@ test "direct browser modules compile bracket-access expressions directly" {
 }
 
 test "direct browser module emits tracked state graph metadata for imported nested paths" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -375,10 +388,10 @@ test "direct browser module emits tracked state graph metadata for imported nest
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/direct-browser-tracked-imported-paths.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/direct-browser-tracked-imported-paths.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "import { workspace as __weiv_import_workspace } from \"./workspace-state.js\";") != null);
@@ -395,7 +408,7 @@ test "direct browser module emits tracked state graph metadata for imported nest
 }
 
 test "direct browser module emits tracked state graph metadata for prop nested paths" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -416,10 +429,10 @@ test "direct browser module emits tracked state graph metadata for prop nested p
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/direct-browser-tracked-prop-paths.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/direct-browser-tracked-prop-paths.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "props = __weiv_getTrackedRoot(\"props\", props);") != null);
@@ -430,7 +443,7 @@ test "direct browser module emits tracked state graph metadata for prop nested p
 }
 
 test "direct browser module emits tracked state graph metadata for local let nested paths" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -445,10 +458,10 @@ test "direct browser module emits tracked state graph metadata for local let nes
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/direct-browser-tracked-local-paths.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/direct-browser-tracked-local-paths.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "state = __weiv_getTrackedRoot(\"state\", state);") != null);
@@ -470,7 +483,7 @@ test "component analysis promotes immutable local object root with nested path u
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/analysis-tracked-immutable-local-root.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/analysis-tracked-immutable-local-root.weiv", allocator);
     defer model.deinit(allocator);
 
     const report = try cli.formatComponentAnalysisReport(model, allocator);
@@ -482,17 +495,17 @@ test "component analysis promotes immutable local object root with nested path u
 }
 
 test "conditional toggle direct browser module emits conditional boundary helpers" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/basic/conditional-toggle.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/basic/conditional-toggle.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/basic/conditional-toggle.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "createConditionalFragment_") != null);
@@ -506,17 +519,17 @@ test "conditional toggle direct browser module emits conditional boundary helper
 }
 
 test "todo list direct browser module emits loop boundary helpers" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/basic/todo-list.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/basic/todo-list.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/basic/todo-list.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "createForEntry_") != null);
@@ -531,44 +544,44 @@ test "todo list direct browser module emits loop boundary helpers" {
     try std.testing.expect(std.mem.indexOf(u8, js, "dirtySet.has(\"item\")") == null);
 }
 
-test "browser plan formatter exposes inspectable direct DOM plan duplicate coverage" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+test "browser render_tree formatter exposes inspectable direct DOM render_tree duplicate coverage" {
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/slots/CardUsage.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/slots/CardUsage.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/slots/CardUsage.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try browser_plan.debug.formatDocument(&plan, allocator);
+    const formatted = try browser_render_tree.debug.formatDocument(&render_tree, allocator);
     defer allocator.free(formatted);
 
-    try std.testing.expect(std.mem.indexOf(u8, formatted, "browser-plan next_ref_id=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "render-tree next_ref_id=") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "component refs=[") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "slot-provision name=header") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "slot-provision name=default") != null);
 }
 
 test "invalidation graph formatter exposes regions dependencies and owned boundaries" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/basic/basic-counter.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/basic/basic-counter.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/basic/basic-counter.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "invalidation-graph source=test/examples/basic/basic-counter.weiv") != null);
@@ -582,7 +595,7 @@ test "invalidation graph formatter exposes regions dependencies and owned bounda
 }
 
 test "invalidation graph formatter expands nested local helper dependencies" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -607,13 +620,13 @@ test "invalidation graph formatter expands nested local helper dependencies" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/invalidation-graph-local-helper-deps.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalidation-graph-local-helper-deps.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=message() eval=direct deps=[message,doubled,count]") != null);
@@ -621,7 +634,7 @@ test "invalidation graph formatter expands nested local helper dependencies" {
 }
 
 test "invalidation graph formatter diagnoses hidden-state template calls" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -635,13 +648,13 @@ test "invalidation graph formatter diagnoses hidden-state template calls" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/hidden-state-call.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/hidden-state-call.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "diagnostics") != null);
@@ -650,7 +663,7 @@ test "invalidation graph formatter diagnoses hidden-state template calls" {
 }
 
 test "invalidation graph formatter inventories tracked imported nested paths" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -665,13 +678,13 @@ test "invalidation graph formatter inventories tracked imported nested paths" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/invalidation-graph-tracked-imported-paths.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalidation-graph-tracked-imported-paths.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "tracked-roots\n  root id=1 binding=workspace kind=imported-tracked\n") != null);
@@ -681,7 +694,7 @@ test "invalidation graph formatter inventories tracked imported nested paths" {
 }
 
 test "invalidation graph formatter inventories tracked prop nested paths" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -702,13 +715,13 @@ test "invalidation graph formatter inventories tracked prop nested paths" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/inspect-tracked-prop-paths.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/inspect-tracked-prop-paths.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "tracked-roots\n  root id=1 binding=props kind=prop-tracked\n") != null);
@@ -718,7 +731,7 @@ test "invalidation graph formatter inventories tracked prop nested paths" {
 }
 
 test "invalidation graph formatter inventories tracked local let nested paths" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -733,13 +746,13 @@ test "invalidation graph formatter inventories tracked local let nested paths" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/inspect-tracked-local-paths.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/inspect-tracked-local-paths.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "tracked-roots\n  root id=1 binding=state kind=local-tracked\n") != null);
@@ -749,7 +762,7 @@ test "invalidation graph formatter inventories tracked local let nested paths" {
 }
 
 test "local tracked roots are not selected when root assignment exists" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -766,10 +779,10 @@ test "local tracked roots are not selected when root assignment exists" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/no-tracked-local-root-assignment.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/no-tracked-local-root-assignment.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "state = __weiv_getTrackedRoot(\"state\", state);") == null);
@@ -777,7 +790,7 @@ test "local tracked roots are not selected when root assignment exists" {
 }
 
 test "invalidation graph formatter warns on tracked-root alias escape" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -793,13 +806,13 @@ test "invalidation graph formatter warns on tracked-root alias escape" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/tracked-root-alias-escape.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/tracked-root-alias-escape.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "warning escape-warning binding=workspace related=alias") != null);
@@ -808,7 +821,7 @@ test "invalidation graph formatter warns on tracked-root alias escape" {
 }
 
 test "invalidation graph formatter warns on tracked-root unowned callback mutation" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -825,13 +838,13 @@ test "invalidation graph formatter warns on tracked-root unowned callback mutati
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/tracked-root-unowned-callback.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/tracked-root-unowned-callback.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "warning escape-warning binding=workspace related= offset=") != null);
@@ -840,7 +853,7 @@ test "invalidation graph formatter warns on tracked-root unowned callback mutati
 }
 
 test "invalidation graph formatter diagnoses local helper external reads" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -859,13 +872,13 @@ test "invalidation graph formatter diagnoses local helper external reads" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/local-helper-hidden-state.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/local-helper-hidden-state.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=themeLabel()") != null);
@@ -873,7 +886,7 @@ test "invalidation graph formatter diagnoses local helper external reads" {
 }
 
 test "invalidation graph formatter diagnoses local helper side effects" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -895,13 +908,13 @@ test "invalidation graph formatter diagnoses local helper side effects" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/local-helper-side-effects.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/local-helper-side-effects.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=nextCount()") != null);
@@ -909,7 +922,7 @@ test "invalidation graph formatter diagnoses local helper side effects" {
 }
 
 test "invalidation graph formatter marks simple callback-argument expressions as direct" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -926,13 +939,13 @@ test "invalidation graph formatter marks simple callback-argument expressions as
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/invalidation-graph-evaluate-fallback.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalidation-graph-evaluate-fallback.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=items.filter((item) => item.done).length eval=direct deps=[items]") != null);
@@ -941,7 +954,7 @@ test "invalidation graph formatter marks simple callback-argument expressions as
 }
 
 test "invalidation graph formatter marks block-bodied callback-argument expressions as direct" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -958,13 +971,13 @@ test "invalidation graph formatter marks block-bodied callback-argument expressi
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/invalidation-graph-block-callback-evaluate-fallback.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalidation-graph-block-callback-evaluate-fallback.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=items.filter((item) => { return item.done; }).length eval=direct deps=[items]") != null);
@@ -973,7 +986,7 @@ test "invalidation graph formatter marks block-bodied callback-argument expressi
 }
 
 test "invalidation graph formatter marks bracket-access expressions as direct" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -991,13 +1004,13 @@ test "invalidation graph formatter marks bracket-access expressions as direct" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/invalidation-graph-bracket-access.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalidation-graph-bracket-access.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=items[selectedIndex].title eval=direct deps=[items,selectedIndex]") != null);
@@ -1005,7 +1018,7 @@ test "invalidation graph formatter marks bracket-access expressions as direct" {
 }
 
 test "invalidation graph formatter lists object and container mutation sites" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1027,13 +1040,13 @@ test "invalidation graph formatter lists object and container mutation sites" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/invalidation-graph-mutations.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalidation-graph-mutations.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "todos method offset=") != null);
@@ -1042,7 +1055,7 @@ test "invalidation graph formatter lists object and container mutation sites" {
 }
 
 test "invalidation graph formatter classifies fallback expressions as info" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1059,13 +1072,13 @@ test "invalidation graph formatter classifies fallback expressions as info" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/invalidation-graph-fallback-info.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalidation-graph-fallback-info.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=items.map(function (item) { return item.done; }).length eval=fallback reason=dynamic-call-arguments deps=[items]") != null);
@@ -1073,7 +1086,7 @@ test "invalidation graph formatter classifies fallback expressions as info" {
 }
 
 test "invalidation graph formatter diagnoses expression-position mutations" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1095,13 +1108,13 @@ test "invalidation graph formatter diagnoses expression-position mutations" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/invalidation-graph-expression-mutation.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalidation-graph-expression-mutation.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "diagnostics") != null);
@@ -1110,20 +1123,20 @@ test "invalidation graph formatter diagnoses expression-position mutations" {
 }
 
 test "invalidation graph formatter classifies child event boundaries as owned" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/todomvc/TodoList.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/todomvc/TodoList.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/todomvc/TodoList.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "child-event name=toggle expr=emitToggle owned=true") != null);
@@ -1131,7 +1144,7 @@ test "invalidation graph formatter classifies child event boundaries as owned" {
 }
 
 test "invalidation graph formatter classifies async template event handlers as owned" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1154,13 +1167,13 @@ test "invalidation graph formatter classifies async template event handlers as o
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/invalidation-graph-async-event.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalidation-graph-async-event.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "template-event name=click expr=load owned=true async=true") != null);
@@ -1168,7 +1181,7 @@ test "invalidation graph formatter classifies async template event handlers as o
 }
 
 test "invalidation graph formatter diagnoses observable mutation inside unowned callback" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1189,13 +1202,13 @@ test "invalidation graph formatter diagnoses observable mutation inside unowned 
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/invalidation-graph-unowned-callback.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalidation-graph-unowned-callback.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "callback-registrations") != null);
@@ -1207,7 +1220,7 @@ test "invalidation graph formatter diagnoses observable mutation inside unowned 
 }
 
 test "invalidation graph formatter diagnoses observable alias mutation" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1229,13 +1242,13 @@ test "invalidation graph formatter diagnoses observable alias mutation" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/invalidation-graph-alias-mutation.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalidation-graph-alias-mutation.weiv", allocator);
     defer model.deinit(allocator);
 
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
 
-    const formatted = try invalidation_graph.formatDocument(&model, &plan, allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "diagnostics") != null);
@@ -1244,17 +1257,17 @@ test "invalidation graph formatter diagnoses observable alias mutation" {
 }
 
 test "direct browser setup wraps timer callbacks in owned boundaries" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/basic/timer-callback.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/basic/timer-callback.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/basic/timer-callback.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "const setTimeout = (callback, ...args) => globalThis.setTimeout(__weiv_wrapCallback(callback), ...args);") != null);
@@ -1262,8 +1275,8 @@ test "direct browser setup wraps timer callbacks in owned boundaries" {
     try std.testing.expect(std.mem.indexOf(u8, js, "instance.setBoundaryRunner((callback) => runOwnedBoundary(instance, callback));") != null);
 }
 
-test "slot outlet and default projection survive through normalized template and IR" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+test "slot outlet and default projection survive through normalized template and LIR" {
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1285,7 +1298,7 @@ test "slot outlet and default projection survive through normalized template and
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/slots/PanelUsage.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/slots/PanelUsage.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expectEqual(@as(usize, 1), model.normalized_template.nodes.len);
@@ -1297,8 +1310,8 @@ test "slot outlet and default projection survive through normalized template and
         else => return error.UnexpectedNormalizedShape,
     }
 
-    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
-    switch (model.ir_document.nodes[0]) {
+    try std.testing.expectEqual(@as(usize, 1), model.lir_document.nodes.len);
+    switch (model.lir_document.nodes[0]) {
         .component => |component_node| {
             try std.testing.expect(std.mem.eql(u8, component_node.tag_name, "Panel"));
             try std.testing.expectEqual(@as(usize, 1), component_node.slot_provisions.len);
@@ -1314,7 +1327,7 @@ test "slot outlet and default projection survive through normalized template and
 }
 
 test "slot outlet parses and lowers fallback content" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1333,7 +1346,7 @@ test "slot outlet parses and lowers fallback content" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/slots/Panel.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/slots/Panel.weiv", allocator);
     defer model.deinit(allocator);
 
     switch (model.normalized_template.nodes[0]) {
@@ -1350,7 +1363,7 @@ test "slot outlet parses and lowers fallback content" {
         else => return error.UnexpectedNormalizedShape,
     }
 
-    switch (model.ir_document.nodes[0]) {
+    switch (model.lir_document.nodes[0]) {
         .element => |root| {
             try std.testing.expectEqual(@as(usize, 1), root.children.len);
             switch (root.children[0]) {
@@ -1366,23 +1379,23 @@ test "slot outlet parses and lowers fallback content" {
 }
 
 test "direct browser modules expose default slot projection contract" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const panel_source = try readFixture(allocator, "test/examples/slots/Panel.weiv");
     defer allocator.free(panel_source);
-    var panel_model = try component.build(panel_source, "test/examples/slots/Panel.weiv", allocator);
+    var panel_model = try compiler_compile.compile(panel_source, "test/examples/slots/Panel.weiv", allocator);
     defer panel_model.deinit(allocator);
 
     const panel_usage_source = try readFixture(allocator, "test/examples/slots/PanelUsage.weiv");
     defer allocator.free(panel_usage_source);
-    var usage_model = try component.build(panel_usage_source, "test/examples/slots/PanelUsage.weiv", allocator);
+    var usage_model = try compiler_compile.compile(panel_usage_source, "test/examples/slots/PanelUsage.weiv", allocator);
     defer usage_model.deinit(allocator);
 
-    const panel_js = try emit_direct_js.emitModule(&panel_model, allocator);
+    const panel_js = try emitComponentJs(&panel_model, allocator);
     defer allocator.free(panel_js);
-    const usage_js = try emit_direct_js.emitModule(&usage_model, allocator);
+    const usage_js = try emitComponentJs(&usage_model, allocator);
     defer allocator.free(usage_js);
 
     try std.testing.expect(std.mem.indexOf(u8, panel_js, "instance.slots?.default") != null);
@@ -1401,18 +1414,18 @@ test "direct browser modules expose default slot projection contract" {
 }
 
 test "named slot grouping lowers into explicit slot provisions" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/slots/CardUsage.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/slots/CardUsage.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/slots/CardUsage.weiv", allocator);
     defer model.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
-    switch (model.ir_document.nodes[0]) {
+    try std.testing.expectEqual(@as(usize, 1), model.lir_document.nodes.len);
+    switch (model.lir_document.nodes[0]) {
         .component => |component_node| {
             try std.testing.expect(std.mem.eql(u8, component_node.tag_name, "Card"));
             try std.testing.expectEqual(@as(usize, 2), component_node.slot_provisions.len);
@@ -1426,23 +1439,23 @@ test "named slot grouping lowers into explicit slot provisions" {
 }
 
 test "named slot browser modules expose slot map contract" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const card_source = try readFixture(allocator, "test/examples/slots/Card.weiv");
     defer allocator.free(card_source);
-    var card_model = try component.build(card_source, "test/examples/slots/Card.weiv", allocator);
+    var card_model = try compiler_compile.compile(card_source, "test/examples/slots/Card.weiv", allocator);
     defer card_model.deinit(allocator);
 
     const card_usage_source = try readFixture(allocator, "test/examples/slots/CardUsage.weiv");
     defer allocator.free(card_usage_source);
-    var usage_model = try component.build(card_usage_source, "test/examples/slots/CardUsage.weiv", allocator);
+    var usage_model = try compiler_compile.compile(card_usage_source, "test/examples/slots/CardUsage.weiv", allocator);
     defer usage_model.deinit(allocator);
 
-    const card_js = try emit_direct_js.emitModule(&card_model, allocator);
+    const card_js = try emitComponentJs(&card_model, allocator);
     defer allocator.free(card_js);
-    const usage_js = try emit_direct_js.emitModule(&usage_model, allocator);
+    const usage_js = try emitComponentJs(&usage_model, allocator);
     defer allocator.free(usage_js);
 
     try std.testing.expect(std.mem.indexOf(u8, card_js, "instance.slots?.[\"header\"]") != null);
@@ -1460,7 +1473,7 @@ test "named slot browser modules expose slot map contract" {
 }
 
 test "slot assignment outside component usage is rejected" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1477,12 +1490,12 @@ test "slot assignment outside component usage is rejected" {
 
     try std.testing.expectError(
         error.InvalidSlotPlacement,
-        component.build(source, "inline-invalid-slot-placement.weiv", allocator),
+        compiler_compile.compile(source, "inline-invalid-slot-placement.weiv", allocator),
     );
 }
 
 test "template grouping without slot assignment is rejected" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1504,12 +1517,12 @@ test "template grouping without slot assignment is rejected" {
 
     try std.testing.expectError(
         error.InvalidSlotTemplatePlacement,
-        component.build(source, "inline-invalid-slot-template.weiv", allocator),
+        compiler_compile.compile(source, "inline-invalid-slot-template.weiv", allocator),
     );
 }
 
 test "dangling else without sibling if is rejected" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1526,12 +1539,12 @@ test "dangling else without sibling if is rejected" {
 
     try std.testing.expectError(
         error.UnexpectedElse,
-        component.build(source, "inline-unexpected-else.weiv", allocator),
+        compiler_compile.compile(source, "inline-unexpected-else.weiv", allocator),
     );
 }
 
 test "slot outlet directives are rejected" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1548,12 +1561,12 @@ test "slot outlet directives are rejected" {
 
     try std.testing.expectError(
         error.InvalidSlotOutlet,
-        component.build(source, "inline-invalid-slot-outlet.weiv", allocator),
+        compiler_compile.compile(source, "inline-invalid-slot-outlet.weiv", allocator),
     );
 }
 
 test "template grouping outside component usage is rejected" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1572,22 +1585,22 @@ test "template grouping outside component usage is rejected" {
 
     try std.testing.expectError(
         error.InvalidSlotTemplatePlacement,
-        component.build(source, "inline-invalid-top-level-template.weiv", allocator),
+        compiler_compile.compile(source, "inline-invalid-top-level-template.weiv", allocator),
     );
 }
 
 test "todomvc app direct browser module preserves child component imports" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/todomvc/App.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/todomvc/App.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/todomvc/App.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "import * as TodoHeader from \"./TodoHeader.mjs\";") != null);
@@ -1606,17 +1619,17 @@ test "todomvc app direct browser module preserves child component imports" {
 }
 
 test "conditional direct browser modules destroy outgoing branch before replacement duplicate coverage" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/basic/conditional-toggle.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/basic/conditional-toggle.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/basic/conditional-toggle.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "function destroyConditionalBranch_") != null);
@@ -1626,16 +1639,16 @@ test "conditional direct browser modules destroy outgoing branch before replacem
 }
 
 test "direct browser modules emit specialized bound attribute patch code" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const counter_source = try readFixture(allocator, "test/examples/basic/basic-counter.weiv");
     defer allocator.free(counter_source);
-    var counter_model = try component.build(counter_source, "test/examples/basic/basic-counter.weiv", allocator);
+    var counter_model = try compiler_compile.compile(counter_source, "test/examples/basic/basic-counter.weiv", allocator);
     defer counter_model.deinit(allocator);
 
-    const counter_js = try emit_direct_js.emitModule(&counter_model, allocator);
+    const counter_js = try emitComponentJs(&counter_model, allocator);
     defer allocator.free(counter_js);
 
     try std.testing.expect(std.mem.indexOf(u8, counter_js, "applyBoundAttribute(") == null);
@@ -1650,10 +1663,10 @@ test "direct browser modules emit specialized bound attribute patch code" {
 
     const todo_item_source = try readFixture(allocator, "test/examples/todomvc/TodoItem.weiv");
     defer allocator.free(todo_item_source);
-    var todo_item_model = try component.build(todo_item_source, "test/examples/todomvc/TodoItem.weiv", allocator);
+    var todo_item_model = try compiler_compile.compile(todo_item_source, "test/examples/todomvc/TodoItem.weiv", allocator);
     defer todo_item_model.deinit(allocator);
 
-    const todo_item_js = try emit_direct_js.emitModule(&todo_item_model, allocator);
+    const todo_item_js = try emitComponentJs(&todo_item_model, allocator);
     defer allocator.free(todo_item_js);
 
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "applyBoundAttribute(") == null);
@@ -1664,10 +1677,10 @@ test "direct browser modules emit specialized bound attribute patch code" {
 
     const text_input_source = try readFixture(allocator, "test/examples/todomvc/TodoTextInput.weiv");
     defer allocator.free(text_input_source);
-    var text_input_model = try component.build(text_input_source, "test/examples/todomvc/TodoTextInput.weiv", allocator);
+    var text_input_model = try compiler_compile.compile(text_input_source, "test/examples/todomvc/TodoTextInput.weiv", allocator);
     defer text_input_model.deinit(allocator);
 
-    const text_input_js = try emit_direct_js.emitModule(&text_input_model, allocator);
+    const text_input_js = try emitComponentJs(&text_input_model, allocator);
     defer allocator.free(text_input_js);
 
     try std.testing.expect(std.mem.indexOf(u8, text_input_js, "const __next_0_value = __value_0_value ?? \"\";") != null);
@@ -1678,10 +1691,10 @@ test "direct browser modules emit specialized bound attribute patch code" {
 
     const todo_footer_source = try readFixture(allocator, "test/examples/todomvc/TodoFooter.weiv");
     defer allocator.free(todo_footer_source);
-    var todo_footer_model = try component.build(todo_footer_source, "test/examples/todomvc/TodoFooter.weiv", allocator);
+    var todo_footer_model = try compiler_compile.compile(todo_footer_source, "test/examples/todomvc/TodoFooter.weiv", allocator);
     defer todo_footer_model.deinit(allocator);
 
-    const todo_footer_js = try emit_direct_js.emitModule(&todo_footer_model, allocator);
+    const todo_footer_js = try emitComponentJs(&todo_footer_model, allocator);
     defer allocator.free(todo_footer_js);
 
     try std.testing.expect(std.mem.indexOf(u8, todo_footer_js, "const __next_text_0 = String((scope.props.activeCount) ?? \"\");") != null);
@@ -1693,7 +1706,7 @@ test "direct browser modules emit specialized bound attribute patch code" {
 }
 
 test "direct browser modules specialize child component update paths" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -1709,10 +1722,10 @@ test "direct browser modules specialize child component update paths" {
         \\</script>
     ;
 
-    var static_model = try component.build(static_source, "inline-static-child.weiv", allocator);
+    var static_model = try compiler_compile.compile(static_source, "inline-static-child.weiv", allocator);
     defer static_model.deinit(allocator);
 
-    const static_js = try emit_direct_js.emitModule(&static_model, allocator);
+    const static_js = try emitComponentJs(&static_model, allocator);
     defer allocator.free(static_js);
 
     try std.testing.expect(std.mem.indexOf(u8, static_js, "Shell.mountIntoBoundary(") != null);
@@ -1724,10 +1737,10 @@ test "direct browser modules specialize child component update paths" {
 
     const panel_usage_source = try readFixture(allocator, "test/examples/slots/PanelUsage.weiv");
     defer allocator.free(panel_usage_source);
-    var panel_usage_model = try component.build(panel_usage_source, "test/examples/slots/PanelUsage.weiv", allocator);
+    var panel_usage_model = try compiler_compile.compile(panel_usage_source, "test/examples/slots/PanelUsage.weiv", allocator);
     defer panel_usage_model.deinit(allocator);
 
-    const panel_usage_js = try emit_direct_js.emitModule(&panel_usage_model, allocator);
+    const panel_usage_js = try emitComponentJs(&panel_usage_model, allocator);
     defer allocator.free(panel_usage_js);
 
     try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, ".setProps(") == null);
@@ -1737,10 +1750,10 @@ test "direct browser modules specialize child component update paths" {
 
     const todo_item_source = try readFixture(allocator, "test/examples/todomvc/TodoItem.weiv");
     defer allocator.free(todo_item_source);
-    var todo_item_model = try component.build(todo_item_source, "test/examples/todomvc/TodoItem.weiv", allocator);
+    var todo_item_model = try compiler_compile.compile(todo_item_source, "test/examples/todomvc/TodoItem.weiv", allocator);
     defer todo_item_model.deinit(allocator);
 
-    const todo_item_js = try emit_direct_js.emitModule(&todo_item_model, allocator);
+    const todo_item_js = try emitComponentJs(&todo_item_model, allocator);
     defer allocator.free(todo_item_js);
 
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "const __props_5 = {\"editing\": true, \"initialValue\": scope.props.todo.title, \"placeholder\": 'Edit task'};") != null);
@@ -1763,10 +1776,10 @@ test "direct browser modules specialize child component update paths" {
         \\</script>
     ;
 
-    var loop_model = try component.build(loop_source, "inline-static-loop-child.weiv", allocator);
+    var loop_model = try compiler_compile.compile(loop_source, "inline-static-loop-child.weiv", allocator);
     defer loop_model.deinit(allocator);
 
-    const loop_js = try emit_direct_js.emitModule(&loop_model, allocator);
+    const loop_js = try emitComponentJs(&loop_model, allocator);
     defer allocator.free(loop_js);
 
     try std.testing.expect(std.mem.indexOf(u8, loop_js, "Shell.mountIntoBoundary(start, end, undefined, undefined, undefined);") != null);
@@ -1788,9 +1801,9 @@ test "todomvc direct app emit emits browser-direct entry files" {
 
     try app_emit.emitApp("test/examples/todomvc/App.weiv", out_dir, allocator);
 
-    const bundle_js = try tmp_dir.dir.readFileAlloc(allocator, "direct-bundle/bundle.mjs", 1024 * 1024);
+    const bundle_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "direct-bundle/bundle.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(bundle_js);
-    const main_js = try tmp_dir.dir.readFileAlloc(allocator, "direct-bundle/main.mjs", 1024 * 1024);
+    const main_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "direct-bundle/main.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(main_js);
 
     try std.testing.expect(std.mem.indexOf(u8, bundle_js, "export function mount(target, props = {})") != null);
@@ -1800,17 +1813,17 @@ test "todomvc direct app emit emits browser-direct entry files" {
 }
 
 test "imported helper render module preserves runtime JS imports" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/imported-helper/App.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/imported-helper/App.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/imported-helper/App.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "import { formatTitle as __weiv_import_formatTitle } from \"./format.js\";") != null);
@@ -1818,17 +1831,17 @@ test "imported helper render module preserves runtime JS imports" {
 }
 
 test "imported TS helper render module rewrites runtime imports to JS" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/imported-ts-helper/App.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/imported-ts-helper/App.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/imported-ts-helper/App.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "import { formatTitle as __weiv_import_formatTitle } from \"./format.js\";") != null);
@@ -1836,14 +1849,14 @@ test "imported TS helper render module rewrites runtime imports to JS" {
 }
 
 test "basic counter emits scoped CSS" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/basic/basic-counter.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/basic/basic-counter.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/basic/basic-counter.weiv", allocator);
     defer model.deinit(allocator);
 
     const scope_id = try style.scopeIdForPath(model.source_path, allocator);
@@ -1870,23 +1883,23 @@ test "classic todo app emits multi-file app emit" {
 
     try app_emit.emitApp("test/examples/classic-todo/App.weiv", out_dir, allocator);
 
-    const app_js = try tmp_dir.dir.readFileAlloc(allocator, "bundle/bundle.mjs", 1024 * 1024);
+    const app_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "bundle/bundle.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(app_js);
-    const browser_entry_js = try tmp_dir.dir.readFileAlloc(allocator, "bundle/main.mjs", 1024 * 1024);
+    const browser_entry_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "bundle/main.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(browser_entry_js);
-    const props_js = try tmp_dir.dir.readFileAlloc(allocator, "bundle/props.mjs", 1024 * 1024);
+    const props_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "bundle/props.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(props_js);
-    const index_html = try tmp_dir.dir.readFileAlloc(allocator, "bundle/index.html", 1024 * 1024);
+    const index_html = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "bundle/index.html", allocator, .limited(1024 * 1024));
     defer allocator.free(index_html);
-    const package_json = try tmp_dir.dir.readFileAlloc(allocator, "bundle/package.json", 1024 * 1024);
+    const package_json = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "bundle/package.json", allocator, .limited(1024 * 1024));
     defer allocator.free(package_json);
-    const dev_server_ts = try tmp_dir.dir.readFileAlloc(allocator, "bundle/server.ts", 1024 * 1024);
+    const dev_server_ts = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "bundle/server.ts", allocator, .limited(1024 * 1024));
     defer allocator.free(dev_server_ts);
-    const root_module_js = try tmp_dir.dir.readFileAlloc(allocator, "bundle/App.mjs", 1024 * 1024);
+    const root_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "bundle/App.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(root_module_js);
-    const list_module_js = try tmp_dir.dir.readFileAlloc(allocator, "bundle/TodoList.mjs", 1024 * 1024);
+    const list_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "bundle/TodoList.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(list_module_js);
-    const styles_css = try tmp_dir.dir.readFileAlloc(allocator, "bundle/styles.css", 1024 * 1024);
+    const styles_css = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "bundle/styles.css", allocator, .limited(1024 * 1024));
     defer allocator.free(styles_css);
 
     try std.testing.expect(std.mem.indexOf(u8, app_js, "\"TodoList\": Component_") != null);
@@ -1923,41 +1936,41 @@ test "todomvc verification app emits multi-file app emit" {
 
     try app_emit.emitApp("test/examples/todomvc/App.weiv", out_dir, allocator);
 
-    const app_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/bundle.mjs", 1024 * 1024);
+    const app_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/bundle.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(app_js);
-    const props_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/props.mjs", 1024 * 1024);
+    const props_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/props.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(props_js);
     const expected_props_js = try readFixture(allocator, "test/fixtures/expected/todomvc-app/props.mjs");
     defer allocator.free(expected_props_js);
-    const browser_entry_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/main.mjs", 1024 * 1024);
+    const browser_entry_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/main.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(browser_entry_js);
     const expected_browser_entry_js = try readFixture(allocator, "test/fixtures/expected/todomvc-app/main.mjs");
     defer allocator.free(expected_browser_entry_js);
-    const index_html = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/index.html", 1024 * 1024);
+    const index_html = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/index.html", allocator, .limited(1024 * 1024));
     defer allocator.free(index_html);
     const expected_index_html = try readFixture(allocator, "test/fixtures/expected/todomvc-app/index.html");
     defer allocator.free(expected_index_html);
-    const package_json = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/package.json", 1024 * 1024);
+    const package_json = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/package.json", allocator, .limited(1024 * 1024));
     defer allocator.free(package_json);
     const expected_package_json = try readFixture(allocator, "test/fixtures/expected/todomvc-app/package.json");
     defer allocator.free(expected_package_json);
-    const dev_server_ts = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/server.ts", 1024 * 1024);
+    const dev_server_ts = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/server.ts", allocator, .limited(1024 * 1024));
     defer allocator.free(dev_server_ts);
     const expected_dev_server_ts = try readFixture(allocator, "test/fixtures/expected/todomvc-app/server.ts");
     defer allocator.free(expected_dev_server_ts);
-    const root_module_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/App.mjs", 1024 * 1024);
+    const root_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/App.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(root_module_js);
-    const header_module_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/TodoHeader.mjs", 1024 * 1024);
+    const header_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/TodoHeader.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(header_module_js);
-    const footer_module_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/TodoFooter.mjs", 1024 * 1024);
+    const footer_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/TodoFooter.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(footer_module_js);
-    const list_module_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/TodoList.mjs", 1024 * 1024);
+    const list_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/TodoList.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(list_module_js);
-    const item_module_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/TodoItem.mjs", 1024 * 1024);
+    const item_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/TodoItem.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(item_module_js);
-    const text_input_module_js = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/TodoTextInput.mjs", 1024 * 1024);
+    const text_input_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/TodoTextInput.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(text_input_module_js);
-    const styles_css = try tmp_dir.dir.readFileAlloc(allocator, "todomvc-bundle/styles.css", 1024 * 1024);
+    const styles_css = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "todomvc-bundle/styles.css", allocator, .limited(1024 * 1024));
     defer allocator.free(styles_css);
 
     try std.testing.expectEqualStrings(expected_browser_entry_js, browser_entry_js);
@@ -1994,23 +2007,23 @@ test "kanib app emits multi-file app emit" {
 
     try app_emit.emitApp("test/examples/kanib/App.weiv", out_dir, allocator);
 
-    const bundle_js = try tmp_dir.dir.readFileAlloc(allocator, "kanib-bundle/bundle.mjs", 1024 * 1024);
+    const bundle_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "kanib-bundle/bundle.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(bundle_js);
-    const root_module_js = try tmp_dir.dir.readFileAlloc(allocator, "kanib-bundle/App.mjs", 1024 * 1024);
+    const root_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "kanib-bundle/App.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(root_module_js);
-    const shared_module_js = try tmp_dir.dir.readFileAlloc(allocator, "kanib-bundle/state/workspace.js", 1024 * 1024);
+    const shared_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "kanib-bundle/state/workspace.js", allocator, .limited(1024 * 1024));
     defer allocator.free(shared_module_js);
-    const observable_module_js = try tmp_dir.dir.readFileAlloc(allocator, "kanib-bundle/__weiv_runtime/index.js", 1024 * 1024);
+    const observable_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "kanib-bundle/__weiv_runtime/index.js", allocator, .limited(1024 * 1024));
     defer allocator.free(observable_module_js);
-    const observable_leaf_module_js = try tmp_dir.dir.readFileAlloc(allocator, "kanib-bundle/__weiv_runtime/observable.js", 1024 * 1024);
+    const observable_leaf_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "kanib-bundle/__weiv_runtime/observable.js", allocator, .limited(1024 * 1024));
     defer allocator.free(observable_leaf_module_js);
-    const metric_tone_js = try tmp_dir.dir.readFileAlloc(allocator, "kanib-bundle/utils/metric_tone.js", 1024 * 1024);
+    const metric_tone_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "kanib-bundle/utils/metric_tone.js", allocator, .limited(1024 * 1024));
     defer allocator.free(metric_tone_js);
-    const header_module_js = try tmp_dir.dir.readFileAlloc(allocator, "kanib-bundle/components/WorkspaceHeader.mjs", 1024 * 1024);
+    const header_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "kanib-bundle/components/WorkspaceHeader.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(header_module_js);
-    const detail_module_js = try tmp_dir.dir.readFileAlloc(allocator, "kanib-bundle/components/DetailPanel.mjs", 1024 * 1024);
+    const detail_module_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "kanib-bundle/components/DetailPanel.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(detail_module_js);
-    const styles_css = try tmp_dir.dir.readFileAlloc(allocator, "kanib-bundle/styles.css", 1024 * 1024);
+    const styles_css = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "kanib-bundle/styles.css", allocator, .limited(1024 * 1024));
     defer allocator.free(styles_css);
 
     try std.testing.expect(std.mem.indexOf(u8, bundle_js, "export function mount(target, props = {})") != null);
@@ -2048,7 +2061,7 @@ test "basic counter app emit emits inferred preview props" {
 
     try app_emit.emitApp("test/examples/basic/basic-counter.weiv", out_dir, allocator);
 
-    const props_js = try tmp_dir.dir.readFileAlloc(allocator, "counter-bundle/props.mjs", 1024 * 1024);
+    const props_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "counter-bundle/props.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(props_js);
     try std.testing.expect(std.mem.indexOf(u8, props_js, "title: \"Preview\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, props_js, "initialCount: 0") != null);
@@ -2066,13 +2079,13 @@ test "imported helper app emit copies runtime JS dependencies" {
 
     try app_emit.emitApp("test/examples/imported-helper/App.weiv", out_dir, allocator);
 
-    const app_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-helper-bundle/App.mjs", 1024 * 1024);
+    const app_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "imported-helper-bundle/App.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(app_js);
-    const helper_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-helper-bundle/format.js", 1024 * 1024);
+    const helper_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "imported-helper-bundle/format.js", allocator, .limited(1024 * 1024));
     defer allocator.free(helper_js);
-    const punctuation_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-helper-bundle/punctuation.js", 1024 * 1024);
+    const punctuation_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "imported-helper-bundle/punctuation.js", allocator, .limited(1024 * 1024));
     defer allocator.free(punctuation_js);
-    const props_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-helper-bundle/props.mjs", 1024 * 1024);
+    const props_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "imported-helper-bundle/props.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(props_js);
 
     try std.testing.expect(std.mem.indexOf(u8, app_js, "import { formatTitle as __weiv_import_formatTitle } from \"./format.js\";") != null);
@@ -2095,13 +2108,13 @@ test "imported TS helper app emit transpiles and copies TS dependencies" {
 
     try app_emit.emitApp("test/examples/imported-ts-helper/App.weiv", out_dir, allocator);
 
-    const app_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-ts-helper-bundle/App.mjs", 1024 * 1024);
+    const app_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "imported-ts-helper-bundle/App.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(app_js);
-    const format_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-ts-helper-bundle/format.js", 1024 * 1024);
+    const format_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "imported-ts-helper-bundle/format.js", allocator, .limited(1024 * 1024));
     defer allocator.free(format_js);
-    const punctuation_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-ts-helper-bundle/punctuation.js", 1024 * 1024);
+    const punctuation_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "imported-ts-helper-bundle/punctuation.js", allocator, .limited(1024 * 1024));
     defer allocator.free(punctuation_js);
-    const props_js = try tmp_dir.dir.readFileAlloc(allocator, "imported-ts-helper-bundle/props.mjs", 1024 * 1024);
+    const props_js = try tmp_dir.dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "imported-ts-helper-bundle/props.mjs", allocator, .limited(1024 * 1024));
     defer allocator.free(props_js);
 
     try std.testing.expect(std.mem.indexOf(u8, app_js, "import { formatTitle as __weiv_import_formatTitle } from \"./format.js\";") != null);
@@ -2124,8 +2137,8 @@ test "emit app generates import map for bare imports" {
 
     try app_emit.emitApp("test/examples/bare-import/App.weiv", out_dir, allocator);
 
-    const dir = try std.fs.cwd().openDir(out_dir, .{});
-    const html = try dir.readFileAlloc(allocator, "index.html", 64 * 1024);
+    const dir = try std.Io.Dir.cwd().openDir(std.Io.Threaded.global_single_threaded.io(), out_dir, .{});
+    const html = try dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "index.html", allocator, .limited(64 * 1024));
     defer allocator.free(html);
 
     try std.testing.expect(std.mem.indexOf(u8, html, "importmap") != null);
@@ -2138,7 +2151,7 @@ test "validate app reports unsupported absolute runtime import with source locat
     var temp_dir = std.testing.tmpDir(.{});
     defer temp_dir.cleanup();
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "App.weiv",
         .data =
         \\<template>
@@ -2176,7 +2189,7 @@ test "validate app reports unsupported relative runtime import type with source 
     var temp_dir = std.testing.tmpDir(.{});
     defer temp_dir.cleanup();
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "App.weiv",
         .data =
         \\<template>
@@ -2191,7 +2204,7 @@ test "validate app reports unsupported relative runtime import type with source 
         ,
     });
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "data.txt",
         .data = "hello",
     });
@@ -2218,7 +2231,7 @@ test "validate app can format machine-readable json diagnostics" {
     var temp_dir = std.testing.tmpDir(.{});
     defer temp_dir.cleanup();
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "App.weiv",
         .data =
         \\<template>
@@ -2233,7 +2246,7 @@ test "validate app can format machine-readable json diagnostics" {
         ,
     });
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "data.txt",
         .data = "hello",
     });
@@ -2375,7 +2388,7 @@ test "validate app reports invalid scoped style diagnostics" {
     var temp_dir = std.testing.tmpDir(.{});
     defer temp_dir.cleanup();
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "App.weiv",
         .data =
         \\<template>
@@ -2416,7 +2429,7 @@ test "validate app reports component build diagnostics for malformed child compo
     var temp_dir = std.testing.tmpDir(.{});
     defer temp_dir.cleanup();
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "App.weiv",
         .data =
         \\<template>
@@ -2431,7 +2444,7 @@ test "validate app reports component build diagnostics for malformed child compo
         ,
     });
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "Child.weiv",
         .data =
         \\<template>
@@ -2468,10 +2481,10 @@ test "validate app reports component tag conflicts as structured diagnostics" {
     var temp_dir = std.testing.tmpDir(.{});
     defer temp_dir.cleanup();
 
-    try temp_dir.dir.makePath("first");
-    try temp_dir.dir.makePath("second");
+    try temp_dir.dir.createDirPath(std.Io.Threaded.global_single_threaded.io(), "first");
+    try temp_dir.dir.createDirPath(std.Io.Threaded.global_single_threaded.io(), "second");
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "App.weiv",
         .data =
         \\<template>
@@ -2488,7 +2501,7 @@ test "validate app reports component tag conflicts as structured diagnostics" {
         ,
     });
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "SectionA.weiv",
         .data =
         \\<template><Panel /></template>
@@ -2500,7 +2513,7 @@ test "validate app reports component tag conflicts as structured diagnostics" {
         ,
     });
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "SectionB.weiv",
         .data =
         \\<template><Panel /></template>
@@ -2512,7 +2525,7 @@ test "validate app reports component tag conflicts as structured diagnostics" {
         ,
     });
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "first/Panel.weiv",
         .data =
         \\<template><p>First</p></template>
@@ -2523,7 +2536,7 @@ test "validate app reports component tag conflicts as structured diagnostics" {
         ,
     });
 
-    try temp_dir.dir.writeFile(.{
+    try temp_dir.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{
         .sub_path = "second/Panel.weiv",
         .data =
         \\<template><p>Second</p></template>
@@ -2564,7 +2577,7 @@ test "component build report preserves invalid directive diagnostics" {
         \\</script>
     ;
 
-    var report = try component.buildReport(source, "test/examples/invalid-directive-analysis.weiv", allocator);
+    var report = try compiler_compile.compileReport(source, "test/examples/invalid-directive-analysis.weiv", allocator);
     defer report.deinit(allocator);
 
     try std.testing.expect(report.halted_after != null);
@@ -2573,7 +2586,7 @@ test "component build report preserves invalid directive diagnostics" {
     try std.testing.expectEqual(.template_parse, report.diagnostics[0].stage);
     try std.testing.expect(report.diagnostics[0].fatal);
 
-    const formatted = try cli.formatComponentBuildReport(report, allocator);
+    const formatted = try cli.formatComponentCompileReport(report, allocator);
     defer allocator.free(formatted);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "template.invalid_directive [template_parse]") != null);
 }
@@ -2596,7 +2609,7 @@ test "component style emit diagnostics report invalid scoped css" {
         \\</style>
     ;
 
-    var model = try component.build(source, "test/examples/invalid-style-diagnostic.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/invalid-style-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
     var bag = compiler_diagnostics.DiagnosticBag.init();
@@ -2614,11 +2627,11 @@ test "kanib WorkspaceSidebar binding diagnostics stay on helper.external_state w
     const source = try readFixture(allocator, "test/examples/kanib/components/WorkspaceSidebar.weiv");
     defer allocator.free(source);
 
-    var model = try component.build(source, "test/examples/kanib/components/WorkspaceSidebar.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/kanib/components/WorkspaceSidebar.weiv", allocator);
     defer model.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 2), model.binding_result.diagnostics.len);
-    for (model.binding_result.diagnostics) |diagnostic| {
+    try std.testing.expectEqual(@as(usize, 2), model.template_bindings.diagnostics.len);
+    for (model.template_bindings.diagnostics) |diagnostic| {
         try std.testing.expectEqualStrings("warning", diagnostic.severity);
         try std.testing.expectEqualStrings("helper.external_state", diagnostic.kind);
     }
@@ -2632,13 +2645,13 @@ fn expectComponentBuild(
     expected_binding_diagnostics: usize,
 ) !void {
     defer allocator.free(source);
-    var model = try component.build(source, path, allocator);
+    var model = try compiler_compile.compile(source, path, allocator);
     defer model.deinit(allocator);
 
     try std.testing.expect(model.script.ok);
     try std.testing.expectEqual(@as(usize, 0), model.script.diagnostics.len);
-    try std.testing.expectEqual(expected_component_refs, model.binding_result.component_refs.len);
-    try std.testing.expectEqual(expected_binding_diagnostics, model.binding_result.diagnostics.len);
+    try std.testing.expectEqual(expected_component_refs, model.template_bindings.component_refs.len);
+    try std.testing.expectEqual(expected_binding_diagnostics, model.template_bindings.diagnostics.len);
 }
 
 test "user-defined emit binding reports framework conflict diagnostic" {
@@ -2665,11 +2678,11 @@ test "user-defined emit binding reports framework conflict diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/framework-emit-conflict.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/framework-emit-conflict.weiv", allocator);
     defer model.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
-    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqual(@as(usize, 1), model.template_bindings.diagnostics.len);
+    const diagnostic = model.template_bindings.diagnostics[0];
     try std.testing.expectEqualStrings("error", diagnostic.severity);
     try std.testing.expectEqualStrings("framework.reserved_binding", diagnostic.kind);
     try std.testing.expectEqualStrings("emit", diagnostic.name);
@@ -2693,11 +2706,11 @@ test "template helper with external reads reports conservative diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/helper-external-state-diagnostic.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/helper-external-state-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
-    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqual(@as(usize, 1), model.template_bindings.diagnostics.len);
+    const diagnostic = model.template_bindings.diagnostics[0];
     try std.testing.expectEqualStrings("warning", diagnostic.severity);
     try std.testing.expectEqualStrings("helper.external_state", diagnostic.kind);
     try std.testing.expectEqualStrings("themeLabel", diagnostic.name);
@@ -2724,11 +2737,11 @@ test "template helper with side effects reports conservative diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/helper-side-effects-diagnostic.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/helper-side-effects-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
-    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqual(@as(usize, 1), model.template_bindings.diagnostics.len);
+    const diagnostic = model.template_bindings.diagnostics[0];
     try std.testing.expectEqualStrings("warning", diagnostic.severity);
     try std.testing.expectEqualStrings("helper.side_effects", diagnostic.kind);
     try std.testing.expectEqualStrings("nextCount", diagnostic.name);
@@ -2755,11 +2768,11 @@ test "expression-position mutation reports conservative diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/expression-position-mutation-diagnostic.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/expression-position-mutation-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
-    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqual(@as(usize, 1), model.template_bindings.diagnostics.len);
+    const diagnostic = model.template_bindings.diagnostics[0];
     try std.testing.expectEqualStrings("warning", diagnostic.severity);
     try std.testing.expectEqualStrings("mutation.expression_position", diagnostic.kind);
     try std.testing.expectEqualStrings("count", diagnostic.name);
@@ -2785,11 +2798,11 @@ test "unowned callback mutation reports conservative diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/unowned-callback-mutation-diagnostic.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/unowned-callback-mutation-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
-    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqual(@as(usize, 1), model.template_bindings.diagnostics.len);
+    const diagnostic = model.template_bindings.diagnostics[0];
     try std.testing.expectEqualStrings("warning", diagnostic.severity);
     try std.testing.expectEqualStrings("callback.unowned_mutation", diagnostic.kind);
     try std.testing.expectEqualStrings("count", diagnostic.name);
@@ -2814,11 +2827,11 @@ test "alias mutation reports conservative diagnostic" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/alias-mutation-diagnostic.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/alias-mutation-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 1), model.binding_result.diagnostics.len);
-    const diagnostic = model.binding_result.diagnostics[0];
+    try std.testing.expectEqual(@as(usize, 1), model.template_bindings.diagnostics.len);
+    const diagnostic = model.template_bindings.diagnostics[0];
     try std.testing.expectEqualStrings("warning", diagnostic.severity);
     try std.testing.expectEqualStrings("alias.mutation", diagnostic.kind);
     try std.testing.expectEqualStrings("user", diagnostic.name);
@@ -2837,7 +2850,7 @@ test "component analysis report includes structured script diagnostics" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/missing-props-diagnostic.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/missing-props-diagnostic.weiv", allocator);
     defer model.deinit(allocator);
 
     try std.testing.expect(model.script.ok);
@@ -2865,7 +2878,7 @@ test "component build report preserves fatal template diagnostics" {
         \\</script>
     ;
 
-    var report = try component.buildReport(source, "test/examples/unexpected-else-analysis.weiv", allocator);
+    var report = try compiler_compile.compileReport(source, "test/examples/unexpected-else-analysis.weiv", allocator);
     defer report.deinit(allocator);
 
     try std.testing.expect(report.halted_after != null);
@@ -2873,7 +2886,7 @@ test "component build report preserves fatal template diagnostics" {
     try std.testing.expectEqualStrings("template.unexpected_else", report.diagnostics[0].code);
     try std.testing.expect(report.diagnostics[0].fatal);
 
-    const formatted = try cli.formatComponentBuildReport(report, allocator);
+    const formatted = try cli.formatComponentCompileReport(report, allocator);
     defer allocator.free(formatted);
 
     try std.testing.expect(std.mem.indexOf(u8, formatted, "Compiler diagnostics\n  total: 1\n") != null);
@@ -2894,10 +2907,10 @@ test "component build report can format machine-readable json diagnostics" {
         \\</script>
     ;
 
-    var report = try component.buildReport(source, "test/examples/unexpected-else-analysis-json.weiv", allocator);
+    var report = try compiler_compile.compileReport(source, "test/examples/unexpected-else-analysis-json.weiv", allocator);
     defer report.deinit(allocator);
 
-    const json = try cli.formatComponentBuildReportJson(report, allocator);
+    const json = try cli.formatComponentCompileReportJson(report, allocator);
     defer allocator.free(json);
 
     try std.testing.expect(std.mem.indexOf(u8, json, "\"sourcePath\": \"test/examples/unexpected-else-analysis-json.weiv\"") != null);
@@ -2921,10 +2934,10 @@ test "component build report json includes invalid directive diagnostics" {
         \\</script>
     ;
 
-    var report = try component.buildReport(source, "test/examples/invalid-directive-analysis-json.weiv", allocator);
+    var report = try compiler_compile.compileReport(source, "test/examples/invalid-directive-analysis-json.weiv", allocator);
     defer report.deinit(allocator);
 
-    const json = try cli.formatComponentBuildReportJson(report, allocator);
+    const json = try cli.formatComponentCompileReportJson(report, allocator);
     defer allocator.free(json);
 
     try std.testing.expect(std.mem.indexOf(u8, json, "\"code\": \"template.invalid_directive\"") != null);
@@ -2946,7 +2959,7 @@ test "component analysis report includes tracked root and escape warning summary
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/analysis-tracked-root-escape.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/analysis-tracked-root-escape.weiv", allocator);
     defer model.deinit(allocator);
 
     const report = try cli.formatComponentAnalysisReport(model, allocator);
@@ -2985,7 +2998,7 @@ test "component analysis report summarizes mixed tracked roots and escape warnin
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/analysis-mixed-tracked-roots.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/analysis-mixed-tracked-roots.weiv", allocator);
     defer model.deinit(allocator);
 
     const report = try cli.formatComponentAnalysisReport(model, allocator);
@@ -3022,10 +3035,10 @@ test "direct browser module emits mixed tracked root graph" {
         \\</script>
     ;
 
-    var model = try component.build(source, "test/examples/direct-browser-mixed-tracked-roots.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/direct-browser-mixed-tracked-roots.weiv", allocator);
     defer model.deinit(allocator);
 
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
 
     try std.testing.expect(std.mem.indexOf(u8, js, "const workspace = __weiv_getTrackedRoot(\"workspace\", __weiv_import_workspace);") != null);
@@ -3037,22 +3050,22 @@ test "direct browser module emits mixed tracked root graph" {
 }
 
 fn readFixture(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    return try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
+    return try std.Io.Dir.cwd().readFileAlloc(std.Io.Threaded.global_single_threaded.io(), path, allocator, .limited(1024 * 1024));
 }
 
 test "Panel.weiv lowers to a single default slot outlet" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/slots/Panel.weiv");
     defer allocator.free(source);
-    var model = try component.build(source, "test/examples/slots/Panel.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/slots/Panel.weiv", allocator);
     defer model.deinit(allocator);
 
     // Top-level: <section><slot><p>...</p></slot></section>
-    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
-    switch (model.ir_document.nodes[0]) {
+    try std.testing.expectEqual(@as(usize, 1), model.lir_document.nodes.len);
+    switch (model.lir_document.nodes[0]) {
         .element => |section| {
             try std.testing.expect(std.mem.eql(u8, section.tag_name, "section"));
             try std.testing.expectEqual(@as(usize, 1), section.children.len);
@@ -3070,18 +3083,18 @@ test "Panel.weiv lowers to a single default slot outlet" {
 }
 
 test "Card.weiv lowers to header named slot and default slot with fallbacks" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/slots/Card.weiv");
     defer allocator.free(source);
-    var model = try component.build(source, "test/examples/slots/Card.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/slots/Card.weiv", allocator);
     defer model.deinit(allocator);
 
     // Top-level: <section><header><slot name="header">...</slot></header><div><slot>...</slot></div></section>
-    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
-    switch (model.ir_document.nodes[0]) {
+    try std.testing.expectEqual(@as(usize, 1), model.lir_document.nodes.len);
+    switch (model.lir_document.nodes[0]) {
         .element => |root| {
             try std.testing.expect(std.mem.eql(u8, root.tag_name, "section"));
             try std.testing.expectEqual(@as(usize, 2), root.children.len);
@@ -3123,7 +3136,7 @@ test "Card.weiv lowers to header named slot and default slot with fallbacks" {
 }
 
 test "slot:name directive carries a non-empty source span" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -3151,17 +3164,17 @@ test "slot:name directive carries a non-empty source span" {
 }
 
 test "EmptyState.weiv lowers with named message slot and default slot, both with fallbacks" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     const source = try readFixture(allocator, "test/examples/slots/EmptyState.weiv");
     defer allocator.free(source);
-    var model = try component.build(source, "test/examples/slots/EmptyState.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/slots/EmptyState.weiv", allocator);
     defer model.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 1), model.ir_document.nodes.len);
-    switch (model.ir_document.nodes[0]) {
+    try std.testing.expectEqual(@as(usize, 1), model.lir_document.nodes.len);
+    switch (model.lir_document.nodes[0]) {
         .element => |root| {
             try std.testing.expect(std.mem.eql(u8, root.tag_name, "section"));
             try std.testing.expectEqual(@as(usize, 2), root.children.len);
@@ -3202,7 +3215,7 @@ test "EmptyState.weiv lowers with named message slot and default slot, both with
 }
 
 test "duplicate <slot name> in a component emits slot.duplicate_outlet" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -3219,18 +3232,18 @@ test "duplicate <slot name> in a component emits slot.duplicate_outlet" {
         \\</script>
         \\<style></style>
     ;
-    var model = try component.build(source, "test:duplicate_outlet.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test:duplicate_outlet.weiv", allocator);
     defer model.deinit(allocator);
 
     var found = false;
-    for (model.binding_result.diagnostics) |d| {
+    for (model.template_bindings.diagnostics) |d| {
         if (std.mem.eql(u8, d.kind, "slot.duplicate_outlet")) found = true;
     }
     try std.testing.expect(found);
 }
 
 test "duplicate bare slot:name without template grouping emits slot.duplicate_provision" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -3248,18 +3261,18 @@ test "duplicate bare slot:name without template grouping emits slot.duplicate_pr
         \\</script>
         \\<style></style>
     ;
-    var model = try component.build(source, "test:duplicate_provision.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test:duplicate_provision.weiv", allocator);
     defer model.deinit(allocator);
 
     var found = false;
-    for (model.binding_result.diagnostics) |d| {
+    for (model.template_bindings.diagnostics) |d| {
         if (std.mem.eql(u8, d.kind, "slot.duplicate_provision")) found = true;
     }
     try std.testing.expect(found);
 }
 
 test "slot:foo with no matching child outlet emits slot.unknown_name" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -3277,11 +3290,11 @@ test "slot:foo with no matching child outlet emits slot.unknown_name" {
         \\</script>
         \\<style></style>
     ;
-    var model = try component.build(source, "test/examples/slots/CardUsageInvalid.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/slots/CardUsageInvalid.weiv", allocator);
     defer model.deinit(allocator);
 
     var found = false;
-    for (model.binding_result.diagnostics) |d| {
+    for (model.template_bindings.diagnostics) |d| {
         if (std.mem.eql(u8, d.kind, "slot.unknown_name")) found = true;
     }
     try std.testing.expect(found);
@@ -3302,7 +3315,7 @@ test "providing default content to a child without default slot emits slot.defau
         \\</script>
         \\<style></style>
     ;
-    try tmp.dir.writeFile(.{ .sub_path = "OnlyNamed.weiv", .data = child_source });
+    try tmp.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{ .sub_path = "OnlyNamed.weiv", .data = child_source });
 
     const parent_source =
         \\<template>
@@ -3315,50 +3328,50 @@ test "providing default content to a child without default slot emits slot.defau
         \\</script>
         \\<style></style>
     ;
-    try tmp.dir.writeFile(.{ .sub_path = "Parent.weiv", .data = parent_source });
+    try tmp.dir.writeFile(std.Io.Threaded.global_single_threaded.io(), .{ .sub_path = "Parent.weiv", .data = parent_source });
 
     // Build absolute path to the parent file so the binder can resolve "./OnlyNamed.weiv"
-    const tmp_dir_path = try tmp.dir.realpathAlloc(allocator, ".");
+    const tmp_dir_path = try tmp.dir.realPathFileAlloc(std.Io.Threaded.global_single_threaded.io(), ".", allocator);
     defer allocator.free(tmp_dir_path);
     const parent_path = try std.fs.path.join(allocator, &.{ tmp_dir_path, "Parent.weiv" });
     defer allocator.free(parent_path);
 
-    var model = try component.build(parent_source, parent_path, allocator);
+    var model = try compiler_compile.compile(parent_source, parent_path, allocator);
     defer model.deinit(allocator);
 
     var found = false;
-    for (model.binding_result.diagnostics) |d| {
+    for (model.template_bindings.diagnostics) |d| {
         if (std.mem.eql(u8, d.kind, "slot.default_not_supported")) found = true;
     }
     try std.testing.expect(found);
 }
 
-test "browser plan formatter exposes inspectable direct DOM plan" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+test "browser render_tree formatter exposes inspectable direct DOM render_tree" {
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     const source = try readFixture(allocator, "test/examples/slots/CardUsage.weiv");
     defer allocator.free(source);
-    var model = try component.build(source, "test/examples/slots/CardUsage.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/slots/CardUsage.weiv", allocator);
     defer model.deinit(allocator);
-    var plan = try browser_plan.lower(&model.ir_document, allocator);
-    defer plan.deinit(allocator);
-    const formatted = try browser_plan.debug.formatDocument(&plan, allocator);
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
+    const formatted = try browser_render_tree.debug.formatDocument(&render_tree, allocator);
     defer allocator.free(formatted);
-    try std.testing.expect(std.mem.indexOf(u8, formatted, "browser-plan next_ref_id=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "render-tree next_ref_id=") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "component refs=[") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "slot-provision name=header") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "slot-provision name=default") != null);
 }
 test "conditional direct browser modules destroy outgoing branch before replacement" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     const source = try readFixture(allocator, "test/examples/basic/conditional-toggle.weiv");
     defer allocator.free(source);
-    var model = try component.build(source, "test/examples/basic/conditional-toggle.weiv", allocator);
+    var model = try compiler_compile.compile(source, "test/examples/basic/conditional-toggle.weiv", allocator);
     defer model.deinit(allocator);
-    const js = try emit_direct_js.emitModule(&model, allocator);
+    const js = try emitComponentJs(&model, allocator);
     defer allocator.free(js);
     try std.testing.expect(std.mem.indexOf(u8, js, "function destroyConditionalBranch_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const previous = refs[") != null);
@@ -3366,7 +3379,7 @@ test "conditional direct browser modules destroy outgoing branch before replacem
     try std.testing.expect(std.mem.indexOf(u8, js, "replaceBetween(refs[") != null);
 }
 test "dangling else without sibling if is rejected duplicate coverage" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     const source =
@@ -3381,18 +3394,18 @@ test "dangling else without sibling if is rejected duplicate coverage" {
     ;
     try std.testing.expectError(
         error.UnexpectedElse,
-        component.build(source, "inline-unexpected-else.weiv", allocator),
+        compiler_compile.compile(source, "inline-unexpected-else.weiv", allocator),
     );
 }
 test "direct browser modules emit specialized bound attribute patch code duplicate coverage" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     const counter_source = try readFixture(allocator, "test/examples/basic/basic-counter.weiv");
     defer allocator.free(counter_source);
-    var counter_model = try component.build(counter_source, "test/examples/basic/basic-counter.weiv", allocator);
+    var counter_model = try compiler_compile.compile(counter_source, "test/examples/basic/basic-counter.weiv", allocator);
     defer counter_model.deinit(allocator);
-    const counter_js = try emit_direct_js.emitModule(&counter_model, allocator);
+    const counter_js = try emitComponentJs(&counter_model, allocator);
     defer allocator.free(counter_js);
     try std.testing.expect(std.mem.indexOf(u8, counter_js, "applyBoundAttribute(") == null);
     try std.testing.expect(std.mem.indexOf(u8, counter_js, "const __next_") != null);
@@ -3403,9 +3416,9 @@ test "direct browser modules emit specialized bound attribute patch code duplica
     try std.testing.expect(std.mem.indexOf(u8, counter_js, ".setAttribute(\"disabled\", \"\")") != null);
     const todo_item_source = try readFixture(allocator, "test/examples/todomvc/TodoItem.weiv");
     defer allocator.free(todo_item_source);
-    var todo_item_model = try component.build(todo_item_source, "test/examples/todomvc/TodoItem.weiv", allocator);
+    var todo_item_model = try compiler_compile.compile(todo_item_source, "test/examples/todomvc/TodoItem.weiv", allocator);
     defer todo_item_model.deinit(allocator);
-    const todo_item_js = try emit_direct_js.emitModule(&todo_item_model, allocator);
+    const todo_item_js = try emitComponentJs(&todo_item_model, allocator);
     defer allocator.free(todo_item_js);
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "applyBoundAttribute(") == null);
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "getAttribute(\"class\") !== __next_attr_0_class") == null);
@@ -3414,9 +3427,9 @@ test "direct browser modules emit specialized bound attribute patch code duplica
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, ".setAttribute(\"checked\", \"\")") != null);
     const text_input_source = try readFixture(allocator, "test/examples/todomvc/TodoTextInput.weiv");
     defer allocator.free(text_input_source);
-    var text_input_model = try component.build(text_input_source, "test/examples/todomvc/TodoTextInput.weiv", allocator);
+    var text_input_model = try compiler_compile.compile(text_input_source, "test/examples/todomvc/TodoTextInput.weiv", allocator);
     defer text_input_model.deinit(allocator);
-    const text_input_js = try emit_direct_js.emitModule(&text_input_model, allocator);
+    const text_input_js = try emitComponentJs(&text_input_model, allocator);
     defer allocator.free(text_input_js);
     try std.testing.expect(std.mem.indexOf(u8, text_input_js, "const __next_0_value = __value_0_value ?? \"\";") != null);
     try std.testing.expect(std.mem.indexOf(u8, text_input_js, "const __next_string_0_value = String(__next_0_value);") != null);
@@ -3425,7 +3438,7 @@ test "direct browser modules emit specialized bound attribute patch code duplica
     try std.testing.expect(std.mem.indexOf(u8, text_input_js, ".setAttribute(\"value\", __next_string_0_value);") != null);
 }
 test "direct browser modules specialize child component update paths duplicate coverage" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     const static_source =
@@ -3439,9 +3452,9 @@ test "direct browser modules specialize child component update paths duplicate c
         \\  export let props: Props;
         \\</script>
     ;
-    var static_model = try component.build(static_source, "inline-static-child.weiv", allocator);
+    var static_model = try compiler_compile.compile(static_source, "inline-static-child.weiv", allocator);
     defer static_model.deinit(allocator);
-    const static_js = try emit_direct_js.emitModule(&static_model, allocator);
+    const static_js = try emitComponentJs(&static_model, allocator);
     defer allocator.free(static_js);
     try std.testing.expect(std.mem.indexOf(u8, static_js, "Shell.mountIntoBoundary(") != null);
     try std.testing.expect(std.mem.indexOf(u8, static_js, "undefined, undefined, undefined") != null);
@@ -3451,9 +3464,9 @@ test "direct browser modules specialize child component update paths duplicate c
     try std.testing.expect(std.mem.indexOf(u8, static_js, "refs[2].update();") == null);
     const panel_usage_source = try readFixture(allocator, "test/examples/slots/PanelUsage.weiv");
     defer allocator.free(panel_usage_source);
-    var panel_usage_model = try component.build(panel_usage_source, "test/examples/slots/PanelUsage.weiv", allocator);
+    var panel_usage_model = try compiler_compile.compile(panel_usage_source, "test/examples/slots/PanelUsage.weiv", allocator);
     defer panel_usage_model.deinit(allocator);
-    const panel_usage_js = try emit_direct_js.emitModule(&panel_usage_model, allocator);
+    const panel_usage_js = try emitComponentJs(&panel_usage_model, allocator);
     defer allocator.free(panel_usage_js);
     try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, ".setProps(") == null);
     try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, ".setEventHandlers(") == null);
@@ -3471,9 +3484,9 @@ test "direct browser modules specialize child component update paths duplicate c
         \\  let items = [1, 2, 3];
         \\</script>
     ;
-    var loop_model = try component.build(loop_source, "inline-static-loop-child.weiv", allocator);
+    var loop_model = try compiler_compile.compile(loop_source, "inline-static-loop-child.weiv", allocator);
     defer loop_model.deinit(allocator);
-    const loop_js = try emit_direct_js.emitModule(&loop_model, allocator);
+    const loop_js = try emitComponentJs(&loop_model, allocator);
     defer allocator.free(loop_js);
     try std.testing.expect(std.mem.indexOf(u8, loop_js, "Shell.mountIntoBoundary(start, end, undefined, undefined, undefined);") != null);
     try std.testing.expect(std.mem.indexOf(u8, loop_js, "record.handle.setProps(") == null);
@@ -3482,7 +3495,7 @@ test "direct browser modules specialize child component update paths duplicate c
     try std.testing.expect(std.mem.indexOf(u8, loop_js, "record.handle.update();") == null);
 }
 test "slot assignment outside component usage is rejected duplicate coverage" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     const source =
@@ -3497,11 +3510,11 @@ test "slot assignment outside component usage is rejected duplicate coverage" {
     ;
     try std.testing.expectError(
         error.InvalidSlotPlacement,
-        component.build(source, "inline-invalid-slot-placement.weiv", allocator),
+        compiler_compile.compile(source, "inline-invalid-slot-placement.weiv", allocator),
     );
 }
 test "slot outlet directives are rejected duplicate coverage" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     const source =
@@ -3516,11 +3529,11 @@ test "slot outlet directives are rejected duplicate coverage" {
     ;
     try std.testing.expectError(
         error.InvalidSlotOutlet,
-        component.build(source, "inline-invalid-slot-outlet.weiv", allocator),
+        compiler_compile.compile(source, "inline-invalid-slot-outlet.weiv", allocator),
     );
 }
 test "template grouping outside component usage is rejected duplicate coverage" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     const source =
@@ -3537,11 +3550,11 @@ test "template grouping outside component usage is rejected duplicate coverage" 
     ;
     try std.testing.expectError(
         error.InvalidSlotTemplatePlacement,
-        component.build(source, "inline-invalid-top-level-template.weiv", allocator),
+        compiler_compile.compile(source, "inline-invalid-top-level-template.weiv", allocator),
     );
 }
 test "template grouping without slot assignment is rejected duplicate coverage" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     const source =
@@ -3561,6 +3574,6 @@ test "template grouping without slot assignment is rejected duplicate coverage" 
     ;
     try std.testing.expectError(
         error.InvalidSlotTemplatePlacement,
-        component.build(source, "inline-invalid-slot-template.weiv", allocator),
+        compiler_compile.compile(source, "inline-invalid-slot-template.weiv", allocator),
     );
 }
