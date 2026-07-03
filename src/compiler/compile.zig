@@ -4,7 +4,7 @@ const binding = @import("sema/binder.zig");
 const lower = @import("lower/index.zig");
 const component_unit = @import("component_unit.zig");
 const parser = @import("parser/index.zig");
-const parser_backend = @import("../ffi/parser_backend.zig");
+const script_backend = @import("../ffi/script_backend.zig");
 
 pub fn compile(
     source: []const u8,
@@ -24,7 +24,7 @@ pub fn compile(
         temp.deinit(allocator);
     }
 
-    const script = try parser_backend.analyzeScript(sfc_document.script.content, source_path, allocator);
+    const script = try script_backend.analyzeScript(sfc_document.script.content, source_path, allocator);
     errdefer {
         var temp = script;
         temp.deinit(allocator);
@@ -98,7 +98,7 @@ pub fn compileReport(
     };
     report.normalized_template = normalized_template;
 
-    var script = try parser_backend.analyzeScript(sfc_document.script.content, source_path, allocator);
+    var script = try script_backend.analyzeScript(sfc_document.script.content, source_path, allocator);
     try compiler_diagnostics.appendScriptDiagnostics(&bag, source, source_path, sfc_document, &script, allocator);
     report.script = script;
 

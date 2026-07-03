@@ -1,0 +1,125 @@
+<template>
+  <section class="wui-tabs">
+    <div class="wui-tabs__list" role="tablist" aria-orientation="horizontal">
+      <button
+        class="wv-button wui-tabs__trigger"
+        role="tab"
+        bind:aria-selected="overviewSelected"
+        on:click="selectOverview"
+        on:keydown="handleKeydown"
+      >
+        Overview
+      </button>
+      <button
+        class="wv-button wui-tabs__trigger"
+        role="tab"
+        bind:aria-selected="activitySelected"
+        on:click="selectActivity"
+        on:keydown="handleKeydown"
+      >
+        Activity
+      </button>
+      <button
+        class="wv-button wui-tabs__trigger"
+        role="tab"
+        bind:aria-selected="settingsSelected"
+        on:click="selectSettings"
+        on:keydown="handleKeydown"
+      >
+        Settings
+      </button>
+    </div>
+
+    <section class="wui-tabs__panel" role="tabpanel">
+      <div if="selectedValue === 'Overview'">
+        <slot name="overview">
+          <p class="wui-tabs__fallback">Overview content</p>
+        </slot>
+      </div>
+      <div if="selectedValue === 'Activity'">
+        <slot name="activity">
+          <p class="wui-tabs__fallback">Activity content</p>
+        </slot>
+      </div>
+      <div if="selectedValue === 'Settings'">
+        <slot name="settings">
+          <p class="wui-tabs__fallback">Settings content</p>
+        </slot>
+      </div>
+    </section>
+  </section>
+</template>
+
+<script lang="ts">
+  import { createTabsController } from "@weivjs/ui-core";
+
+  export interface Props {
+    activationMode?: "automatic" | "manual";
+    initialTab?: "Overview" | "Activity" | "Settings";
+  }
+
+  export let props: Props;
+
+  const tabs = createTabsController({
+    tabs: ["Overview", "Activity", "Settings"],
+    initialValue: props.initialTab ?? "Overview",
+    activationMode: props.activationMode ?? "automatic",
+  });
+
+  let selectedValue = tabs.selectedValue;
+  let overviewSelected = selectedValue === "Overview" ? "true" : "false";
+  let activitySelected = selectedValue === "Activity" ? "true" : "false";
+  let settingsSelected = selectedValue === "Settings" ? "true" : "false";
+
+  tabs.subscribe((state) => {
+    selectedValue = state.selectedValue;
+    overviewSelected = selectedValue === "Overview" ? "true" : "false";
+    activitySelected = selectedValue === "Activity" ? "true" : "false";
+    settingsSelected = selectedValue === "Settings" ? "true" : "false";
+  });
+
+  function selectOverview() {
+    tabs.select("Overview");
+  }
+
+  function selectActivity() {
+    tabs.select("Activity");
+  }
+
+  function selectSettings() {
+    tabs.select("Settings");
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    tabs.onTabKeydown(event);
+  }
+</script>
+
+<style>
+  .wui-tabs {
+    display: grid;
+    gap: var(--weiv-space-3);
+  }
+
+  .wui-tabs__list {
+    display: flex;
+    gap: var(--weiv-space-2);
+    flex-wrap: wrap;
+  }
+
+  .wui-tabs__trigger[aria-selected="false"] {
+    opacity: 0.75;
+  }
+
+  .wui-tabs__panel {
+    border: 1px solid var(--weiv-color-border);
+    border-radius: var(--weiv-radius-md);
+    background: var(--weiv-color-surface);
+    padding: var(--weiv-space-3);
+  }
+
+  .wui-tabs__fallback {
+    margin: 0;
+    color: var(--weiv-color-muted);
+  }
+</style>

@@ -5,7 +5,7 @@ const component = @import("compiler/component_unit.zig");
 const compiler_diagnostics = @import("compiler/diagnostics.zig");
 const inspect = @import("compiler/inspect/index.zig");
 const parser = @import("compiler/parser/index.zig");
-const parser_backend = @import("ffi/parser_backend.zig");
+const script_backend = @import("ffi/script_backend.zig");
 
 const app_emit = browser_backend.emit.app;
 const browser_render_tree = browser_backend.render_tree;
@@ -528,7 +528,7 @@ fn runAnalyzeScript(path: []const u8, allocator: std.mem.Allocator) !void {
     };
     defer allocator.free(source);
 
-    const analysis_json = parser_backend.analyzeScriptRaw(source, path, allocator) catch |err| {
+    const analysis_json = script_backend.analyzeScriptRaw(source, path, allocator) catch |err| {
         try printCliStageError("analyze script", path, .script_facts, "script.backend_failure", err, allocator);
         return error.Reported;
     };
@@ -789,7 +789,6 @@ fn printUsage() !void {
         \\  weiv emit invalidation-graph <path> [out-file]
         \\  weiv emit js <path> [out-file]
         \\  weiv emit css <path> [out-file]
-        \\  weiv emit app <root.weiv> <out-dir>
         \\  weiv compile <root.weiv> [out-dir]
         \\  weiv dev <root.weiv> [out-dir]
         \\

@@ -5,7 +5,7 @@ const component = @import("../../../../component_unit.zig");
 const sir = @import("../../../../sema/sir.zig");
 const tracked_root = @import("../../../../sema/tracked_root.zig");
 const common = @import("common.zig");
-const parser_backend = @import("../../../../../ffi/parser_backend.zig");
+const script_backend = @import("../../../../../ffi/script_backend.zig");
 
 const TrackedRoot = struct {
     id: usize,
@@ -1736,7 +1736,7 @@ pub fn emitResolvedExpression(
     }
 
     if (bindings_json.len > 0) {
-        if (parser_backend.rewriteExpression(trimmed, bindings_json, scope_expr, allocator)) |rewritten| {
+        if (script_backend.rewriteExpression(trimmed, bindings_json, scope_expr, allocator)) |rewritten| {
             defer allocator.free(rewritten);
             try out.appendSlice(allocator, rewritten);
             return;

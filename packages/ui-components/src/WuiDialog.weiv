@@ -1,0 +1,123 @@
+<template>
+  <section class="wui-dialog">
+    <button class="wv-button wui-dialog__trigger" on:click="openDialog">
+      {{ props.triggerLabel ?? "Open dialog" }}
+    </button>
+
+    <div
+      if="open"
+      class="wui-dialog__backdrop"
+      on:click="onBackdropClick"
+      on:keydown="onBackdropKeydown"
+      tabindex="-1"
+    >
+      <section class="wui-dialog__surface" bind:role="dialogRole" bind:aria-modal="ariaModal" bind:aria-labelledby="labelId" bind:aria-describedby="descriptionId">
+        <header class="wui-dialog__header">
+          <h2 class="wui-dialog__title" bind:id="labelId">{{ props.title ?? "Dialog" }}</h2>
+          <button class="wv-button wui-dialog__close" on:click="closeDialog">
+            {{ props.closeLabel ?? "Close" }}
+          </button>
+        </header>
+
+        <p class="wui-dialog__description" bind:id="descriptionId">{{ props.description ?? "Dialog description" }}</p>
+
+        <div class="wui-dialog__body">
+          <slot>
+            <p class="wui-dialog__fallback">Add dialog content here.</p>
+          </slot>
+        </div>
+      </section>
+    </div>
+  </section>
+</template>
+
+<script lang="ts">
+  import { createDialogController } from "@weivjs/ui-core";
+
+  export interface Props {
+    triggerLabel?: string;
+    title?: string;
+    description?: string;
+    closeLabel?: string;
+  }
+
+  export let props: Props;
+
+  const dialog = createDialogController();
+
+  let open = dialog.open;
+  const a11y = dialog.getDialogA11yProps();
+  const dialogRole = a11y.role;
+  const ariaModal = a11y["aria-modal"];
+  const labelId = dialog.labelId;
+  const descriptionId = dialog.descriptionId;
+
+  dialog.subscribe((nextOpen) => {
+    open = nextOpen;
+  });
+
+  function openDialog() {
+    dialog.openDialog();
+  }
+
+  function closeDialog() {
+    dialog.closeDialog();
+  }
+
+  function onBackdropClick(event: MouseEvent) {
+    const target = event.target as Element | null;
+    if (target?.classList.contains("wui-dialog__backdrop")) {
+      dialog.closeDialog();
+    }
+  }
+
+  function onBackdropKeydown(event: KeyboardEvent) {
+    dialog.onKeydown(event);
+  }
+</script>
+
+<style>
+  .wui-dialog {
+    display: grid;
+    gap: var(--weiv-space-3);
+  }
+
+  .wui-dialog__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: grid;
+    place-items: center;
+    background: rgba(9, 16, 32, 0.48);
+    padding: var(--weiv-space-4);
+  }
+
+  .wui-dialog__surface {
+    width: min(560px, 100%);
+    border-radius: var(--weiv-radius-lg);
+    border: 1px solid var(--weiv-color-border);
+    background: var(--weiv-color-surface);
+    box-shadow: var(--weiv-shadow-md);
+    padding: var(--weiv-space-4);
+    display: grid;
+    gap: var(--weiv-space-3);
+  }
+
+  .wui-dialog__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--weiv-space-3);
+  }
+
+  .wui-dialog__title {
+    margin: 0;
+    font: 650 1.05rem/1.2 var(--weiv-font-body);
+  }
+
+  .wui-dialog__description,
+  .wui-dialog__fallback {
+    margin: 0;
+    color: var(--weiv-color-muted);
+  }
+</style>

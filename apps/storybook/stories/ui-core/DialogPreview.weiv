@@ -1,0 +1,56 @@
+<template>
+  <section class="dialog-story-shell">
+    <h3>{{ props.title }}</h3>
+    <p class="wv-help">{{ props.description }}</p>
+    <div class="dialog-story-actions">
+      <button class="wv-button" on:click="emitConfirm">Confirm</button>
+      <button class="wv-button dialog-story-cancel" on:click="emitCancel">Cancel</button>
+    </div>
+  </section>
+</template>
+
+<script lang="ts">
+  export interface Props {
+    title: string;
+    description: string;
+  }
+
+  export interface Emits {
+    confirm: void;
+    cancel: void;
+  }
+
+  export let props: Props;
+
+  function emitConfirm() {
+    emit("confirm");
+  }
+
+  function emitCancel() {
+    emit("cancel");
+  }
+</script>
+
+<style>
+  .dialog-story-shell {
+    display: grid;
+    gap: 12px;
+  }
+
+  .dialog-story-shell h3 {
+    margin: 0;
+    font: 700 18px/1.2 var(--weiv-font-body);
+    color: var(--weiv-color-text);
+  }
+
+  .dialog-story-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .dialog-story-cancel {
+    background: var(--weiv-color-surface);
+    color: var(--weiv-color-text);
+    border-color: var(--weiv-color-border);
+  }
+</style>

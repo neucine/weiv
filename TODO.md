@@ -8,7 +8,7 @@
   - optional `weiv:*` typings (`weiv:observable`, `weiv:router`)
 - [x] Publish macOS arm64 platform package (`@weivjs/weiv-darwin-arm64`) and `weivjs`
 - [x] Add package-level clean-install E2E verification (`npm run test:package`)
-- [x] Move VS Code extension into workspace packages and add publish scripts/docs
+- [x] Split VS Code extension into a standalone repo and wire docs/publish flow around it
 - [x] Ship canonical CLI diagnostics mode (`--json-diagnostics`) with contract tests
 - [x] Normalize `weiv dev` info logs and harden watch ergonomics (tunable poll/debounce, scan throttling)
 - [x] Scaffold UI package split:
@@ -19,7 +19,7 @@
 
 - [x] Reduce `evaluate(...)` fallbacks — compile dynamic expressions to direct access
 - [x] Diagnostics unification — structured author errors across primary CLI/dev failure paths
-- [ ] App-scale verification — kanib as the primary confidence anchor
+- [x] App-scale verification — kanib as the primary confidence anchor
 - [x] `weiv dev` polish — solid authoring loop, rebuild clarity, process ergonomics
 
 ## Should-Have (v1 quality bar)
@@ -64,7 +64,7 @@ weivjs/vite            — Vite adapter surface
 - [ ] Define migration path from CLI-bridge to native or wasm compiler distribution without changing plugin user API.
 - [ ] Replace remaining non-mac platform placeholder binaries and publish full optional-dependency matrix.
 
-See: `docs/archive/bundler-integration-plan.md`
+See: https://weiv.dev/npm-single-package-distribution
 
 ## Post-v1
 
@@ -79,10 +79,10 @@ See: `docs/archive/bundler-integration-plan.md`
 
 - [x] Establish split architecture: headless core + themed visual layer
 - [x] Publishable package scaffolds for `@weivjs/ui-core` and `@weivjs/ui-theme-default`
-- [ ] Implement first full primitive contract (Dialog: focus restore, escape, outside click semantics)
+- [x] Implement first full primitive contract (Dialog: focus restore, escape, outside click semantics)
 - [ ] Add core form-control primitives (Field, Input, Select, Checkbox, Radio)
 - [ ] Add default theme variants and density modes
-- [ ] Add UI package integration examples in Kanib or dedicated sample app
+- [x] Add UI package integration examples in Kanib or dedicated sample app
 
 ## VS Code Extension DX
 

@@ -1,0 +1,68 @@
+<template>
+  <section class="wui-disclosure">
+    <button
+      class="wv-button wui-disclosure__trigger"
+      bind:aria-expanded="ariaExpanded"
+      bind:aria-controls="controlsId"
+      on:click="toggle"
+    >
+      {{ props.label ?? "Toggle" }}
+    </button>
+
+    <div class="wui-disclosure__content" bind:id="controlsId" bind:hidden="hidden">
+      <slot>
+        <p class="wui-disclosure__fallback">Disclosure content.</p>
+      </slot>
+    </div>
+  </section>
+</template>
+
+<script lang="ts">
+  import { createDisclosureController } from "@weivjs/ui-core";
+
+  export interface Props {
+    label?: string;
+    initialExpanded?: boolean;
+  }
+
+  export let props: Props;
+
+  const disclosure = createDisclosureController({
+    initialExpanded: props.initialExpanded ?? false,
+  });
+
+  let ariaExpanded = disclosure.getTriggerA11yProps()["aria-expanded"];
+  let controlsId = disclosure.contentId;
+  let hidden = Boolean(disclosure.getContentA11yProps().hidden);
+
+  disclosure.subscribe(() => {
+    const trigger = disclosure.getTriggerA11yProps();
+    const content = disclosure.getContentA11yProps();
+    ariaExpanded = trigger["aria-expanded"];
+    controlsId = trigger["aria-controls"];
+    hidden = Boolean(content.hidden);
+  });
+
+  function toggle() {
+    disclosure.toggle();
+  }
+</script>
+
+<style>
+  .wui-disclosure {
+    display: grid;
+    gap: var(--weiv-space-3);
+  }
+
+  .wui-disclosure__content {
+    border: 1px solid var(--weiv-color-border);
+    border-radius: var(--weiv-radius-md);
+    background: var(--weiv-color-surface);
+    padding: var(--weiv-space-3);
+  }
+
+  .wui-disclosure__fallback {
+    margin: 0;
+    color: var(--weiv-color-muted);
+  }
+</style>

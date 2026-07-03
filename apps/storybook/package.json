@@ -1,0 +1,14 @@
+{
+  "name": "weiv-storybook",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "WEIV_BINARY_PATH=../../packages/weiv-darwin-arm64/bin/weiv bunx storybook dev -p 6006",
+    "build": "WEIV_BINARY_PATH=../../packages/weiv-darwin-arm64/bin/weiv bunx storybook build"
+  },
+  "devDependencies": {
+    "@storybook/addon-docs": "^10.4.0",
+    "@storybook/html-vite": "^10.4.0",
+    "storybook": "^10.4.0"
+  }
+}

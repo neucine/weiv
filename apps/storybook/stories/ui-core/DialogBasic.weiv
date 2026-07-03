@@ -1,0 +1,93 @@
+<template>
+  <section class="story-root">
+    <wui-dialog bind:data-state="open ? 'open' : 'closed'">
+      <wui-dialog-trigger>
+        <button class="wv-button" on:click="openDialog">Open dialog</button>
+      </wui-dialog-trigger>
+      <p class="wv-help">State: {{ open ? "open" : "closed" }}</p>
+
+      <wui-dialog-overlay
+        class="dialog-overlay"
+        bind:style="open ? 'display:grid' : 'display:none'"
+        on:click="onBackdropClick"
+      >
+        <wui-dialog-content class="dialog-content" on:click="stopBubbling">
+        <wui-dialog-title class="dialog-title">Dialog preview</wui-dialog-title>
+        <wui-dialog-description class="wv-help">
+          This canvas now uses the same wui-dialog API shape.
+        </wui-dialog-description>
+        <wui-dialog-footer class="dialog-footer">
+          <button class="wv-button" on:click="closeDialog">Confirm</button>
+          <button class="wv-button story-cancel" on:click="closeDialog">Cancel</button>
+        </wui-dialog-footer>
+      </wui-dialog-content>
+      </wui-dialog-overlay>
+    </wui-dialog>
+  </section>
+</template>
+
+<script lang="ts">
+  let open = false;
+
+  function openDialog() {
+    open = true;
+  }
+
+  function closeDialog() {
+    open = false;
+  }
+
+  function onBackdropClick() {
+    closeDialog();
+  }
+
+  function stopBubbling(event: MouseEvent) {
+    event.stopPropagation();
+  }
+</script>
+
+<style>
+  .story-root {
+    display: grid;
+    gap: 12px;
+    max-width: 560px;
+  }
+
+  .dialog-overlay {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(7, 15, 31, 0.45);
+    z-index: 999;
+  }
+
+  .dialog-content {
+    width: min(480px, 90vw);
+    background: var(--weiv-color-surface);
+    color: var(--weiv-color-text);
+    border: 1px solid var(--weiv-color-border);
+    border-radius: var(--weiv-radius-lg);
+    padding: 20px;
+    box-shadow: var(--weiv-shadow-md);
+    display: grid;
+    gap: 12px;
+  }
+
+  .dialog-title {
+    display: block;
+    margin: 0;
+    font: 700 18px/1.2 var(--weiv-font-body);
+  }
+
+  .dialog-footer {
+    display: flex;
+    gap: 10px;
+  }
+
+  .story-cancel {
+    background: var(--weiv-color-surface);
+    color: var(--weiv-color-text);
+    border-color: var(--weiv-color-border);
+  }
+</style>

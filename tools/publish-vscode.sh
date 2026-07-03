@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-EXT_DIR="$ROOT_DIR/packages/vscode-extension"
+EXT_DIR="$ROOT_DIR/../weiv-vscode"
 
 DRY_RUN=0
 DO_PUBLISH=0
@@ -38,6 +38,13 @@ EOF
   esac
 done
 
+if [[ ! -d "$EXT_DIR" ]]; then
+  echo "Expected standalone VS Code extension repo at: $EXT_DIR" >&2
+  echo "Clone it first, for example:" >&2
+  echo "  git clone https://github.com/neucine/weiv-vscode.git \"$EXT_DIR\"" >&2
+  exit 1
+fi
+
 cd "$EXT_DIR"
 
 echo "==> Installing extension dependencies"
@@ -56,7 +63,7 @@ if ! command -v npx >/dev/null 2>&1; then
 fi
 npx --no-install tsc -v >/dev/null 2>&1 || {
   echo "TypeScript toolchain not installed for extension workspace." >&2
-  echo "Run: cd packages/vscode-extension && npm install" >&2
+  echo "Run: cd \"$EXT_DIR\" && npm install" >&2
   exit 1
 }
 npm run build

@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/weiv",
+    "packages/ui-core",
+    "packages/ui-theme-default",
+    "packages/ui-components"
   ],
   "scripts": {
     "weiv": "zig build run --",
@@ -12,6 +15,7 @@
     "test:component": "bun test test/component",
     "test:inspect": "bun test test/inspect",
     "test:runtime": "bun test test/runtime",
+    "test:ui-core": "bun test test/ui-core",
     "test:observable": "bun test test/runtime/observable.test.ts",
     "test:router": "bun test test/runtime/router.test.ts",
     "test:package": "node ./test/package/package-e2e.test.mjs",
@@ -24,7 +28,10 @@
     "vscode:package": "tools/publish-vscode.sh --dry-run",
     "vscode:publish": "tools/publish-vscode.sh --publish",
     "pkg:pack:ui-core": "npm pack ./packages/ui-core",
-    "pkg:pack:ui-theme-default": "npm pack ./packages/ui-theme-default"
+    "pkg:pack:ui-theme-default": "npm pack ./packages/ui-theme-default",
+    "pkg:pack:ui-components": "npm pack ./packages/ui-components",
+    "storybook": "bun run --cwd ./apps/storybook dev",
+    "storybook:build": "bun run --cwd ./apps/storybook build"
   },
   "devDependencies": {
     "cypress": "^14.5.0",

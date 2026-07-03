@@ -31,15 +31,15 @@ pub fn build(b: *std.Build) void {
         exe.root_module.linkSystemLibrary("iconv", .{});
     }
 
-    const build_parser_backend = b.addSystemCommand(&.{
+    const build_script_backend = b.addSystemCommand(&.{
         "cargo",
         "build",
         "--release",
         "--quiet",
     });
-    build_parser_backend.setCwd(b.path("libs/parser-backend"));
+    build_script_backend.setCwd(b.path("libs/parser-backend"));
 
-    exe.step.dependOn(&build_parser_backend.step);
+    exe.step.dependOn(&build_script_backend.step);
 
     b.installArtifact(exe);
 
@@ -75,7 +75,7 @@ pub fn build(b: *std.Build) void {
         tests.root_module.linkFramework("Security", .{});
         tests.root_module.linkSystemLibrary("iconv", .{});
     }
-    tests.step.dependOn(&build_parser_backend.step);
+    tests.step.dependOn(&build_script_backend.step);
 
     const test_step = b.step("test", "Run compiler e2e tests");
     const run_tests = b.addRunArtifact(tests);
@@ -87,7 +87,7 @@ pub fn build(b: *std.Build) void {
         "test/component",
     });
     component_check.setCwd(b.path("."));
-    component_check.step.dependOn(&build_parser_backend.step);
+    component_check.step.dependOn(&build_script_backend.step);
 
     const component_test_step = b.step("component-test", "Run emitted component tests with Bun");
     component_test_step.dependOn(&component_check.step);
@@ -101,7 +101,7 @@ pub fn build(b: *std.Build) void {
         "test/runtime",
     });
     runtime_check.setCwd(b.path("."));
-    runtime_check.step.dependOn(&build_parser_backend.step);
+    runtime_check.step.dependOn(&build_script_backend.step);
 
     const runtime_test_step = b.step("runtime-test", "Run observable runtime tests with Bun");
     runtime_test_step.dependOn(&runtime_check.step);
@@ -112,7 +112,7 @@ pub fn build(b: *std.Build) void {
         "test/cypress/run_direct.ts",
     });
     cypress_direct.setCwd(b.path("."));
-    cypress_direct.step.dependOn(&build_parser_backend.step);
+    cypress_direct.step.dependOn(&build_script_backend.step);
 
     const cypress_slots = b.addSystemCommand(&.{
         "bun",
@@ -120,7 +120,7 @@ pub fn build(b: *std.Build) void {
         "test/cypress/run_slots.ts",
     });
     cypress_slots.setCwd(b.path("."));
-    cypress_slots.step.dependOn(&build_parser_backend.step);
+    cypress_slots.step.dependOn(&build_script_backend.step);
 
     const cypress_test_step = b.step("cypress-test", "Run Cypress E2E tests (starts dev server, requires browser)");
     cypress_test_step.dependOn(&cypress_direct.step);

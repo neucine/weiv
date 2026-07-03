@@ -1,0 +1,53 @@
+<template>
+  <main class="app">
+    <h1>Wui Phase 1 Demo</h1>
+
+    <WuiDialog bind:triggerLabel="'Open release notes'" bind:title="'Release Notes'" bind:description="'Summary of this sprint output.'" bind:closeLabel="'Done'">
+      <ul class="app__list">
+        <li>Dialog controller semantics now live in ui-core.</li>
+        <li>Public API is now Wui-prefixed Weiv components.</li>
+      </ul>
+    </WuiDialog>
+
+    <WuiDisclosure bind:label="'Toggle deployment details'" bind:initialExpanded="true">
+      <p>Deployment window: 02:00 - 03:00 UTC.</p>
+    </WuiDisclosure>
+
+    <WuiTabs bind:initialTab="'Overview'" bind:activationMode="'automatic'">
+      <template slot:overview>
+        <p>Overview slot content.</p>
+      </template>
+      <template slot:activity>
+        <p>Activity slot content.</p>
+      </template>
+      <template slot:settings>
+        <p>Settings slot content.</p>
+      </template>
+    </WuiTabs>
+  </main>
+</template>
+
+<script lang="ts">
+  import WuiDialog from "../../../packages/ui-components/src/WuiDialog.weiv";
+  import WuiDisclosure from "../../../packages/ui-components/src/WuiDisclosure.weiv";
+  import WuiTabs from "../../../packages/ui-components/src/WuiTabs.weiv";
+
+  export interface Props {}
+
+  export let props: Props;
+</script>
+
+<style>
+  .app {
+    display: grid;
+    gap: 1rem;
+    max-width: 680px;
+    margin: 1.5rem auto;
+    font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  }
+
+  .app__list {
+    margin: 0;
+    padding-left: 1.1rem;
+  }
+</style>

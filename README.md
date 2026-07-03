@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/assets/weiv.png" alt="weiv" width="120" />
+  <img src="https://weiv.dev/assets/weiv.png" alt="weiv" width="120" />
 </p>
 
 Frontend, with room to breathe.
@@ -51,9 +51,16 @@ npx weiv dev path/to/App.weiv
 If you want a static bundle instead of the dev server:
 
 ```bash
-npx weiv compile emit app path/to/App.weiv ./dist
+npx weiv compile path/to/App.weiv
 cd ./dist
 bun server.ts
+```
+
+`compile` writes to `dist` by default. Pass an explicit output directory when
+you want a different bundle location:
+
+```bash
+npx weiv compile path/to/App.weiv ./public
 ```
 
 ## NPM Package
@@ -64,14 +71,14 @@ bun server.ts
 - bundler adapters: `weivjs/vite`, `weivjs/bun`
 - optional typings: `weiv:observable`, `weiv:router`
 
-See packaging details in [NPM Single-Package Distribution](./docs/npm-single-package-distribution.md).
+See packaging details in the [NPM Single-Package Distribution docs](https://weiv.dev/npm-single-package-distribution).
 
 ## Diagnostics JSON
 
 For tooling and machine-readable failure handling:
 
 ```bash
-npx weiv --json-diagnostics compile emit js path/to/App.weiv
+npx weiv --json-diagnostics emit js path/to/App.weiv
 ```
 
 This emits canonical diagnostics JSON with:
@@ -81,13 +88,58 @@ This emits canonical diagnostics JSON with:
 - `ok`
 - `diagnostics` (`code`, `severity`, `stage`, `message`, `location`, `span`, `fatal`)
 
+## Compiler Architecture
+
+The compiler is organized as a sequence of explicit representations:
+
+```text
+parser  -> SFC document + template AST
+sema    -> ScriptFacts + TemplateBindings
+lower   -> LIR
+backend -> browser RenderTree + emitted artifacts
+```
+
+The parser owns the `.weiv` document shape: a single-file component has a
+template section, a script section, and optional style section. Template syntax
+is parsed into a template AST. Script and style stay as raw section text at this
+layer so the document representation is complete without making parser own
+TypeScript semantics.
+
+Semantic analysis turns the raw script into `ScriptFacts` through the Rust FFI
+script backend, then binds template references into `TemplateBindings`. The
+lowering phase converts the target-neutral component information into LIR.
+After that, `ComponentUnit` aggregates the phase outputs for one component.
+
+Browser-specific work lives under the browser backend. It builds a `RenderTree`
+from LIR, wraps browser-specific facts in `BrowserComponent`, and emits JavaScript,
+scoped CSS, or a whole app bundle. App bundles additionally use an app graph to
+collect component and runtime dependencies.
+
+Useful compiler representations can be emitted directly:
+
+```bash
+npx weiv emit ast path/to/App.weiv
+npx weiv emit sir path/to/App.weiv
+npx weiv emit lir path/to/App.weiv
+npx weiv emit render-tree path/to/App.weiv
+npx weiv emit invalidation-graph path/to/App.weiv
+```
+
+Each of those writes to stdout by default. Add an output file to materialize it:
+
+```bash
+npx weiv emit lir path/to/App.weiv App.lir.txt
+```
+
 ## Learn More
 
-- [Docs Index](./docs/README.md)
-- [Framework Vision](./docs/framework-vision.md)
-- [Current Architecture](./docs/architecture.md)
-- [Current Status](./docs/status.md)
-- [NPM Single-Package Distribution](./docs/npm-single-package-distribution.md)
+Public docs live at [weiv.dev](https://weiv.dev).
+
+- [Docs Index](https://weiv.dev/)
+- [Framework Vision](https://weiv.dev/framework-vision)
+- [Current Architecture](https://weiv.dev/architecture)
+- [Current Status](https://weiv.dev/status)
+- [NPM Single-Package Distribution](https://weiv.dev/npm-single-package-distribution)
 
 ## Contributor Commands
 

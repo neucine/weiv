@@ -4,7 +4,7 @@ const compiler_diagnostics = @import("../../../../diagnostics.zig");
 const component = @import("../../../../component_unit.zig");
 const browser_component = @import("../../component.zig");
 const js_module = @import("../js_module.zig");
-const parser_backend = @import("../../../../../ffi/parser_backend.zig");
+const script_backend = @import("../../../../../ffi/script_backend.zig");
 const sir = @import("../../../../sema/sir.zig");
 const style = @import("../scoped_css.zig");
 
@@ -928,7 +928,7 @@ fn emittedRuntimeImportPath(source: []const u8, allocator: std.mem.Allocator) ![
 
 fn emitRuntimeImportOutput(source: []const u8, source_path: []const u8, output_rel_path: []const u8, allocator: std.mem.Allocator) ![]u8 {
     if (isTranspilableTypeScriptModule(source_path)) {
-        const transpiled = try parser_backend.transpileModule(source, source_path, allocator);
+        const transpiled = try script_backend.transpileModule(source, source_path, allocator);
         defer allocator.free(transpiled);
         return try rewriteRuntimeImportSpecifiers(transpiled, output_rel_path, allocator);
     }
