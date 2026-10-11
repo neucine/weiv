@@ -1,5 +1,5 @@
 <template>
-  <article bind:class="cardClass()">
+  <article :class="cardClass()">
     <p class="metric-card__label">{{ props.label }}</p>
     <strong class="metric-card__value">{{ props.value }}</strong>
     <p class="metric-card__change">{{ props.change > 0 ? "+" : "" }}{{ props.change }}%</p>

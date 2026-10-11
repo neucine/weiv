@@ -7,23 +7,23 @@
       </div>
     </template>
 
-    <EmptyState if="items().length === 0">
+    <EmptyState #if="items().length === 0">
       <template slot:message>
         <p>No notifications for this workspace.</p>
       </template>
       <p>Team mentions and issue updates will appear here.</p>
     </EmptyState>
 
-    <ul else class="notifications-page__list">
-      <li for="item in items()" bind:class="rowClass(item.read)">
+    <ul #else class="notifications-page__list">
+      <li #for="item in items()" :class="rowClass(item.read)">
         <div class="notifications-page__body">
           <strong>{{ item.title }}</strong>
           <p>{{ item.detail }}</p>
           <small>{{ item.minutesAgo }}m ago</small>
         </div>
         <div class="notifications-page__actions">
-          <button class="notifications-page__ghost" bind:disabled="!item.issueId" on:click="openIssue(item.issueId)">Open issue</button>
-          <button class="notifications-page__primary" bind:disabled="item.read" on:click="markRead(item.id)">
+          <button class="notifications-page__ghost" :disabled="!item.issueId" @click="openIssue(item.issueId)">Open issue</button>
+          <button class="notifications-page__primary" :disabled="item.read" @click="markRead(item.id)">
             {{ item.read ? "Read" : "Mark read" }}
           </button>
         </div>

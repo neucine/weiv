@@ -2,16 +2,16 @@
   <section class="todo-list">
     <header class="todo-list__header">
       <h2>{{ props.title }}</h2>
-      <button on:click="toggleCompleted">
+      <button @click="toggleCompleted">
         Toggle completed
       </button>
     </header>
 
-    <p if="showCompleted">Showing completed tasks</p>
-    <p else>Showing pending tasks</p>
+    <p #if="showCompleted">Showing completed tasks</p>
+    <p #else>Showing pending tasks</p>
 
     <ul>
-      <li for="item in visibleItems()">
+      <li #for="item in visibleItems()">
         <span>{{ item.label }}</span>
       </li>
     </ul>

@@ -4,44 +4,44 @@
       <button
         class="wv-button wui-tabs__trigger"
         role="tab"
-        bind:aria-selected="overviewSelected"
-        on:click="selectOverview"
-        on:keydown="handleKeydown"
+        :aria-selected="overviewSelected"
+        @click="selectOverview"
+        @keydown="handleKeydown"
       >
         Overview
       </button>
       <button
         class="wv-button wui-tabs__trigger"
         role="tab"
-        bind:aria-selected="activitySelected"
-        on:click="selectActivity"
-        on:keydown="handleKeydown"
+        :aria-selected="activitySelected"
+        @click="selectActivity"
+        @keydown="handleKeydown"
       >
         Activity
       </button>
       <button
         class="wv-button wui-tabs__trigger"
         role="tab"
-        bind:aria-selected="settingsSelected"
-        on:click="selectSettings"
-        on:keydown="handleKeydown"
+        :aria-selected="settingsSelected"
+        @click="selectSettings"
+        @keydown="handleKeydown"
       >
         Settings
       </button>
     </div>
 
     <section class="wui-tabs__panel" role="tabpanel">
-      <div if="selectedValue === 'Overview'">
+      <div #if="selectedValue === 'Overview'">
         <slot name="overview">
           <p class="wui-tabs__fallback">Overview content</p>
         </slot>
       </div>
-      <div if="selectedValue === 'Activity'">
+      <div #if="selectedValue === 'Activity'">
         <slot name="activity">
           <p class="wui-tabs__fallback">Activity content</p>
         </slot>
       </div>
-      <div if="selectedValue === 'Settings'">
+      <div #if="selectedValue === 'Settings'">
         <slot name="settings">
           <p class="wui-tabs__fallback">Settings content</p>
         </slot>

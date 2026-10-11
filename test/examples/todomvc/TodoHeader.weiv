@@ -1,7 +1,7 @@
 <template>
   <header class="todo-header">
     <h1>{{ props.title || "todos" }}</h1>
-    <TodoTextInput bind:initialValue="''" bind:placeholder="'What needs to be done?'" on:submit="handleCreate" />
+    <TodoTextInput :initialValue="''" :placeholder="'What needs to be done?'" @submit="handleCreate" />
   </header>
 </template>
 

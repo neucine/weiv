@@ -8,29 +8,29 @@
     </template>
 
     <template slot:actions>
-      <button bind:class="filterClass('all')" on:click="showAll">All</button>
-      <button bind:class="filterClass('active')" on:click="showActive">Active</button>
-      <button bind:class="filterClass('review')" on:click="showReview">Review</button>
+      <button :class="filterClass('all')" @click="showAll">All</button>
+      <button :class="filterClass('active')" @click="showActive">Active</button>
+      <button :class="filterClass('review')" @click="showReview">Review</button>
     </template>
 
-    <EmptyState if="visibleIssues().length === 0">
+    <EmptyState #if="visibleIssues().length === 0">
       <template slot:message>
         <p>No issues match the current filter.</p>
       </template>
       <p>Switch filters or move work back into the active queue.</p>
     </EmptyState>
 
-    <ul else class="activity-feed__list">
+    <ul #else class="activity-feed__list">
       <ActivityItem
-        for="issue in visibleIssues()"
-        bind:id="issue.id"
-        bind:owner="issue.owner"
-        bind:priority="issue.priority"
-        bind:selected="workspaceShared.selectedIssueId === issue.id"
-        bind:status="issue.status"
-        bind:summary="issue.summary"
-        bind:title="issue.title"
-        on:open-issue="openIssue"
+        #for="issue in visibleIssues()"
+        :id="issue.id"
+        :owner="issue.owner"
+        :priority="issue.priority"
+        :selected="workspaceShared.selectedIssueId === issue.id"
+        :status="issue.status"
+        :summary="issue.summary"
+        :title="issue.title"
+        @open-issue="openIssue"
       />
     </ul>
   </Panel>

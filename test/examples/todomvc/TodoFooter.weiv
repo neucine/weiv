@@ -2,11 +2,11 @@
   <footer class="todo-footer">
     <span class="todo-count"><strong>{{ props.activeCount }}</strong><span class="todo-count__suffix">{{ props.activeCount === 1 ? " item left" : " items left" }}</span></span>
     <ul class="filters">
-      <li><button bind:class="filterClass('all')" on:click="selectAll">All</button></li>
-      <li><button bind:class="filterClass('active')" on:click="selectActive">Active</button></li>
-      <li><button bind:class="filterClass('completed')" on:click="selectCompleted">Completed</button></li>
+      <li><button :class="filterClass('all')" @click="selectAll">All</button></li>
+      <li><button :class="filterClass('active')" @click="selectActive">Active</button></li>
+      <li><button :class="filterClass('completed')" @click="selectCompleted">Completed</button></li>
     </ul>
-    <button if="props.completedCount > 0" class="clear-completed" on:click="clearCompleted">Clear completed</button>
+    <button #if="props.completedCount > 0" class="clear-completed" @click="clearCompleted">Clear completed</button>
   </footer>
 </template>
 

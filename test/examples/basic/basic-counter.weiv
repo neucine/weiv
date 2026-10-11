@@ -5,7 +5,7 @@
     <p>Current count: {{ count }}</p>
     <p>Doubled: {{ doubled() }}</p>
 
-    <button on:click="increment" bind:disabled="count >= limit">
+    <button @click="increment" :disabled="count >= limit">
       Increment
     </button>
   </section>

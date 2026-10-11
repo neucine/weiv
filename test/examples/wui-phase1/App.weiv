@@ -2,18 +2,18 @@
   <main class="app">
     <h1>Wui Phase 1 Demo</h1>
 
-    <WuiDialog bind:triggerLabel="'Open release notes'" bind:title="'Release Notes'" bind:description="'Summary of this sprint output.'" bind:closeLabel="'Done'">
+    <WuiDialog :triggerLabel="'Open release notes'" :title="'Release Notes'" :description="'Summary of this sprint output.'" :closeLabel="'Done'">
       <ul class="app__list">
         <li>Dialog controller semantics now live in ui-core.</li>
         <li>Public API is now Wui-prefixed Weiv components.</li>
       </ul>
     </WuiDialog>
 
-    <WuiDisclosure bind:label="'Toggle deployment details'" bind:initialExpanded="true">
+    <WuiDisclosure :label="'Toggle deployment details'" :initialExpanded="true">
       <p>Deployment window: 02:00 - 03:00 UTC.</p>
     </WuiDisclosure>
 
-    <WuiTabs bind:initialTab="'Overview'" bind:activationMode="'automatic'">
+    <WuiTabs :initialTab="'Overview'" :activationMode="'automatic'">
       <template slot:overview>
         <p>Overview slot content.</p>
       </template>

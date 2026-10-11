@@ -1,11 +1,11 @@
 <template>
-  <nav bind:class="sidebarClass()">
+  <nav :class="sidebarClass()">
     <section class="workspace-sidebar__section">
       <p class="workspace-sidebar__label">Workspaces</p>
       <button
-        for="workspace in workspaces()"
-        bind:class="workspaceClass(workspace.id)"
-        on:click="selectWorkspace(workspace.id)"
+        #for="workspace in workspaces()"
+        :class="workspaceClass(workspace.id)"
+        @click="selectWorkspace(workspace.id)"
       >
         <span>{{ workspace.key }}</span>
         <small>{{ workspace.name }}</small>
@@ -15,9 +15,9 @@
     <section class="workspace-sidebar__section">
       <p class="workspace-sidebar__label">Projects</p>
       <button
-        for="project in projects()"
-        bind:class="projectClass(project.id)"
-        on:click="selectProject(project.id)"
+        #for="project in projects()"
+        :class="projectClass(project.id)"
+        @click="selectProject(project.id)"
       >
         <span>{{ project.key }}</span>
         <small>{{ project.name }}</small>
@@ -26,27 +26,27 @@
 
     <section class="workspace-sidebar__section">
       <p class="workspace-sidebar__label">Views</p>
-      <button bind:class="itemClass(overviewPath())" on:click="showOverview">
+      <button :class="itemClass(overviewPath())" @click="showOverview">
         <span>Overview</span>
         <small>metrics, recent movement</small>
       </button>
-      <button bind:class="itemClass(issuesPath())" on:click="showIssues">
+      <button :class="itemClass(issuesPath())" @click="showIssues">
         <span>Issues</span>
         <small>list, filters, selection</small>
       </button>
-      <button bind:class="itemClass(boardPath())" on:click="showBoard">
+      <button :class="itemClass(boardPath())" @click="showBoard">
         <span>Board</span>
         <small>status grouped work</small>
       </button>
-      <button bind:class="itemClass(notificationsPath())" on:click="showNotifications">
+      <button :class="itemClass(notificationsPath())" @click="showNotifications">
         <span>Notifications</span>
         <small>mentions and activity</small>
       </button>
-      <button bind:class="itemClass(membersPath())" on:click="showMembers">
+      <button :class="itemClass(membersPath())" @click="showMembers">
         <span>Members</span>
         <small>roles and focus</small>
       </button>
-      <button bind:class="itemClass(settingsPath())" on:click="showSettings">
+      <button :class="itemClass(settingsPath())" @click="showSettings">
         <span>Settings</span>
         <small>preferences and rules</small>
       </button>

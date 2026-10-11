@@ -8,10 +8,10 @@
     </template>
 
     <div class="settings-page__group">
-      <button bind:class="toggleClass(autopinEnabled)" on:click="toggleAutopin">
+      <button :class="toggleClass(autopinEnabled)" @click="toggleAutopin">
         {{ autopinEnabled ? "Autopin enabled" : "Autopin disabled" }}
       </button>
-      <button bind:class="toggleClass(compactCards)" on:click="toggleCompactCards">
+      <button :class="toggleClass(compactCards)" @click="toggleCompactCards">
         {{ compactCards ? "Compact board cards" : "Comfortable board cards" }}
       </button>
     </div>
@@ -19,7 +19,7 @@
     <template slot:footer>
       <div class="settings-page__footer">
         <small>{{ savedMessage() }}</small>
-        <button class="settings-page__primary" on:click="saveSettings">Save workspace settings</button>
+        <button class="settings-page__primary" @click="saveSettings">Save workspace settings</button>
       </div>
     </template>
   </Panel>

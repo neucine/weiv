@@ -1,11 +1,11 @@
 <template>
-  <li bind:class="itemClass()">
-    <button class="activity-item__content" on:click="openIssue">
+  <li :class="itemClass()">
+    <button class="activity-item__content" @click="openIssue">
       <strong>{{ props.title }}</strong>
       <p>{{ props.summary }}</p>
       <small>{{ props.owner }} · {{ props.status }} · {{ props.priority }}</small>
     </button>
-    <button class="activity-item__action" on:click="openIssue">Open</button>
+    <button class="activity-item__action" @click="openIssue">Open</button>
   </li>
 </template>
 

@@ -1,6 +1,6 @@
 <template>
   <section class="card-toggle-usage">
-    <button on:click="toggleContent">Toggle card content</button>
+    <button @click="toggleContent">Toggle card content</button>
 
     <Card>
       <template slot:header>

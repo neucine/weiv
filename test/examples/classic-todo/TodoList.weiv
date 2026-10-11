@@ -1,12 +1,12 @@
 <template>
   <section class="todo-list">
-    <div if="props.items.length === 0" class="todo-list__empty">
+    <div #if="props.items.length === 0" class="todo-list__empty">
       <p class="todo-list__empty-title">Nothing in this lane yet</p>
       <span class="todo-list__empty-copy">{{ props.showCompleted ? "Completed work will land here." : "Active work will land here." }}</span>
     </div>
-    <ul else class="todo-list__items">
-      <li for="item in props.items">
-        <TodoItem bind:item="item" on:toggle="emitToggle" />
+    <ul #else class="todo-list__items">
+      <li #for="item in props.items">
+        <TodoItem :item="item" @toggle="emitToggle" />
       </li>
     </ul>
   </section>

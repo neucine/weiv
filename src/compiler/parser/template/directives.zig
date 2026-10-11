@@ -25,11 +25,15 @@ pub const ForDirective = struct {
 pub const EventDirective = struct {
     event_name: []const u8,
     expression: []const u8,
+    deprecated_syntax: bool,
+    span: sfc.Span,
 };
 
 pub const BindDirective = struct {
     target_name: []const u8,
     expression: []const u8,
+    deprecated_syntax: bool,
+    span: sfc.Span,
 };
 
 pub const SlotAssignDirective = struct {
@@ -63,7 +67,7 @@ pub fn split(raw_attributes: []const ast.Attribute, allocator: std.mem.Allocator
     defer directives.deinit(allocator);
 
     for (raw_attributes) |attribute| {
-        if (std.mem.eql(u8, attribute.name, "if")) {
+        if (std.mem.eql(u8, attribute.name, "#if")) {
             const value = attribute.value orelse return error.InvalidDirective;
             try directives.append(allocator, .{
                 .if_expr = .{ .expression = value },
@@ -71,14 +75,15 @@ pub fn split(raw_attributes: []const ast.Attribute, allocator: std.mem.Allocator
             continue;
         }
 
-        if (std.mem.eql(u8, attribute.name, "else")) {
+        if (std.mem.eql(u8, attribute.name, "#else")) {
+            if (attribute.value != null) return error.InvalidDirective;
             try directives.append(allocator, .{
                 .else_branch = .{},
             });
             continue;
         }
 
-        if (std.mem.eql(u8, attribute.name, "for")) {
+        if (std.mem.eql(u8, attribute.name, "#for")) {
             const value = attribute.value orelse return error.InvalidDirective;
             const parsed = parseForExpression(value) orelse return error.InvalidDirective;
             try directives.append(allocator, .{
@@ -87,23 +92,59 @@ pub fn split(raw_attributes: []const ast.Attribute, allocator: std.mem.Allocator
             continue;
         }
 
+        // Deprecated compatibility spelling; canonical event directives use `@`.
         if (std.mem.startsWith(u8, attribute.name, "on:")) {
             const value = attribute.value orelse return error.InvalidDirective;
             try directives.append(allocator, .{
                 .event = .{
                     .event_name = attribute.name["on:".len..],
                     .expression = value,
+                    .deprecated_syntax = true,
+                    .span = attribute.span,
                 },
             });
             continue;
         }
 
+        if (std.mem.startsWith(u8, attribute.name, "@")) {
+            const value = attribute.value orelse return error.InvalidDirective;
+            const event_name = attribute.name[1..];
+            if (event_name.len == 0) return error.InvalidDirective;
+            try directives.append(allocator, .{
+                .event = .{
+                    .event_name = event_name,
+                    .expression = value,
+                    .deprecated_syntax = false,
+                    .span = attribute.span,
+                },
+            });
+            continue;
+        }
+
+        // Deprecated compatibility spelling; canonical bindings use `:`.
         if (std.mem.startsWith(u8, attribute.name, "bind:")) {
             const value = attribute.value orelse return error.InvalidDirective;
             try directives.append(allocator, .{
                 .bind = .{
                     .target_name = attribute.name["bind:".len..],
                     .expression = value,
+                    .deprecated_syntax = true,
+                    .span = attribute.span,
+                },
+            });
+            continue;
+        }
+
+        if (std.mem.startsWith(u8, attribute.name, ":")) {
+            const value = attribute.value orelse return error.InvalidDirective;
+            const target_name = attribute.name[1..];
+            if (target_name.len == 0) return error.InvalidDirective;
+            try directives.append(allocator, .{
+                .bind = .{
+                    .target_name = target_name,
+                    .expression = value,
+                    .deprecated_syntax = false,
+                    .span = attribute.span,
                 },
             });
             continue;

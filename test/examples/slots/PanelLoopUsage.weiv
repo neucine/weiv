@@ -1,10 +1,10 @@
 <template>
   <section class="panel-loop-usage">
-    <button on:click="toggleCompleted">Toggle completed</button>
+    <button @click="toggleCompleted">Toggle completed</button>
 
     <Panel>
       <ul class="panel-loop-usage__list">
-        <li for="item in visibleItems()">{{ item.label }}</li>
+        <li #for="item in visibleItems()">{{ item.label }}</li>
       </ul>
     </Panel>
   </section>

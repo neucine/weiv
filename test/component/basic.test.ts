@@ -14,12 +14,14 @@ test("basic direct components mount and patch selectively", async () => {
   const modules = await loadModules({
     "BasicCounter.mjs": emitDirectBrowserModule("test/examples/basic/basic-counter.weiv"),
     "ConditionalToggleDirect.mjs": emitDirectBrowserModule("test/examples/basic/conditional-toggle.weiv"),
+    "NestedConditionalList.mjs": emitDirectBrowserModule("test/examples/basic/nested-conditional-list.weiv"),
     "TimerCallbackDirect.mjs": emitDirectBrowserModule("test/examples/basic/timer-callback.weiv"),
     "TodoListDirect.mjs": emitDirectBrowserModule("test/examples/basic/todo-list.weiv"),
   });
 
   const basicCounterModule = modules["BasicCounter.mjs"];
   const conditionalToggleDirectModule = modules["ConditionalToggleDirect.mjs"];
+  const nestedConditionalListModule = modules["NestedConditionalList.mjs"];
   const timerCallbackDirectModule = modules["TimerCallbackDirect.mjs"];
   const todoListDirectModule = modules["TodoListDirect.mjs"];
 
@@ -109,6 +111,37 @@ test("basic direct components mount and patch selectively", async () => {
   }
   if (conditionalTarget.textContent.includes("Panel is closed")) {
     throw new Error("ConditionalToggle direct toggle left the closed branch mounted");
+  }
+
+  const nestedConditionalDocument = new FakeDocument();
+  const nestedConditionalTarget = nestedConditionalDocument.createElement("div");
+  nestedConditionalDocument.body.append(nestedConditionalTarget);
+  installDocument(nestedConditionalDocument);
+
+  nestedConditionalListModule.mount(nestedConditionalTarget, {});
+  for (const expected of ["First", "Second", "Third", "After strategies"]) {
+    if (!nestedConditionalTarget.textContent.includes(expected)) {
+      throw new Error(`Nested conditional list is missing ${expected}: ${nestedConditionalTarget.textContent}`);
+    }
+  }
+  if ((nestedConditionalTarget.textContent.match(/selected/g) ?? []).length !== 1) {
+    throw new Error(`Nested conditional list selected the wrong number of entries: ${nestedConditionalTarget.textContent}`);
+  }
+  const nestedConditionalButton = findElement(nestedConditionalDocument.body, byTag("button"));
+  if (!nestedConditionalButton) throw new Error("Nested conditional list is missing its update button");
+  if (nestedConditionalButton.className !== "second") {
+    throw new Error(`Bind shorthand did not set the initial class: ${nestedConditionalButton.className}`);
+  }
+  click(nestedConditionalButton);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  if (nestedConditionalButton.className !== "third") {
+    throw new Error(`Bind shorthand did not update the class: ${nestedConditionalButton.className}`);
+  }
+  if (!nestedConditionalTarget.textContent.includes("Thirdselected")) {
+    throw new Error(`Nested conditional list did not update its loop-local condition: ${nestedConditionalTarget.textContent}`);
+  }
+  if (nestedConditionalTarget.textContent.includes("Secondselected")) {
+    throw new Error(`Nested conditional list left the previous conditional branch mounted: ${nestedConditionalTarget.textContent}`);
   }
 
   const todoListDirectDocument = new FakeDocument();

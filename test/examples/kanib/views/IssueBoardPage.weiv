@@ -1,6 +1,6 @@
 <template>
   <section class="issue-board">
-    <Panel for="column in columns()">
+    <Panel #for="column in columns()">
       <template slot:header>
         <div>
           <h2>{{ column.label }}</h2>
@@ -8,55 +8,55 @@
         </div>
       </template>
 
-      <EmptyState if="column.items.length === 0">
+      <EmptyState #if="column.items.length === 0">
         <template slot:message>
           <p>{{ column.label }} is clear.</p>
         </template>
         <p>Work will appear here as issue status changes.</p>
       </EmptyState>
 
-      <div else class="issue-board__cards">
+      <div #else class="issue-board__cards">
         <article
-          for="issue in column.items"
+          #for="issue in column.items"
           class="issue-board__card"
         >
           <strong>{{ issue.title }}</strong>
           <p>{{ issue.summary }}</p>
           <small>{{ issue.owner }} · {{ issue.priority }}</small>
           <div class="issue-board__top-actions">
-            <button class="issue-board__open" on:click="openIssue(issue.id)" type="button">Open detail</button>
-            <button class="issue-board__advance" on:click="advanceIssue(issue.id)" type="button">Advance</button>
+            <button class="issue-board__open" @click="openIssue(issue.id)" type="button">Open detail</button>
+            <button class="issue-board__advance" @click="advanceIssue(issue.id)" type="button">Advance</button>
           </div>
           <span class="issue-board__move-label">Move to</span>
           <div class="issue-board__move-row">
             <button
               class="issue-board__move"
-              bind:disabled="issue.status === 'backlog'"
-              on:click="moveToBacklog(issue.id)"
+              :disabled="issue.status === 'backlog'"
+              @click="moveToBacklog(issue.id)"
               type="button"
             >
               Backlog
             </button>
             <button
               class="issue-board__move"
-              bind:disabled="issue.status === 'in-progress'"
-              on:click="moveToInProgress(issue.id)"
+              :disabled="issue.status === 'in-progress'"
+              @click="moveToInProgress(issue.id)"
               type="button"
             >
               In progress
             </button>
             <button
               class="issue-board__move"
-              bind:disabled="issue.status === 'review'"
-              on:click="moveToReview(issue.id)"
+              :disabled="issue.status === 'review'"
+              @click="moveToReview(issue.id)"
               type="button"
             >
               Review
             </button>
             <button
               class="issue-board__move"
-              bind:disabled="issue.status === 'done'"
-              on:click="moveToDone(issue.id)"
+              :disabled="issue.status === 'done'"
+              @click="moveToDone(issue.id)"
               type="button"
             >
               Done

@@ -1,7 +1,7 @@
 <template>
   <section class="timer-callback">
     <p>{{ count }}</p>
-    <button on:click="schedule">Schedule</button>
+    <button @click="schedule">Schedule</button>
   </section>
 </template>
 

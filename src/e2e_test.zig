@@ -1024,7 +1024,7 @@ test "invalidation graph formatter lists object and container mutation sites" {
 
     const source =
         \\<template>
-        \\  <button on:click="mutate">{{ todos.length }}</button>
+        \\  <button @click="mutate">{{ todos.length }}</button>
         \\</template>
         \\
         \\<script lang="ts">
@@ -1092,7 +1092,7 @@ test "invalidation graph formatter diagnoses expression-position mutations" {
 
     const source =
         \\<template>
-        \\  <button on:click="mutate">{{ count }}</button>
+        \\  <button @click="mutate">{{ count }}</button>
         \\</template>
         \\
         \\<script lang="ts">
@@ -1150,7 +1150,7 @@ test "invalidation graph formatter classifies async template event handlers as o
 
     const source =
         \\<template>
-        \\  <button on:click="load">{{ status }}</button>
+        \\  <button @click="load">{{ status }}</button>
         \\</template>
         \\
         \\<script lang="ts">
@@ -1528,7 +1528,7 @@ test "dangling else without sibling if is rejected" {
 
     const source =
         \\<template>
-        \\  <div else>Wrong place</div>
+        \\  <div #else>Wrong place</div>
         \\</template>
         \\
         \\<script lang="ts">
@@ -1765,7 +1765,7 @@ test "direct browser modules specialize child component update paths" {
 
     const loop_source =
         \\<template>
-        \\  <Shell for="item in items"></Shell>
+        \\  <Shell #for="item in items"></Shell>
         \\</template>
         \\
         \\<script lang="ts">
@@ -1869,6 +1869,32 @@ test "basic counter emits scoped CSS" {
 
     try std.testing.expect(std.mem.indexOf(u8, css, expected_prefix) != null);
     try std.testing.expect(std.mem.indexOf(u8, css, "border-radius: 16px;") != null);
+}
+
+test "global style selectors bypass component scoping" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template><main class="shell">Global shell</main></template>
+        \\<script lang="ts"></script>
+        \\<style>
+        \\  :global(:root), :global(body) { margin: 0; }
+        \\  .shell { display: block; }
+        \\</style>
+    ;
+
+    var model = try compiler_compile.compile(source, "test/examples/global-style.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const scope_id = try style.scopeIdForPath(model.source_path, allocator);
+    defer allocator.free(scope_id);
+    const css = try style.emitScopedCss(&model, allocator);
+    defer allocator.free(css);
+
+    try std.testing.expect(std.mem.indexOf(u8, css, ":root, body { margin: 0; }") != null);
+    try std.testing.expect(std.mem.indexOf(u8, css, ":global(") == null);
+    const expected_scoped = try std.fmt.allocPrint(allocator, "[data-weiv-scope=\"{s}\"] .shell", .{scope_id});
+    defer allocator.free(expected_scoped);
+    try std.testing.expect(std.mem.indexOf(u8, css, expected_scoped) != null);
 }
 
 test "classic todo app emits multi-file app emit" {
@@ -2448,7 +2474,7 @@ test "validate app reports component build diagnostics for malformed child compo
         .sub_path = "Child.weiv",
         .data =
         \\<template>
-        \\  <div else>bad</div>
+        \\  <div #else>bad</div>
         \\</template>
         \\
         \\<script lang="ts">
@@ -2658,7 +2684,7 @@ test "user-defined emit binding reports framework conflict diagnostic" {
     const allocator = std.testing.allocator;
     const source =
         \\<template>
-        \\  <button on:click="save">{{ props.title }}</button>
+        \\  <button @click="save">{{ props.title }}</button>
         \\</template>
         \\
         \\<script lang="ts">
@@ -2752,7 +2778,7 @@ test "expression-position mutation reports conservative diagnostic" {
     const allocator = std.testing.allocator;
     const source =
         \\<template>
-        \\  <button on:click="mutate">{{ count }}</button>
+        \\  <button @click="mutate">{{ count }}</button>
         \\</template>
         \\
         \\<script lang="ts">
@@ -2869,7 +2895,7 @@ test "component build report preserves fatal template diagnostics" {
     const allocator = std.testing.allocator;
     const source =
         \\<template>
-        \\  <div else>bad</div>
+        \\  <div #else>bad</div>
         \\</template>
         \\
         \\<script lang="ts">
@@ -2898,7 +2924,7 @@ test "component build report can format machine-readable json diagnostics" {
     const allocator = std.testing.allocator;
     const source =
         \\<template>
-        \\  <div else>bad</div>
+        \\  <div #else>bad</div>
         \\</template>
         \\
         \\<script lang="ts">
@@ -3163,6 +3189,82 @@ test "slot:name directive carries a non-empty source span" {
     try std.testing.expect(slot_dir.span.end > slot_dir.span.start);
 }
 
+test "canonical symbol directives and deprecated long forms normalize identically" {
+    const allocator = std.testing.allocator;
+    const input_attrs = [_]ast.Attribute{
+        .{ .name = ":class", .value = "buttonClass", .span = .{ .start = 0, .end = 20 } },
+        .{ .name = "bind:disabled", .value = "busy", .span = .{ .start = 21, .end = 41 } },
+        .{ .name = "@click", .value = "submit", .span = .{ .start = 42, .end = 57 } },
+        .{ .name = "on:focus", .value = "focus", .span = .{ .start = 58, .end = 74 } },
+    };
+
+    const result = try directives.split(&input_attrs, allocator);
+    defer allocator.free(result.attributes);
+    defer allocator.free(result.directives);
+
+    try std.testing.expectEqual(@as(usize, 0), result.attributes.len);
+    try std.testing.expectEqual(@as(usize, 4), result.directives.len);
+    try std.testing.expectEqualStrings("class", result.directives[0].bind.target_name);
+    try std.testing.expectEqualStrings("buttonClass", result.directives[0].bind.expression);
+    try std.testing.expectEqualStrings("disabled", result.directives[1].bind.target_name);
+    try std.testing.expectEqualStrings("click", result.directives[2].event.event_name);
+    try std.testing.expectEqualStrings("submit", result.directives[2].event.expression);
+    try std.testing.expectEqualStrings("focus", result.directives[3].event.event_name);
+}
+
+test "deprecated bind and event spellings emit warnings while symbols stay clean" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <button bind:disabled="busy" on:click="submit">Legacy</button>
+        \\  <button :disabled="busy" @click="submit">Canonical</button>
+        \\</template>
+        \\<script lang="ts">
+        \\  let busy = false;
+        \\  function submit() { busy = true; }
+        \\</script>
+    ;
+
+    var model = try compiler_compile.compile(source, "test/examples/deprecated-directives.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 2), model.template_bindings.diagnostics.len);
+    for (model.template_bindings.diagnostics) |diagnostic| {
+        try std.testing.expectEqualStrings("warning", diagnostic.severity);
+        try std.testing.expectEqualStrings("directive.deprecated_syntax", diagnostic.kind);
+        try std.testing.expect(diagnostic.span.end > diagnostic.span.start);
+    }
+}
+
+test "structural shorthand does not consume ordinary HTML for attributes" {
+    const allocator = std.testing.allocator;
+    const input_attrs = [_]ast.Attribute{
+        .{ .name = "for", .value = "email", .span = .{ .start = 0, .end = 11 } },
+        .{ .name = "if", .value = "feature", .span = .{ .start = 12, .end = 24 } },
+        .{ .name = "else", .value = null, .span = .{ .start = 25, .end = 29 } },
+        .{ .name = "#for", .value = "item in items", .span = .{ .start = 30, .end = 51 } },
+        .{ .name = "#if", .value = "item.visible", .span = .{ .start = 52, .end = 70 } },
+        .{ .name = "#else", .value = null, .span = .{ .start = 71, .end = 76 } },
+    };
+
+    const result = try directives.split(&input_attrs, allocator);
+    defer allocator.free(result.attributes);
+    defer allocator.free(result.directives);
+
+    try std.testing.expectEqual(@as(usize, 3), result.attributes.len);
+    try std.testing.expectEqualStrings("for", result.attributes[0].name);
+    try std.testing.expectEqualStrings("email", result.attributes[0].value.?);
+    try std.testing.expectEqualStrings("if", result.attributes[1].name);
+    try std.testing.expectEqualStrings("feature", result.attributes[1].value.?);
+    try std.testing.expectEqualStrings("else", result.attributes[2].name);
+    try std.testing.expect(result.attributes[2].value == null);
+    try std.testing.expectEqual(@as(usize, 3), result.directives.len);
+    try std.testing.expectEqualStrings("item", result.directives[0].for_expr.item_name);
+    try std.testing.expectEqualStrings("items", result.directives[0].for_expr.iterable_expr);
+    try std.testing.expectEqualStrings("item.visible", result.directives[1].if_expr.expression);
+    _ = result.directives[2].else_branch;
+}
+
 test "EmptyState.weiv lowers with named message slot and default slot, both with fallbacks" {
     var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -3384,7 +3486,7 @@ test "dangling else without sibling if is rejected duplicate coverage" {
     const allocator = gpa.allocator();
     const source =
         \\<template>
-        \\  <div else>Wrong place</div>
+        \\  <div #else>Wrong place</div>
         \\</template>
         \\
         \\<script lang="ts">
@@ -3474,7 +3576,7 @@ test "direct browser modules specialize child component update paths duplicate c
     try std.testing.expect(std.mem.indexOf(u8, panel_usage_js, "refs[4].update();") != null);
     const loop_source =
         \\<template>
-        \\  <Shell for="item in items"></Shell>
+        \\  <Shell #for="item in items"></Shell>
         \\</template>
         \\
         \\<script lang="ts">

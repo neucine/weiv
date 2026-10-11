@@ -390,7 +390,7 @@ fn emitSingleConditionalHelper(
 ) !void {
     try out.print(
         allocator,
-        "function createConditionalFragment_{d}(instance, scope, isConsequent) {{\n  const refs = instance.refs;\n  const fragment = document.createDocumentFragment();\n",
+        "function createConditionalFragment_{d}(instance, scope, refs, isConsequent) {{\n  const fragment = document.createDocumentFragment();\n",
         .{conditional.start_ref_id},
     );
     try out.appendSlice(allocator, "  if (isConsequent) {\n");
@@ -405,7 +405,7 @@ fn emitSingleConditionalHelper(
 
     try out.print(
         allocator,
-        "function destroyConditionalBranch_{d}(instance, wasConsequent) {{\n  const refs = instance.refs;\n  if (wasConsequent) {{\n",
+        "function destroyConditionalBranch_{d}(instance, refs, wasConsequent) {{\n  if (wasConsequent) {{\n",
         .{conditional.start_ref_id},
     );
     for (conditional.consequent) |node| {
@@ -419,13 +419,13 @@ fn emitSingleConditionalHelper(
 
     try out.print(
         allocator,
-        "function updateConditional_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const next = Boolean(",
+        "function updateConditional_{d}(instance, scope, refs) {{\n  const next = Boolean(",
         .{conditional.start_ref_id},
     );
     try node_codegen.emitResolvedExpression(conditional.condition, "scope", bindings_json, out, allocator);
     try out.print(
         allocator,
-        ");\n  if (refs[{d}] !== next) {{\n    const previous = refs[{d}];\n    destroyConditionalBranch_{d}(instance, previous === true);\n    refs[{d}] = next;\n    replaceBetween(refs[{d}], refs[{d}], createConditionalFragment_{d}(instance, scope, next));\n  }}\n",
+        ");\n  if (refs[{d}] !== next) {{\n    const previous = refs[{d}];\n    destroyConditionalBranch_{d}(instance, refs, previous === true);\n    refs[{d}] = next;\n    replaceBetween(refs[{d}], refs[{d}], createConditionalFragment_{d}(instance, scope, refs, next));\n  }}\n",
         .{
             conditional.state_ref_id,
             conditional.state_ref_id,
@@ -475,7 +475,7 @@ fn emitKeyedComponentLoopHelper(
     const needs_update = node_codegen.componentNeedsParentUpdate(component_node);
     try out.print(
         allocator,
-        "function createForComponentEntry_{d}(instance, scope, item, reference) {{\n  const refs = instance.refs;\n  const parent = reference.parentNode;\n  const start = document.createComment(\"for:item:start\");\n  const end = document.createComment(\"for:item:end\");\n  parent.insertBefore(start, reference);\n  parent.insertBefore(end, reference);\n  const loopScope = {{ ...scope, [",
+        "function createForComponentEntry_{d}(instance, scope, item, reference) {{\n  const parent = reference.parentNode;\n  const start = document.createComment(\"for:item:start\");\n  const end = document.createComment(\"for:item:end\");\n  parent.insertBefore(start, reference);\n  parent.insertBefore(end, reference);\n  const loopScope = {{ ...scope, [",
         .{for_loop.start_ref_id},
     );
     try common.emitString(for_loop.item_name, out, allocator);
@@ -509,7 +509,7 @@ fn emitKeyedComponentLoopHelper(
 
     try out.print(
         allocator,
-        "function updateForLoop_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const iterable = (",
+        "function updateForLoop_{d}(instance, scope, refs) {{\n  const iterable = (",
         .{for_loop.start_ref_id},
     );
     try node_codegen.emitResolvedExpression(for_loop.iterable_expr, "scope", bindings_json, out, allocator);
@@ -577,7 +577,7 @@ fn emitKeyedGenericLoopHelper(
 
     try out.print(
         allocator,
-        "function updateForLoop_{d}(instance, scope) {{\n  const refs = instance.refs;\n  const iterable = (",
+        "function updateForLoop_{d}(instance, scope, refs) {{\n  const iterable = (",
         .{for_loop.start_ref_id},
     );
     try node_codegen.emitResolvedExpression(for_loop.iterable_expr, "scope", bindings_json, out, allocator);

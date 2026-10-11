@@ -131,7 +131,7 @@ pub const Graph = struct {
 
         var model = try report.intoComponentUnit();
         errdefer model.deinit(self.allocator);
-        consumeComponentCompileReport(&report);
+        consumeComponentCompileReport(&report, self.allocator);
 
         const node_index = self.nodes.items.len;
         try self.nodes.append(self.allocator, .{
@@ -674,7 +674,9 @@ fn appendDiagnosticsFromSlice(
     }
 }
 
-fn consumeComponentCompileReport(report: *component.ComponentCompileReport) void {
+fn consumeComponentCompileReport(report: *component.ComponentCompileReport, allocator: std.mem.Allocator) void {
+    for (report.diagnostics) |*diagnostic| diagnostic.deinit(allocator);
+    if (report.diagnostics.len != 0) allocator.free(report.diagnostics);
     report.diagnostics = &.{};
     report.source_path = &.{};
     report.sfc_document = null;

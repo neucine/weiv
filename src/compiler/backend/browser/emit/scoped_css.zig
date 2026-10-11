@@ -174,13 +174,41 @@ fn prefixSelectorList(selector_source: []const u8, scope_selector: []const u8, a
             const part = std.mem.trim(u8, selector_source[start..i], &std.ascii.whitespace);
             if (part.len > 0) {
                 if (out.items.len > 0) try out.appendSlice(allocator, ", ");
-                try out.print(allocator, "{s}{s}, {s} {s}", .{ scope_selector, part, scope_selector, part });
+                if (globalSelectorContents(part)) |global_selector| {
+                    try out.appendSlice(allocator, global_selector);
+                } else {
+                    try out.print(allocator, "{s}{s}, {s} {s}", .{ scope_selector, part, scope_selector, part });
+                }
             }
             start = i + 1;
         }
     }
 
     return try out.toOwnedSlice(allocator);
+}
+
+fn globalSelectorContents(selector: []const u8) ?[]const u8 {
+    const prefix = ":global(";
+    if (!std.mem.startsWith(u8, selector, prefix) or selector.len <= prefix.len or selector[selector.len - 1] != ')') {
+        return null;
+    }
+
+    var depth: usize = 1;
+    var i: usize = prefix.len;
+    while (i + 1 < selector.len) : (i += 1) {
+        switch (selector[i]) {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if (depth == 0) return null;
+            },
+            else => {},
+        }
+    }
+    if (depth != 1) return null;
+
+    const contents = std.mem.trim(u8, selector[prefix.len .. selector.len - 1], &std.ascii.whitespace);
+    return if (contents.len == 0) null else contents;
 }
 
 fn shouldRecurseAtRule(header: []const u8) bool {

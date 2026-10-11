@@ -1,5 +1,5 @@
 <template>
-  <input autofocus bind:class="inputClass()" bind:placeholder="props.placeholder" bind:value="props.initialValue || ''" on:blur="handleBlur" on:keydown="handleKeydown" type="text" />
+  <input autofocus :class="inputClass()" :placeholder="props.placeholder" :value="props.initialValue || ''" @blur="handleBlur" @keydown="handleKeydown" type="text" />
 </template>
 
 <script lang="ts">

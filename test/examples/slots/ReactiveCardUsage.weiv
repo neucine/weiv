@@ -5,7 +5,7 @@
       <p data-test="header-eyebrow">Updated {{ updateCount }} time(s)</p>
     </template>
     <p data-test="body">{{ body }}</p>
-    <button data-test="bump" on:click="bump">Bump</button>
+    <button data-test="bump" @click="bump">Bump</button>
   </Card>
 </template>
 

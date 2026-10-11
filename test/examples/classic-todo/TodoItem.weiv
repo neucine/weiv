@@ -1,7 +1,7 @@
 <template>
   <article class="todo-item">
     <label class="todo-item__label">
-      <input bind:checked="props.item.completed" on:change="emit('toggle', props.item.id)" type="checkbox" />
+      <input :checked="props.item.completed" @change="emit('toggle', props.item.id)" type="checkbox" />
       <span class="todo-item__copy">
         <strong>{{ props.item.title }}</strong>
         <em>{{ props.item.completed ? "Completed" : "In progress" }}</em>

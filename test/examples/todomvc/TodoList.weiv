@@ -1,14 +1,14 @@
 <template>
   <ul class="todo-list">
     <TodoItem
-      for="item in props.items"
-      bind:editing="props.editingId === item.id"
-      bind:todo="item"
-      on:cancel-edit="emitCancel"
-      on:destroy="emitDestroy"
-      on:save-edit="emitSave"
-      on:start-edit="emitStartEdit"
-      on:toggle="emitToggle"
+      #for="item in props.items"
+      :editing="props.editingId === item.id"
+      :todo="item"
+      @cancel-edit="emitCancel"
+      @destroy="emitDestroy"
+      @save-edit="emitSave"
+      @start-edit="emitStartEdit"
+      @toggle="emitToggle"
     />
   </ul>
 </template>

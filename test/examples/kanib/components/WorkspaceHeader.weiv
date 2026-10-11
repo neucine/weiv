@@ -8,10 +8,10 @@
 
     <div class="workspace-header__actions">
       <span class="workspace-header__section">{{ props.sectionLabel }}</span>
-      <button class="workspace-header__ghost" on:click="handleOpenNotifications">Open notifications</button>
-      <button class="workspace-header__ghost" on:click="handleQueueRefresh">Sync updates</button>
-      <button class="workspace-header__ghost" on:click="handleClearNotifications">Clear notifications</button>
-      <button class="workspace-header__primary" on:click="handleToggleSidebar">
+      <button class="workspace-header__ghost" @click="handleOpenNotifications">Open notifications</button>
+      <button class="workspace-header__ghost" @click="handleQueueRefresh">Sync updates</button>
+      <button class="workspace-header__ghost" @click="handleClearNotifications">Clear notifications</button>
+      <button class="workspace-header__primary" @click="handleToggleSidebar">
         {{ props.collapsed ? "Expand sidebar" : "Collapse sidebar" }}
       </button>
       <span class="workspace-header__notification">{{ props.notifications }} notifications</span>

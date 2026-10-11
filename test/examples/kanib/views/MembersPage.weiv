@@ -7,15 +7,15 @@
       </div>
     </template>
 
-    <EmptyState if="workspaceMembers().length === 0">
+    <EmptyState #if="workspaceMembers().length === 0">
       <template slot:message>
         <p>No members are assigned to this workspace.</p>
       </template>
       <p>Invite teammates once the workspace is ready.</p>
     </EmptyState>
 
-    <ul else class="members-page__list">
-      <li for="member in workspaceMembers()" class="members-page__row">
+    <ul #else class="members-page__list">
+      <li #for="member in workspaceMembers()" class="members-page__row">
         <strong>{{ member.name }}</strong>
         <span>{{ member.role }}</span>
         <small>{{ member.focus }}</small>

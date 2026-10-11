@@ -1,6 +1,6 @@
 <template>
   <section class="panel-nested-card-usage">
-    <button on:click="toggleCardContent">Toggle nested card content</button>
+    <button @click="toggleCardContent">Toggle nested card content</button>
 
     <Panel>
       <Card>

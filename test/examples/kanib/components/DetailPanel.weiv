@@ -8,38 +8,38 @@
     </template>
 
     <template slot:actions>
-      <button class="detail-panel__ghost" bind:disabled="props.liveSyncConnected" on:click="registerWatch">
+      <button class="detail-panel__ghost" :disabled="props.liveSyncConnected" @click="registerWatch">
         {{ props.liveSyncConnected ? "Live sync connected" : "Start live sync" }}
       </button>
-      <button class="detail-panel__ghost" on:click="triggerExternalPulse">Simulate teammate update</button>
+      <button class="detail-panel__ghost" @click="triggerExternalPulse">Simulate teammate update</button>
     </template>
 
-    <EmptyState if="!props.item">
+    <EmptyState #if="!props.item">
       <template slot:message>
         <p>No issue is selected yet.</p>
       </template>
       <p>Open any issue from the list or board to keep the side panel in sync.</p>
     </EmptyState>
 
-    <section else class="detail-panel__content">
+    <section #else class="detail-panel__content">
       <header class="detail-panel__headline">
         <strong>{{ props.item.title }}</strong>
         <span>{{ props.item.status }}</span>
       </header>
 
-      <DetailSection bind:body="props.item.summary" bind:title="'Summary'" />
-      <DetailSection bind:body="props.item.detail" bind:title="'Detail'" />
+      <DetailSection :body="props.item.summary" :title="'Summary'" />
+      <DetailSection :body="props.item.detail" :title="'Detail'" />
 
       <footer class="detail-panel__footer">
         <p class="detail-panel__ticks">Live teammate updates: {{ props.externalTicks }}</p>
         <div class="detail-panel__actions">
-          <button class="detail-panel__ghost" on:click="openIssue">Open detail</button>
-          <button class="detail-panel__primary" on:click="advanceIssue">Advance status</button>
+          <button class="detail-panel__ghost" @click="openIssue">Open detail</button>
+          <button class="detail-panel__primary" @click="advanceIssue">Advance status</button>
         </div>
       </footer>
 
       <ul class="detail-panel__activity">
-        <li for="event in props.recentEvents">{{ event }}</li>
+        <li #for="event in props.recentEvents">{{ event }}</li>
       </ul>
     </section>
   </Panel>

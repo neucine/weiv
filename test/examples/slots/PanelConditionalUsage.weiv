@@ -1,10 +1,10 @@
 <template>
   <section class="panel-conditional-usage">
-    <button on:click="toggleOpen">Toggle details</button>
+    <button @click="toggleOpen">Toggle details</button>
 
     <Panel>
-      <p if="open" class="panel-conditional-usage__open">Projected panel is open</p>
-      <p else class="panel-conditional-usage__closed">Projected panel is closed</p>
+      <p #if="open" class="panel-conditional-usage__open">Projected panel is open</p>
+      <p #else class="panel-conditional-usage__closed">Projected panel is closed</p>
     </Panel>
   </section>
 </template>

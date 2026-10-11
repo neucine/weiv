@@ -2,14 +2,14 @@
   <section class="wui-disclosure">
     <button
       class="wv-button wui-disclosure__trigger"
-      bind:aria-expanded="ariaExpanded"
-      bind:aria-controls="controlsId"
-      on:click="toggle"
+      :aria-expanded="ariaExpanded"
+      :aria-controls="controlsId"
+      @click="toggle"
     >
       {{ props.label ?? "Toggle" }}
     </button>
 
-    <div class="wui-disclosure__content" bind:id="controlsId" bind:hidden="hidden">
+    <div class="wui-disclosure__content" :id="controlsId" :hidden="hidden">
       <slot>
         <p class="wui-disclosure__fallback">Disclosure content.</p>
       </slot>

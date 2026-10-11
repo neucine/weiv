@@ -1,21 +1,21 @@
 <template>
   <article class="dashboard-card">
-    <MetricBadge bind:label="props.statusLabel" bind:tone="tone()" />
+    <MetricBadge :label="props.statusLabel" :tone="tone()" />
 
     <h3>{{ props.title }}</h3>
     <p>{{ props.description }}</p>
 
     <ul class="dashboard-card__stats">
-      <li for="stat in props.stats">
+      <li #for="stat in props.stats">
         <span>{{ stat.name }}</span>
         <strong>{{ stat.value }}</strong>
       </li>
     </ul>
 
-    <button if="props.actionEnabled" on:click="handleOpen">
+    <button #if="props.actionEnabled" @click="handleOpen">
       Open details
     </button>
-    <p else>Action unavailable</p>
+    <p #else>Action unavailable</p>
   </article>
 </template>
 

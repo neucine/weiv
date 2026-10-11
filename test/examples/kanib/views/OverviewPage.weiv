@@ -9,11 +9,11 @@
       </template>
 
       <template slot:actions>
-        <button class="dashboard-section__action" on:click="openIssues">Open issues</button>
-        <button class="dashboard-section__action" on:click="openBoard">View board</button>
+        <button class="dashboard-section__action" @click="openIssues">Open issues</button>
+        <button class="dashboard-section__action" @click="openBoard">View board</button>
       </template>
 
-      <MetricGrid bind:metrics="workspaceMetrics()" />
+      <MetricGrid :metrics="workspaceMetrics()" />
     </Panel>
 
     <Panel>
@@ -25,7 +25,7 @@
       </template>
 
       <ul class="dashboard-section__facts">
-        <li for="issue in recentIssues()">
+        <li #for="issue in recentIssues()">
           <strong>{{ issue.title }}</strong>
           <span>{{ issue.status }} · {{ issue.watchers }} watchers</span>
         </li>

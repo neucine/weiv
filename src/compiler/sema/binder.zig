@@ -280,9 +280,29 @@ fn bindElement(
     for (element.directives) |directive| {
         switch (directive) {
             .bind => |bind_dir| {
+                if (bind_dir.deprecated_syntax) {
+                    try appendDiagnostic(
+                        diagnostics,
+                        "directive.deprecated_syntax",
+                        bind_dir.target_name,
+                        "bind: is deprecated; use the canonical :name binding syntax",
+                        bind_dir.span,
+                        allocator,
+                    );
+                }
                 try bindExpression(bind_dir.expression, element.span, script, diagnostics, scopes.items, allocator);
             },
             .event => |event_dir| {
+                if (event_dir.deprecated_syntax) {
+                    try appendDiagnostic(
+                        diagnostics,
+                        "directive.deprecated_syntax",
+                        event_dir.event_name,
+                        "on: is deprecated; use the canonical @event syntax",
+                        event_dir.span,
+                        allocator,
+                    );
+                }
                 try bindExpression(event_dir.expression, element.span, script, diagnostics, scopes.items, allocator);
             },
             // slot:name placement (and <template slot:foo> placement) is enforced
@@ -483,6 +503,7 @@ fn classifyDiagnosticSeverity(kind: []const u8) []const u8 {
     if (std.mem.eql(u8, kind, "mutation.expression_position")) return "warning";
     if (std.mem.eql(u8, kind, "callback.unowned_mutation")) return "warning";
     if (std.mem.eql(u8, kind, "alias.mutation")) return "warning";
+    if (std.mem.eql(u8, kind, "directive.deprecated_syntax")) return "warning";
     return "info";
 }
 

@@ -1,0 +1,24 @@
+<template>
+  <section>
+    <button :class="selectedStrategyId" @click="selectThird">Select third</button>
+    <article #for="strategy in strategies">
+      <h2>{{ strategy.title }}</h2>
+      <i #if="strategy.id === selectedStrategyId">selected</i>
+    </article>
+    <p>After strategies</p>
+  </section>
+</template>
+
+<script lang="ts">
+  let strategies = [
+    { id: "first", title: "First" },
+    { id: "second", title: "Second" },
+    { id: "third", title: "Third" },
+  ];
+  let selectedStrategyId = "second";
+
+  async function selectThird() {
+    await Promise.resolve();
+    selectedStrategyId = "third";
+  }
+</script>

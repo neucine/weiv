@@ -1,29 +1,29 @@
 <template>
   <main class="todomvc-page">
     <section class="todoapp">
-      <TodoHeader bind:title="props.title" on:create="addTodo" />
+      <TodoHeader :title="props.title" @create="addTodo" />
 
-      <section if="todos.length > 0" class="main">
-        <input bind:checked="isAllCompleted()" class="toggle-all" on:change="toggleAll" type="checkbox" />
+      <section #if="todos.length > 0" class="main">
+        <input :checked="isAllCompleted()" class="toggle-all" @change="toggleAll" type="checkbox" />
 
         <TodoList
-          bind:editingId="editingId"
-          bind:items="visibleTodos()"
-          on:cancel-edit="cancelEditing"
-          on:destroy="destroyTodo"
-          on:save-edit="saveTodo"
-          on:start-edit="startEditing"
-          on:toggle="toggleTodo"
+          :editingId="editingId"
+          :items="visibleTodos()"
+          @cancel-edit="cancelEditing"
+          @destroy="destroyTodo"
+          @save-edit="saveTodo"
+          @start-edit="startEditing"
+          @toggle="toggleTodo"
         />
       </section>
 
       <TodoFooter
-        if="todos.length > 0"
-        bind:activeCount="activeCount()"
-        bind:completedCount="completedCount()"
-        bind:filter="filter"
-        on:clear-completed="clearCompleted"
-        on:filter-change="setFilter"
+        #if="todos.length > 0"
+        :activeCount="activeCount()"
+        :completedCount="completedCount()"
+        :filter="filter"
+        @clear-completed="clearCompleted"
+        @filter-change="setFilter"
       />
     </section>
   </main>

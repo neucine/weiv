@@ -682,7 +682,7 @@ fn emitConditionalRegionUpdateFunction(
     _ = bindings_json; // conditional regions delegate to updateConditional_ which handles its own expressions
     try out.print(allocator, "function updateRegion_conditional_{d}(instance, scope, refs) {{\n", .{conditional.start_ref_id});
     try common.writeIndent(1, out, allocator);
-    try out.print(allocator, "updateConditional_{d}(instance, scope);\n", .{conditional.start_ref_id});
+    try out.print(allocator, "updateConditional_{d}(instance, scope, refs);\n", .{conditional.start_ref_id});
     try out.appendSlice(allocator, "}\n");
 }
 
@@ -695,7 +695,7 @@ fn emitLoopRegionUpdateFunction(
     _ = bindings_json; // loop regions delegate to updateForLoop_ which handles its own expressions
     try out.print(allocator, "function updateRegion_loop_{d}(instance, scope, refs) {{\n", .{for_loop.start_ref_id});
     try common.writeIndent(1, out, allocator);
-    try out.print(allocator, "updateForLoop_{d}(instance, scope);\n", .{for_loop.start_ref_id});
+    try out.print(allocator, "updateForLoop_{d}(instance, scope, refs);\n", .{for_loop.start_ref_id});
     try out.appendSlice(allocator, "}\n");
 }
 

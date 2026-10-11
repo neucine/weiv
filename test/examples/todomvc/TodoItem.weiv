@@ -1,11 +1,11 @@
 <template>
-  <li bind:class="itemClass()">
-    <TodoTextInput if="props.editing" autofocus bind:editing="true" bind:initialValue="props.todo.title" bind:placeholder="'Edit task'" on:cancel="handleCancel" on:submit="handleSubmit" />
+  <li :class="itemClass()">
+    <TodoTextInput #if="props.editing" autofocus :editing="true" :initialValue="props.todo.title" :placeholder="'Edit task'" @cancel="handleCancel" @submit="handleSubmit" />
 
-    <div else class="view">
-      <input bind:checked="props.todo.completed" class="toggle" on:change="handleToggle" type="checkbox" />
-      <label on:dblclick="startEdit">{{ props.todo.title }}</label>
-      <button class="destroy" on:click="handleDestroy"></button>
+    <div #else class="view">
+      <input :checked="props.todo.completed" class="toggle" @change="handleToggle" type="checkbox" />
+      <label @dblclick="startEdit">{{ props.todo.title }}</label>
+      <button class="destroy" @click="handleDestroy"></button>
     </div>
   </li>
 </template>

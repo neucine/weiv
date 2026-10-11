@@ -1,6 +1,6 @@
 <template>
   <section class="panel-toggle-usage">
-    <button on:click="toggleMessage">Toggle message</button>
+    <button @click="toggleMessage">Toggle message</button>
 
     <Panel>
       <p class="panel-toggle-usage__message">{{ message }}</p>

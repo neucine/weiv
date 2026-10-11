@@ -1,16 +1,16 @@
 <template>
-  <WorkspaceShell bind:collapsed="shellState.collapsed">
+  <WorkspaceShell :collapsed="shellState.collapsed">
     <template slot:header>
       <WorkspaceHeader
-        bind:collapsed="shellState.collapsed"
-        bind:notifications="workspaceShared.notifications"
-        bind:sectionLabel="currentSectionLabel()"
-        bind:subtitle="headerSubtitle()"
-        bind:title="headerTitle()"
-        on:clear-notifications="clearHeaderNotifications"
-        on:open-notifications="openNotifications"
-        on:queue-refresh="queueRefresh"
-        on:toggle-sidebar="toggleSidebar"
+        :collapsed="shellState.collapsed"
+        :notifications="workspaceShared.notifications"
+        :sectionLabel="currentSectionLabel()"
+        :subtitle="headerSubtitle()"
+        :title="headerTitle()"
+        @clear-notifications="clearHeaderNotifications"
+        @open-notifications="openNotifications"
+        @queue-refresh="queueRefresh"
+        @toggle-sidebar="toggleSidebar"
       />
     </template>
 
@@ -30,14 +30,14 @@
 
     <template slot:sidebar>
       <WorkspaceSidebar
-        bind:collapsed="shellState.collapsed"
-        bind:currentPath="workspaceShared.currentPath"
-        bind:currentWorkspaceId="workspaceShared.currentWorkspaceId"
-        bind:selectedProjectId="workspaceShared.selectedProjectId"
-        bind:statusMessage="shellState.statusMessage"
-        on:navigate="handleNavigate"
-        on:switch-project="switchProject"
-        on:switch-workspace="switchWorkspace"
+        :collapsed="shellState.collapsed"
+        :currentPath="workspaceShared.currentPath"
+        :currentWorkspaceId="workspaceShared.currentWorkspaceId"
+        :selectedProjectId="workspaceShared.selectedProjectId"
+        :statusMessage="shellState.statusMessage"
+        @navigate="handleNavigate"
+        @switch-project="switchProject"
+        @switch-workspace="switchWorkspace"
       />
     </template>
 
@@ -47,15 +47,15 @@
 
     <template slot:detail>
       <DetailPanel
-        bind:externalTicks="externalTicks"
-        bind:liveSyncConnected="externalWatchRegistered"
-        bind:item="selectedIssue()"
-        bind:recentEvents="recentEvents"
-        bind:workspaceId="workspaceShared.currentWorkspaceId"
-        on:advance-issue="advanceSelectedIssue"
-        on:open-issue="openSelectedIssue"
-        on:register-external-watch="registerExternalWatch"
-        on:trigger-external-pulse="triggerExternalPulse"
+        :externalTicks="externalTicks"
+        :liveSyncConnected="externalWatchRegistered"
+        :item="selectedIssue()"
+        :recentEvents="recentEvents"
+        :workspaceId="workspaceShared.currentWorkspaceId"
+        @advance-issue="advanceSelectedIssue"
+        @open-issue="openSelectedIssue"
+        @register-external-watch="registerExternalWatch"
+        @trigger-external-pulse="triggerExternalPulse"
       />
     </template>
   </WorkspaceShell>

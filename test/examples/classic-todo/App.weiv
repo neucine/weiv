@@ -19,15 +19,15 @@
             <p class="todo-app__panel-label">Inbox</p>
             <h2>Product Todo Board</h2>
           </div>
-          <button class="todo-app__filter" on:click="toggleCompletedFilter">
+          <button class="todo-app__filter" @click="toggleCompletedFilter">
             {{ showCompleted ? "Show active" : "Show completed" }}
           </button>
         </div>
 
         <TodoList
-          bind:items="visibleItems()"
-          bind:showCompleted="showCompleted"
-          on:toggle="toggleItem"
+          :items="visibleItems()"
+          :showCompleted="showCompleted"
+          @toggle="toggleItem"
         />
       </section>
     </div>

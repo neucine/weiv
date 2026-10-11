@@ -3,8 +3,8 @@
     <h3>{{ props.title }}</h3>
     <p class="wv-help">{{ props.description }}</p>
     <div class="dialog-story-actions">
-      <button class="wv-button" on:click="emitConfirm">Confirm</button>
-      <button class="wv-button dialog-story-cancel" on:click="emitCancel">Cancel</button>
+      <button class="wv-button" @click="emitConfirm">Confirm</button>
+      <button class="wv-button dialog-story-cancel" @click="emitCancel">Cancel</button>
     </div>
   </section>
 </template>

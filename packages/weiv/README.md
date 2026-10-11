@@ -56,6 +56,64 @@ You can build normal components without any `weiv:*` imports.
 
 Use `weiv:*` imports only when you need shared state or routing.
 
+### DOM bindings and input state
+
+Weiv directives always begin with a symbol:
+
+- `:name` binds a DOM property, attribute, or component prop.
+- `@event` handles a DOM or component event.
+- `#if`, `#else`, and `#for` control template structure.
+
+The older `bind:name` and `on:event` spellings are deprecated compatibility
+syntax. They remain accepted for now, but new and migrated code should use the
+symbol forms.
+
+Structural directives use `#` so they cannot be confused with ordinary HTML
+attributes:
+
+```html
+<label for="email">Email</label>
+<article #for="item in items">
+  <p #if="item.visible">{{ item.label }}</p>
+  <p #else>Hidden</p>
+</article>
+```
+
+Bare `if`, `else`, and `for` are ordinary attributes. This keeps native and
+custom-element attributes available without special escaping.
+
+Binding directives write component state to DOM properties and attributes; they
+are one-way. In particular, `:value`/`bind:value` does not write user edits back
+to the component variable. Handle the input event explicitly when component
+state must track the field:
+
+```html
+<input :value="draftName" @input="updateDraftName" />
+
+<script lang="ts">
+  let draftName = "";
+
+  function updateDraftName(event: Event) {
+    draftName = (event.currentTarget as HTMLInputElement).value;
+  }
+</script>
+```
+
+### Global styles
+
+Component styles are scoped by default. Wrap a whole selector in `:global(...)`
+when it must apply outside the component scope:
+
+```css
+:global(:root) {
+  --ink: #193047;
+}
+
+:global(body) {
+  margin: 0;
+}
+```
+
 Shared state example:
 
 ```ts

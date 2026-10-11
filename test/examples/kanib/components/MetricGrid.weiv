@@ -1,6 +1,6 @@
 <template>
   <div class="metric-grid">
-    <MetricCard for="metric in props.metrics" bind:change="metric.change" bind:label="metric.label" bind:value="metric.value" />
+    <MetricCard #for="metric in props.metrics" :change="metric.change" :label="metric.label" :value="metric.value" />
   </div>
 </template>
 

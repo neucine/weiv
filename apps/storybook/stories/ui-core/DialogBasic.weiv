@@ -1,24 +1,24 @@
 <template>
   <section class="story-root">
-    <wui-dialog bind:data-state="open ? 'open' : 'closed'">
+    <wui-dialog :data-state="open ? 'open' : 'closed'">
       <wui-dialog-trigger>
-        <button class="wv-button" on:click="openDialog">Open dialog</button>
+        <button class="wv-button" @click="openDialog">Open dialog</button>
       </wui-dialog-trigger>
       <p class="wv-help">State: {{ open ? "open" : "closed" }}</p>
 
       <wui-dialog-overlay
         class="dialog-overlay"
-        bind:style="open ? 'display:grid' : 'display:none'"
-        on:click="onBackdropClick"
+        :style="open ? 'display:grid' : 'display:none'"
+        @click="onBackdropClick"
       >
-        <wui-dialog-content class="dialog-content" on:click="stopBubbling">
+        <wui-dialog-content class="dialog-content" @click="stopBubbling">
         <wui-dialog-title class="dialog-title">Dialog preview</wui-dialog-title>
         <wui-dialog-description class="wv-help">
           This canvas now uses the same wui-dialog API shape.
         </wui-dialog-description>
         <wui-dialog-footer class="dialog-footer">
-          <button class="wv-button" on:click="closeDialog">Confirm</button>
-          <button class="wv-button story-cancel" on:click="closeDialog">Cancel</button>
+          <button class="wv-button" @click="closeDialog">Confirm</button>
+          <button class="wv-button story-cancel" @click="closeDialog">Cancel</button>
         </wui-dialog-footer>
       </wui-dialog-content>
       </wui-dialog-overlay>
