@@ -1,0 +1,137 @@
+name: Publish Supported Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without the v prefix"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version and release metadata
+        id: meta
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          actual="$(node -p "require('./packages/weiv/package.json').version")"
+          test "$actual" = "$VERSION"
+          tag="v${VERSION}"
+          git rev-parse "$tag"
+          gh release view "$tag" >/dev/null 2>&1 || \
+            gh release create "$tag" --verify-tag --title "$tag" --generate-notes
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  publish-darwin-arm64:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish macOS ARM64 package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          package="@weivjs/weiv-darwin-arm64"
+          actual="$(node -p "require('./packages/weiv-darwin-arm64/package.json').version")"
+          test "$actual" = "$VERSION"
+          file packages/weiv-darwin-arm64/bin/weiv | grep -q 'Mach-O 64-bit arm64'
+          if npm view "${package}@${VERSION}" version >/dev/null 2>&1; then
+            echo "${package}@${VERSION} already published"
+          else
+            npm publish ./packages/weiv-darwin-arm64 --access public
+          fi
+
+      - name: Upload macOS ARM64 release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ needs.prepare-release.outputs.tag }}" \
+            "packages/weiv-darwin-arm64/bin/weiv#weiv-darwin-arm64" --clobber
+
+  publish-windows-x64:
+    needs: prepare-release
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Build and publish Windows x64 package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          package="@weivjs/weiv-win32-x64-msvc"
+          actual="$(node -p "require('./packages/weiv-win32-x64-msvc/package.json').version")"
+          test "$actual" = "$VERSION"
+          cargo build --release --manifest-path libs/parser-backend/Cargo.toml
+          zig build -Dtarget=x86_64-windows-msvc -Doptimize=ReleaseFast
+          cp zig-out/bin/weiv.exe packages/weiv-win32-x64-msvc/bin/weiv.exe
+          ./packages/weiv-win32-x64-msvc/bin/weiv.exe --help
+          if npm view "${package}@${VERSION}" version >/dev/null 2>&1; then
+            echo "${package}@${VERSION} already published"
+          else
+            npm publish ./packages/weiv-win32-x64-msvc --access public
+          fi
+
+      - name: Upload Windows x64 release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ needs.prepare-release.outputs.tag }}" \
+            "packages/weiv-win32-x64-msvc/bin/weiv.exe#weiv-win32-x64-msvc.exe" --clobber
+
+  publish-main:
+    needs:
+      - publish-darwin-arm64
+      - publish-windows-x64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          package="weivjs"
+          actual="$(node -p "require('./packages/weiv/package.json').version")"
+          test "$actual" = "$VERSION"
+          if npm view "${package}@${VERSION}" version >/dev/null 2>&1; then
+            echo "${package}@${VERSION} already published"
+          else
+            npm publish ./packages/weiv --access public
+          fi
