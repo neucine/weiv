@@ -345,9 +345,6 @@ pub const Graph = struct {
         else
             root_basename;
 
-        const import_map = try self.emitImportMap(allocator);
-        defer allocator.free(import_map);
-
         var out = std.ArrayList(u8).empty;
         defer out.deinit(allocator);
 
@@ -356,53 +353,10 @@ pub const Graph = struct {
         try out.appendSlice(allocator, "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n");
         try out.print(allocator, "    <title>{s}</title>\n", .{page_title});
         try out.appendSlice(allocator, "    <link rel=\"stylesheet\" href=\"/styles.css\" />\n");
-        if (import_map.len > 0) {
-            try out.appendSlice(allocator, import_map);
-        }
         try out.appendSlice(allocator, "  </head>\n  <body>\n");
         try out.appendSlice(allocator, "    <div id=\"app\"></div>\n");
         try out.appendSlice(allocator, "    <script type=\"module\" src=\"/main.mjs\"></script>\n");
         try out.appendSlice(allocator, "  </body>\n</html>\n");
-
-        return try out.toOwnedSlice(allocator);
-    }
-
-    fn emitImportMap(self: *Graph, allocator: std.mem.Allocator) ![]u8 {
-        if (self.bare_imports.count() == 0) return try allocator.dupe(u8, "");
-
-        var specifiers = std.ArrayList([]const u8).empty;
-        defer specifiers.deinit(allocator);
-
-        var iter = self.bare_imports.keyIterator();
-        while (iter.next()) |key| {
-            try specifiers.append(allocator, key.*);
-        }
-
-        std.mem.sort([]const u8, specifiers.items, {}, struct {
-            fn lessThan(_: void, a: []const u8, b: []const u8) bool {
-                return std.mem.order(u8, a, b) == .lt;
-            }
-        }.lessThan);
-
-        var out = std.ArrayList(u8).empty;
-        defer out.deinit(allocator);
-
-        try out.appendSlice(allocator, "    <script type=\"importmap\">\n");
-        try out.appendSlice(allocator, "    {\n      \"imports\": {\n");
-
-        for (specifiers.items, 0..) |specifier, i| {
-            try out.appendSlice(allocator, "        \"");
-            try out.appendSlice(allocator, specifier);
-            try out.appendSlice(allocator, "\": \"/node_modules/");
-            try out.appendSlice(allocator, specifier);
-            try out.appendSlice(allocator, "\"");
-            if (i + 1 < specifiers.items.len) {
-                try out.appendSlice(allocator, ",");
-            }
-            try out.appendSlice(allocator, "\n");
-        }
-
-        try out.appendSlice(allocator, "      }\n    }\n    </script>\n");
 
         return try out.toOwnedSlice(allocator);
     }
@@ -428,6 +382,24 @@ pub const Graph = struct {
         return try std.fmt.allocPrint(allocator,
             \\const host = Bun.env.HOST ?? "0.0.0.0";
             \\const port = Number(Bun.env.PORT ?? 3000);
+            \\const packagePrefix = "/__weiv_packages/";
+            \\const packageBundles = new Map<string, Promise<Blob>>();
+            \\
+            \\function bundlePackage(specifier: string) {{
+            \\  let pending = packageBundles.get(specifier);
+            \\  if (!pending) {{
+            \\    pending = (async () => {{
+            \\      const entrypoint = Bun.resolveSync(specifier, import.meta.dir);
+            \\      const result = await Bun.build({{ entrypoints: [entrypoint], target: "browser", format: "esm" }});
+            \\      if (!result.success || result.outputs.length !== 1) {{
+            \\        throw new Error(`Failed to bundle package ${{specifier}}`);
+            \\      }}
+            \\      return result.outputs[0];
+            \\    }})();
+            \\    packageBundles.set(specifier, pending);
+            \\  }}
+            \\  return pending;
+            \\}}
             \\
             \\const server = Bun.serve({{
             \\  hostname: host,
@@ -435,6 +407,17 @@ pub const Graph = struct {
             \\  async fetch(req) {{
             \\    const url = new URL(req.url);
             \\    const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
+            \\    if (pathname.startsWith(packagePrefix)) {{
+            \\      const specifier = decodeURIComponent(pathname.slice(packagePrefix.length));
+            \\      if (!specifier || specifier.startsWith(".") || specifier.includes("\\")) {{
+            \\        return new Response("Invalid package specifier", {{ status: 400 }});
+            \\      }}
+            \\      try {{
+            \\        return new Response(await bundlePackage(specifier), {{ headers: {{ "content-type": "text/javascript; charset=utf-8" }} }});
+            \\      }} catch (error) {{
+            \\        return new Response(String(error), {{ status: 404 }});
+            \\      }}
+            \\    }}
             \\    const staticFile = Bun.file(new URL(`.${{pathname}}`, import.meta.url));
             \\
             \\    if (await staticFile.exists()) {{
@@ -960,21 +943,33 @@ fn rewriteRuntimeImportSpecifiers(source: []const u8, output_rel_path: []const u
 }
 
 fn rewriteImportLine(line: []const u8, output_rel_path: []const u8, allocator: std.mem.Allocator) ![]u8 {
-    if (extractQuotedSpecifier(line)) |specifier| {
-        const is_import_export = std.mem.startsWith(u8, std.mem.trimStart(u8, line, &std.ascii.whitespace), "import ") or
-            std.mem.startsWith(u8, std.mem.trimStart(u8, line, &std.ascii.whitespace), "export ");
-        if (is_import_export and isWeivRuntimeSpecifier(specifier)) {
-            const rewritten_specifier = try relativeRuntimePackageSpecifier(specifier, output_rel_path, allocator);
+    const trimmed = std.mem.trimStart(u8, line, &std.ascii.whitespace);
+    const specifier = extractModuleSpecifier(trimmed, "import ") orelse extractModuleSpecifier(trimmed, "export ");
+    if (specifier) |module_specifier| {
+        if (isWeivRuntimeSpecifier(module_specifier)) {
+            const rewritten_specifier = try relativeRuntimePackageSpecifier(module_specifier, output_rel_path, allocator);
             defer allocator.free(rewritten_specifier);
-            return try replaceFirstSpecifier(line, specifier, rewritten_specifier, allocator);
+            return try replaceFirstSpecifier(line, module_specifier, rewritten_specifier, allocator);
         }
-        if (is_import_export and isTranspilableTypeScriptModule(specifier)) {
-            const rewritten_specifier = try emittedRuntimeImportPath(specifier, allocator);
+        if (isTranspilableTypeScriptModule(module_specifier)) {
+            const rewritten_specifier = try emittedRuntimeImportPath(module_specifier, allocator);
             defer allocator.free(rewritten_specifier);
-            return try replaceFirstSpecifier(line, specifier, rewritten_specifier, allocator);
+            return try replaceFirstSpecifier(line, module_specifier, rewritten_specifier, allocator);
+        }
+        if (isBareImportSpecifier(module_specifier)) {
+            const rewritten_specifier = try std.fmt.allocPrint(allocator, "/__weiv_packages/{s}", .{module_specifier});
+            defer allocator.free(rewritten_specifier);
+            return try replaceFirstSpecifier(line, module_specifier, rewritten_specifier, allocator);
         }
     }
     return try allocator.dupe(u8, line);
+}
+
+fn isBareImportSpecifier(specifier: []const u8) bool {
+    return !std.fs.path.isAbsolute(specifier) and
+        !std.mem.startsWith(u8, specifier, "./") and
+        !std.mem.startsWith(u8, specifier, "../") and
+        !isWeivRuntimeSpecifier(specifier);
 }
 
 fn relativeRuntimePackageSpecifier(source_specifier: []const u8, output_rel_path: []const u8, allocator: std.mem.Allocator) ![]u8 {

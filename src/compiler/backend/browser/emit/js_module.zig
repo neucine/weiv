@@ -85,12 +85,10 @@ pub fn emitModule(component: *const browser_component.BrowserComponent, allocato
         \\
     );
 
-    const needs_evaluate = std.mem.indexOf(u8, body.items, "__weiv_evaluate(") != null;
-
     var out = std.ArrayList(u8).empty;
     defer out.deinit(allocator);
     try out.appendSlice(allocator, component.preserved_imports);
-    try helpers.emitPrelude(&out, allocator, needs_evaluate);
+    try helpers.emitPrelude(&out, allocator);
     try out.appendSlice(allocator, body.items);
 
     return try out.toOwnedSlice(allocator);

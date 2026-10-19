@@ -73,6 +73,47 @@ test("conditional toggle works with jsdom real DOM", async () => {
   }
 });
 
+test("dynamic loops, call handlers, and style bindings work with jsdom real DOM", async () => {
+  const modules = await loadModules({
+    "NestedConditionalList.mjs": emitDirectBrowserModule("test/examples/basic/nested-conditional-list.weiv"),
+  });
+
+  const mod = modules["NestedConditionalList.mjs"];
+  const { document: doc, window: win } = installJsdom();
+  const target = doc.createElement("div");
+  doc.body.appendChild(target);
+
+  mod.mount(target, {});
+
+  let buttons = target.querySelectorAll("button");
+  const firstStrategyButton = buttons[2];
+  if (!firstStrategyButton) throw new Error("Missing first loop event button");
+  firstStrategyButton.dispatchEvent(new win.Event("click", { bubbles: true }));
+
+  if (!target.textContent?.includes("Firstselected")) {
+    throw new Error(`Argument-bearing loop event did not flush: ${target.textContent}`);
+  }
+
+  const firstArticle = target.querySelector("article") as HTMLElement | null;
+  if (firstArticle?.style.left !== "58%" || firstArticle.style.width !== "60px") {
+    throw new Error(`Dynamic style binding did not populate CSSStyleDeclaration: ${firstArticle?.style.cssText}`);
+  }
+
+  const appendButton = buttons[1];
+  if (!appendButton) throw new Error("Missing append button");
+  appendButton.dispatchEvent(new win.Event("click", { bubbles: true }));
+
+  const articles = target.querySelectorAll("article");
+  if (articles.length !== 4) {
+    throw new Error(`Reactive loop append expected 4 entries, found ${articles.length}`);
+  }
+  for (const title of ["First", "Second", "Third", "Fourth"]) {
+    if ((target.textContent?.match(new RegExp(title, "g")) ?? []).length !== 1) {
+      throw new Error(`Reactive loop append duplicated ${title}: ${target.textContent}`);
+    }
+  }
+});
+
 test("todo list works with jsdom real DOM", async () => {
   const modules = await loadModules({
     "TodoList.mjs": emitDirectBrowserModule("test/examples/basic/todo-list.weiv"),

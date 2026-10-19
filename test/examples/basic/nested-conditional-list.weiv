@@ -1,8 +1,9 @@
 <template>
-  <section>
+  <section style="display: block">
     <button :class="selectedStrategyId" @click="selectThird">Select third</button>
-    <article #for="strategy in strategies">
-      <h2>{{ strategy.title }}</h2>
+    <button @click="appendStrategy">Append fourth</button>
+    <article #for="strategy in strategies" :style="strategyStyle(strategy)">
+      <button @click="selectStrategy(strategy.id)">{{ strategy.title }}</button>
       <i #if="strategy.id === selectedStrategyId">selected</i>
     </article>
     <p>After strategies</p>
@@ -16,6 +17,18 @@
     { id: "third", title: "Third" },
   ];
   let selectedStrategyId = "second";
+
+  function strategyStyle(strategy: { id: string }) {
+    return strategy.id === selectedStrategyId ? "left: 58%; width: 60px" : "left: 12%; width: 40px";
+  }
+
+  function selectStrategy(id: string) {
+    selectedStrategyId = id;
+  }
+
+  function appendStrategy() {
+    strategies = [...strategies, { id: "fourth", title: "Fourth" }];
+  }
 
   async function selectThird() {
     await Promise.resolve();

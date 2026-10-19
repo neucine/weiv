@@ -3,23 +3,7 @@ const browser_render_tree = @import("../../render_tree/index.zig");
 const common = @import("common.zig");
 const node_codegen = @import("node_codegen.zig");
 
-pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator, needs_evaluate: bool) !void {
-    if (needs_evaluate) {
-        try out.appendSlice(allocator,
-            \\const __weiv_evaluate_warned = new Set();
-            \\function __weiv_evaluate(expression, scope) {
-            \\  if (!__weiv_evaluate_warned.has(expression)) {
-            \\    __weiv_evaluate_warned.add(expression);
-            \\    console.warn(`[weiv] runtime evaluate fallback for expression: ${expression}`);
-            \\  }
-            \\  const entries = Object.entries(scope);
-            \\  const names = entries.map(([name]) => name);
-            \\  const values = entries.map(([, value]) => value);
-            \\  return Function(...names, `return (${expression});`)(...values);
-            \\}
-            \\
-        );
-    }
+pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void {
     try out.appendSlice(allocator,
         \\function replaceBetween(start, end, content) {
         \\  const parent = start.parentNode;

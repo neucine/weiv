@@ -265,6 +265,28 @@ fn bindElement(
     loader: *NeighbourLoader,
     allocator: std.mem.Allocator,
 ) anyerror!void {
+    for (element.attributes) |attribute| {
+        if (std.mem.eql(u8, attribute.name, "v-if")) {
+            try appendDiagnostic(
+                diagnostics,
+                "directive.vue_structural_syntax",
+                attribute.name,
+                "v-if is an inert HTML attribute in Weiv; use #if for a structural conditional",
+                attribute.span,
+                allocator,
+            );
+        } else if (std.mem.eql(u8, attribute.name, "v-for")) {
+            try appendDiagnostic(
+                diagnostics,
+                "directive.vue_structural_syntax",
+                attribute.name,
+                "v-for is an inert HTML attribute in Weiv; use #for for a structural loop",
+                attribute.span,
+                allocator,
+            );
+        }
+    }
+
     if (isComponentTag(element.tag_name)) {
         const resolved = isNameVisible(element.tag_name, script, scopes.items);
         try component_refs.append(allocator, .{
@@ -504,6 +526,7 @@ fn classifyDiagnosticSeverity(kind: []const u8) []const u8 {
     if (std.mem.eql(u8, kind, "callback.unowned_mutation")) return "warning";
     if (std.mem.eql(u8, kind, "alias.mutation")) return "warning";
     if (std.mem.eql(u8, kind, "directive.deprecated_syntax")) return "warning";
+    if (std.mem.eql(u8, kind, "directive.vue_structural_syntax")) return "warning";
     return "info";
 }
 

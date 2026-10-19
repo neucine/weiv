@@ -48,6 +48,16 @@ pub fn buildSetupCode(model: *const component.ComponentUnit, allocator: std.mem.
         try out.appendSlice(allocator, "\n");
     }
 
+    for (model.script.bindings) |binding| {
+        if (!binding.callable or !std.mem.eql(u8, binding.kind, "function")) continue;
+        if (!isAsyncHelper(model, binding.name)) continue;
+        try out.print(
+            allocator,
+            "  {s} = __weiv_wrapCallback({s});\n",
+            .{ binding.name, binding.name },
+        );
+    }
+
     for (model.script.imports) |import_record| {
         if (import_record.local_name.len == 0) continue;
         if (std.mem.endsWith(u8, import_record.source, ".weiv")) continue;
@@ -134,6 +144,13 @@ pub fn buildSetupCode(model: *const component.ComponentUnit, allocator: std.mem.
     try out.appendSlice(allocator, "  return { scope: __weiv_scope, refresh: __weiv_refresh, setProps: __weiv_setProps, setEventHandlers: __weiv_setEventHandlers, setBoundaryRunner: __weiv_setBoundaryRunner, subscribeImportedObservables: __weiv_subscribeImportedObservables };\n}\n");
 
     return try out.toOwnedSlice(allocator);
+}
+
+fn isAsyncHelper(model: *const component.ComponentUnit, name: []const u8) bool {
+    for (model.script.state_facts.helpers) |helper| {
+        if (std.mem.eql(u8, helper.name, name)) return helper.async_flag;
+    }
+    return false;
 }
 
 pub fn buildPreservedImports(model: *const component.ComponentUnit, allocator: std.mem.Allocator) ![]u8 {

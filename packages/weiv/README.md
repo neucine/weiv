@@ -164,7 +164,8 @@ export default defineConfig({
 });
 ```
 
-You can then import `.weiv` files directly in your app.
+You can then import `.weiv` files directly in your app. The plugin emits both
+the component JavaScript and its scoped `<style>` CSS through Vite.
 
 ## Bun Plugin
 

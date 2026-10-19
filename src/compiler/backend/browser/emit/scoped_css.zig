@@ -177,7 +177,8 @@ fn prefixSelectorList(selector_source: []const u8, scope_selector: []const u8, a
                 if (globalSelectorContents(part)) |global_selector| {
                     try out.appendSlice(allocator, global_selector);
                 } else {
-                    try out.print(allocator, "{s}{s}, {s} {s}", .{ scope_selector, part, scope_selector, part });
+                    try appendRootScopedSelector(&out, part, scope_selector, allocator);
+                    try out.print(allocator, ", {s} {s}", .{ scope_selector, part });
                 }
             }
             start = i + 1;
@@ -185,6 +186,42 @@ fn prefixSelectorList(selector_source: []const u8, scope_selector: []const u8, a
     }
 
     return try out.toOwnedSlice(allocator);
+}
+
+fn appendRootScopedSelector(
+    out: *std.ArrayList(u8),
+    selector: []const u8,
+    scope_selector: []const u8,
+    allocator: std.mem.Allocator,
+) !void {
+    if (selector.len == 0) return;
+
+    if (selector[0] == '*') {
+        try out.append(allocator, '*');
+        try out.appendSlice(allocator, scope_selector);
+        try out.appendSlice(allocator, selector[1..]);
+        return;
+    }
+
+    if (isTypeSelectorStart(selector[0])) {
+        var end: usize = 1;
+        while (end < selector.len and isTypeSelectorContinue(selector[end])) : (end += 1) {}
+        try out.appendSlice(allocator, selector[0..end]);
+        try out.appendSlice(allocator, scope_selector);
+        try out.appendSlice(allocator, selector[end..]);
+        return;
+    }
+
+    try out.appendSlice(allocator, scope_selector);
+    try out.appendSlice(allocator, selector);
+}
+
+fn isTypeSelectorStart(ch: u8) bool {
+    return std.ascii.isAlphabetic(ch) or ch == '_' or ch == '-';
+}
+
+fn isTypeSelectorContinue(ch: u8) bool {
+    return std.ascii.isAlphanumeric(ch) or ch == '_' or ch == '-';
 }
 
 fn globalSelectorContents(selector: []const u8) ?[]const u8 {

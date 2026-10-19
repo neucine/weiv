@@ -1,0 +1,13 @@
+<template>
+  <button class="clip" :class="selected ? 'selected' : ''" @click="toggle">
+    Toggle selection
+  </button>
+</template>
+
+<script lang="ts">
+  let selected = false;
+
+  function toggle() {
+    selected = !selected;
+  }
+</script>

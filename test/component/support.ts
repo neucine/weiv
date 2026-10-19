@@ -81,9 +81,19 @@ export class FakeElement extends FakeNode {
   id = "";
   className = "";
   type = "";
+  style: { cssText: string };
 
   constructor(public tagName: string) {
     super();
+    const element = this;
+    this.style = {
+      get cssText() {
+        return element.attributes.get("style") ?? "";
+      },
+      set cssText(value: string) {
+        element.attributes.set("style", value);
+      },
+    };
   }
 
   append(node: FakeNode) {

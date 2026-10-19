@@ -254,7 +254,8 @@ test "basic counter direct browser module emits create/update DOM contract" {
     try std.testing.expect(std.mem.indexOf(u8, js, "function runOwnedBoundary(instance, callback)") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "document.createElement(\"section\")") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "addEventListener(\"click\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "return runOwnedBoundary(instance, () => resolved(event));") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "addEventListener(\"click\", (event) => runOwnedBoundary(instance, () => {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "return resolved(event);") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "function collectDirtyBindings(beforeScope, afterScope)") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const dirtyBindings = collectDirtyBindings(beforeScope, afterScope);") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "function normalizeDirtyState(dirtyState)") != null);
@@ -313,6 +314,41 @@ test "direct browser modules compile simple callback-argument expressions direct
     try std.testing.expect(std.mem.indexOf(u8, js, "function evaluate(") == null);
     try std.testing.expect(std.mem.indexOf(u8, js, "scope.items.filter((item) => item.done).length") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "evaluate(\"items.filter((item) => item.done).length\", scope)") == null);
+}
+
+test "loop event call expressions compile without unsafe eval and inside owned boundaries" {
+    const allocator = std.testing.allocator;
+    const source = try readFixture(allocator, "test/examples/basic/nested-conditional-list.weiv");
+    defer allocator.free(source);
+
+    var model = try compiler_compile.compile(source, "test/examples/basic/nested-conditional-list.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emitComponentJs(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "Function(...names") == null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "__weiv_evaluate(") == null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "addEventListener(\"click\", (event) => runOwnedBoundary(instance, () => {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "const resolved = loopScope.selectStrategy(loopScope.strategy.id);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, ".style.cssText = \"display: block\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, ".style.cssText = __value_") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, ".setAttribute(\"style\"") == null);
+}
+
+test "component async helpers retain owned boundaries when their promises are discarded" {
+    const allocator = std.testing.allocator;
+    const source = try readFixture(allocator, "test/examples/basic/framecept-reactivity.weiv");
+    defer allocator.free(source);
+
+    var model = try compiler_compile.compile(source, "test/examples/basic/framecept-reactivity.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const js = try emitComponentJs(&model, allocator);
+    defer allocator.free(js);
+
+    try std.testing.expect(std.mem.indexOf(u8, js, "loadMissingThumbnails = __weiv_wrapCallback(loadMissingThumbnails);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "startThumbnailLoad = __weiv_wrapCallback(startThumbnailLoad);") == null);
 }
 
 test "direct browser modules compile block-bodied callback-argument expressions directly" {
@@ -1611,7 +1647,8 @@ test "todomvc app direct browser module preserves child component imports" {
     try std.testing.expect(std.mem.indexOf(u8, js, "updateRegion_child_") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, ".setProps(") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, ".setEventHandlers(") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "return runOwnedBoundary(instance, () => resolved(payload));") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "(payload) => runOwnedBoundary(instance, () => {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "return resolved(payload);") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const next = Boolean(scope.todos.length > 0);") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const __props_9 = {\"editingId\": scope.editingId, \"items\": scope.visibleTodos()};") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "const __props_16 = {\"activeCount\": scope.activeCount(), \"completedCount\": scope.completedCount(), \"filter\": scope.filter};") != null);
@@ -1759,7 +1796,7 @@ test "direct browser modules specialize child component update paths" {
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "const __props_5 = {\"editing\": true, \"initialValue\": scope.props.todo.title, \"placeholder\": 'Edit task'};") != null);
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "const resolved = scope.handleToggle;") != null);
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "refs[5].setProps({\"editing\": true, \"initialValue\": scope.props.todo.title, \"placeholder\": 'Edit task'});") != null);
-    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "refs[5].setEventHandlers({\"cancel\": (payload) => { const resolved = scope.handleCancel;") != null);
+    try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "refs[5].setEventHandlers({\"cancel\": (payload) => runOwnedBoundary(instance, () => { const resolved = scope.handleCancel;") != null);
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "const next = Boolean(scope.props.editing);") != null);
     try std.testing.expect(std.mem.indexOf(u8, todo_item_js, "const __value_11_class = scope.itemClass();") != null);
 
@@ -1895,6 +1932,40 @@ test "global style selectors bypass component scoping" {
     const expected_scoped = try std.fmt.allocPrint(allocator, "[data-weiv-scope=\"{s}\"] .shell", .{scope_id});
     defer allocator.free(expected_scoped);
     try std.testing.expect(std.mem.indexOf(u8, css, expected_scoped) != null);
+}
+
+test "bare element style selectors keep valid scoped combinators" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template><header><button>Hello</button></header></template>
+        \\<script lang="ts"></script>
+        \\<style>
+        \\  button, input, textarea { font: inherit; }
+        \\  header:hover { display: flex; }
+        \\</style>
+    ;
+
+    var model = try compiler_compile.compile(source, "test/examples/bare-element-style.weiv", allocator);
+    defer model.deinit(allocator);
+
+    const scope_id = try style.scopeIdForPath(model.source_path, allocator);
+    defer allocator.free(scope_id);
+    const css = try style.emitScopedCss(&model, allocator);
+    defer allocator.free(css);
+
+    const invalid_button = try std.fmt.allocPrint(allocator, "[data-weiv-scope=\"{s}\"]button", .{scope_id});
+    defer allocator.free(invalid_button);
+    try std.testing.expect(std.mem.indexOf(u8, css, invalid_button) == null);
+
+    const root_button = try std.fmt.allocPrint(allocator, "button[data-weiv-scope=\"{s}\"]", .{scope_id});
+    defer allocator.free(root_button);
+    const descendant_button = try std.fmt.allocPrint(allocator, "[data-weiv-scope=\"{s}\"] button", .{scope_id});
+    defer allocator.free(descendant_button);
+    const root_header_hover = try std.fmt.allocPrint(allocator, "header[data-weiv-scope=\"{s}\"]:hover", .{scope_id});
+    defer allocator.free(root_header_hover);
+    try std.testing.expect(std.mem.indexOf(u8, css, root_button) != null);
+    try std.testing.expect(std.mem.indexOf(u8, css, descendant_button) != null);
+    try std.testing.expect(std.mem.indexOf(u8, css, root_header_hover) != null);
 }
 
 test "classic todo app emits multi-file app emit" {
@@ -2151,7 +2222,7 @@ test "imported TS helper app emit transpiles and copies TS dependencies" {
     try std.testing.expect(std.mem.indexOf(u8, props_js, "count: 0") != null);
 }
 
-test "emit app generates import map for bare imports" {
+test "emit app rewrites bare imports for strict CSP" {
     const allocator = std.testing.allocator;
     var tmp_dir = std.testing.tmpDir(.{});
     defer tmp_dir.cleanup();
@@ -2166,10 +2237,15 @@ test "emit app generates import map for bare imports" {
     const dir = try std.Io.Dir.cwd().openDir(std.Io.Threaded.global_single_threaded.io(), out_dir, .{});
     const html = try dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "index.html", allocator, .limited(64 * 1024));
     defer allocator.free(html);
+    const app_js = try dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "App.mjs", allocator, .limited(1024 * 1024));
+    defer allocator.free(app_js);
+    const server_ts = try dir.readFileAlloc(std.Io.Threaded.global_single_threaded.io(), "server.ts", allocator, .limited(1024 * 1024));
+    defer allocator.free(server_ts);
 
-    try std.testing.expect(std.mem.indexOf(u8, html, "importmap") != null);
-    try std.testing.expect(std.mem.indexOf(u8, html, "\"lodash-es\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, html, "/node_modules/lodash-es") != null);
+    try std.testing.expect(std.mem.indexOf(u8, html, "importmap") == null);
+    try std.testing.expect(std.mem.indexOf(u8, app_js, "from \"/__weiv_packages/lodash-es\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, server_ts, "Bun.resolveSync(specifier, import.meta.dir)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, server_ts, "Bun.build({ entrypoints: [entrypoint], target: \"browser\", format: \"esm\" })") != null);
 }
 
 test "validate app reports unsupported absolute runtime import with source location" {
@@ -3234,6 +3310,37 @@ test "deprecated bind and event spellings emit warnings while symbols stay clean
         try std.testing.expectEqualStrings("directive.deprecated_syntax", diagnostic.kind);
         try std.testing.expect(diagnostic.span.end > diagnostic.span.start);
     }
+}
+
+test "Vue structural attribute spellings emit migration warnings" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template>
+        \\  <p v-if="ready">Ready</p>
+        \\  <p v-for="entry in entries">Entry</p>
+        \\</template>
+        \\<script lang="ts">
+        \\  let ready = true;
+        \\  let entries = [1, 2];
+        \\</script>
+    ;
+
+    var report = try compiler_compile.compileReport(source, "test/examples/vue-structural-warning.weiv", allocator);
+    defer report.deinit(allocator);
+
+    var vue_warning_count: usize = 0;
+    var saw_if_warning = false;
+    var saw_for_warning = false;
+    for (report.diagnostics) |diagnostic| {
+        if (!std.mem.eql(u8, diagnostic.code, "directive.vue_structural_syntax")) continue;
+        vue_warning_count += 1;
+        try std.testing.expectEqual(.warning, diagnostic.severity);
+        saw_if_warning = saw_if_warning or std.mem.indexOf(u8, diagnostic.message, "use #if") != null;
+        saw_for_warning = saw_for_warning or std.mem.indexOf(u8, diagnostic.message, "use #for") != null;
+    }
+    try std.testing.expectEqual(@as(usize, 2), vue_warning_count);
+    try std.testing.expect(saw_if_warning);
+    try std.testing.expect(saw_for_warning);
 }
 
 test "structural shorthand does not consume ordinary HTML for attributes" {

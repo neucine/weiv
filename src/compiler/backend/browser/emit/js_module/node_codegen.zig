@@ -180,15 +180,19 @@ pub fn emitCreateNode(
             try out.print(allocator, "{s}.setAttribute(\"data-weiv-scope\", \"{s}\");\n", .{ var_name, scope_id });
             for (element.attributes) |attribute| {
                 try common.writeIndent(indent, out, allocator);
-                try out.print(allocator, "{s}.setAttribute(\"{s}\", ", .{ var_name, attribute.name });
+                if (std.mem.eql(u8, attribute.name, "style")) {
+                    try out.print(allocator, "{s}.style.cssText = ", .{var_name});
+                } else {
+                    try out.print(allocator, "{s}.setAttribute(\"{s}\", ", .{ var_name, attribute.name });
+                }
                 try common.emitString(attribute.value orelse "", out, allocator);
-                try out.appendSlice(allocator, ");\n");
+                try out.appendSlice(allocator, if (std.mem.eql(u8, attribute.name, "style")) ";\n" else ");\n");
             }
             for (element.event_effects) |effect| {
                 switch (effect) {
                     .event => |event_dir| {
                         try common.writeIndent(indent, out, allocator);
-                        try out.print(allocator, "{s}.addEventListener(\"{s}\", (event) => {{\n", .{ var_name, event_dir.event_name });
+                        try out.print(allocator, "{s}.addEventListener(\"{s}\", (event) => runOwnedBoundary(instance, () => {{\n", .{ var_name, event_dir.event_name });
                         try common.writeIndent(indent + 1, out, allocator);
                         try out.appendSlice(allocator, "const resolved = ");
                         try emitResolvedExpression(event_dir.expression, scope_expr, "", out, allocator);
@@ -196,11 +200,13 @@ pub fn emitCreateNode(
                         try common.writeIndent(indent + 1, out, allocator);
                         try out.appendSlice(allocator, "if (typeof resolved === \"function\") {\n");
                         try common.writeIndent(indent + 2, out, allocator);
-                        try out.appendSlice(allocator, "return runOwnedBoundary(instance, () => resolved(event));\n");
+                        try out.appendSlice(allocator, "return resolved(event);\n");
                         try common.writeIndent(indent + 1, out, allocator);
                         try out.appendSlice(allocator, "}\n");
+                        try common.writeIndent(indent + 1, out, allocator);
+                        try out.appendSlice(allocator, "return resolved;\n");
                         try common.writeIndent(indent, out, allocator);
-                        try out.appendSlice(allocator, "});\n");
+                        try out.appendSlice(allocator, "}));\n");
                     },
                     .bind => unreachable,
                 }
@@ -417,7 +423,15 @@ fn emitRegionUpdateFunctionsForNode(
         .element => |element| {
             for (element.bind_effects) |effect| {
                 switch (effect) {
-                    .bind => |bind_dir| try emitAttributeRegionUpdateFunction(element.ref_id, bind_dir.target_name, bind_dir.expression, bindings_json, out, allocator),
+                    .bind => |bind_dir| try emitAttributeRegionUpdateFunction(
+                        element.ref_id,
+                        bind_dir.target_name,
+                        bind_dir.expression,
+                        staticAttributeValue(element.attributes, bind_dir.target_name),
+                        bindings_json,
+                        out,
+                        allocator,
+                    ),
                     .event => unreachable,
                 }
             }
@@ -661,6 +675,7 @@ fn emitAttributeRegionUpdateFunction(
     ref_id: usize,
     target_name: []const u8,
     expression: []const u8,
+    static_value: ?[]const u8,
     bindings_json: []const u8,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
@@ -669,8 +684,15 @@ fn emitAttributeRegionUpdateFunction(
     defer allocator.free(suffix);
 
     try out.print(allocator, "function updateRegion_attribute_{d}_{s}(instance, scope, refs) {{\n", .{ ref_id, suffix });
-    try emitBoundAttributeUpdate(target_name, expression, "refs", ref_id, "scope", bindings_json, 1, out, allocator);
+    try emitBoundAttributeUpdate(target_name, expression, static_value, "refs", ref_id, "scope", bindings_json, 1, out, allocator);
     try out.appendSlice(allocator, "}\n");
+}
+
+fn staticAttributeValue(attributes: []const lir.Attribute, name: []const u8) ?[]const u8 {
+    for (attributes) |attribute| {
+        if (std.mem.eql(u8, attribute.name, name)) return attribute.value orelse "";
+    }
+    return null;
 }
 
 fn emitConditionalRegionUpdateFunction(
@@ -1456,6 +1478,7 @@ fn emitSlotFallbackReplaceLine(
 fn emitBoundAttributeUpdate(
     target_name: []const u8,
     expression: []const u8,
+    static_value: ?[]const u8,
     refs_expr: []const u8,
     ref_id: usize,
     scope_expr: []const u8,
@@ -1466,6 +1489,53 @@ fn emitBoundAttributeUpdate(
 ) !void {
     const suffix = try sanitizedIdentifierFragment(target_name, allocator);
     defer allocator.free(suffix);
+
+    if (std.mem.eql(u8, target_name, "class") and static_value != null) {
+        try common.writeIndent(indent, out, allocator);
+        try out.print(allocator, "const __value_{d}_{s} = ", .{ ref_id, suffix });
+        try emitResolvedExpression(expression, scope_expr, bindings_json, out, allocator);
+        try out.appendSlice(allocator, ";\n");
+        try common.writeIndent(indent, out, allocator);
+        try out.print(allocator, "const __static_{d}_{s} = ", .{ ref_id, suffix });
+        try common.emitString(static_value.?, out, allocator);
+        try out.appendSlice(allocator, ".trim();\n");
+        try common.writeIndent(indent, out, allocator);
+        try out.print(allocator, "const __dynamic_{d}_{s} = __value_{d}_{s} === false || __value_{d}_{s} === true || __value_{d}_{s} === null || __value_{d}_{s} === undefined ? \"\" : String(__value_{d}_{s}).trim();\n", .{
+            ref_id,
+            suffix,
+            ref_id,
+            suffix,
+            ref_id,
+            suffix,
+            ref_id,
+            suffix,
+            ref_id,
+            suffix,
+            ref_id,
+            suffix,
+        });
+        try common.writeIndent(indent, out, allocator);
+        try out.print(allocator, "const __next_{d}_{s} = [__static_{d}_{s}, __dynamic_{d}_{s}].filter(Boolean).join(\" \");\n", .{
+            ref_id,
+            suffix,
+            ref_id,
+            suffix,
+            ref_id,
+            suffix,
+        });
+        try common.writeIndent(indent, out, allocator);
+        try out.print(allocator, "if (__next_{d}_{s}) {{\n", .{ ref_id, suffix });
+        try common.writeIndent(indent + 1, out, allocator);
+        try out.print(allocator, "{s}[{d}].setAttribute(\"class\", __next_{d}_{s});\n", .{ refs_expr, ref_id, ref_id, suffix });
+        try common.writeIndent(indent, out, allocator);
+        try out.appendSlice(allocator, "} else if (");
+        try out.print(allocator, "{s}[{d}].hasAttribute(\"class\")) {{\n", .{ refs_expr, ref_id });
+        try common.writeIndent(indent + 1, out, allocator);
+        try out.print(allocator, "{s}[{d}].removeAttribute(\"class\");\n", .{ refs_expr, ref_id });
+        try common.writeIndent(indent, out, allocator);
+        try out.appendSlice(allocator, "}\n");
+        return;
+    }
 
     if (std.mem.eql(u8, target_name, "checked") or
         std.mem.eql(u8, target_name, "disabled") or
@@ -1570,6 +1640,43 @@ fn emitBoundAttributeUpdate(
             ref_id,
             suffix,
         });
+        return;
+    }
+
+    if (std.mem.eql(u8, target_name, "style")) {
+        try common.writeIndent(indent, out, allocator);
+        try out.print(allocator, "const __value_{d}_{s} = ", .{ ref_id, suffix });
+        try emitResolvedExpression(expression, scope_expr, bindings_json, out, allocator);
+        try out.appendSlice(allocator, ";\n");
+        try common.writeIndent(indent, out, allocator);
+        try out.print(allocator, "if (__value_{d}_{s} === false || __value_{d}_{s} === null || __value_{d}_{s} === undefined) {{\n", .{
+            ref_id,
+            suffix,
+            ref_id,
+            suffix,
+            ref_id,
+            suffix,
+        });
+        try common.writeIndent(indent + 1, out, allocator);
+        try out.print(allocator, "if ({s}[{d}].hasAttribute(\"style\")) {{ {s}[{d}].removeAttribute(\"style\"); }}\n", .{
+            refs_expr,
+            ref_id,
+            refs_expr,
+            ref_id,
+        });
+        try common.writeIndent(indent, out, allocator);
+        try out.appendSlice(allocator, "} else {\n");
+        try common.writeIndent(indent + 1, out, allocator);
+        try out.print(allocator, "{s}[{d}].style.cssText = __value_{d}_{s} === true ? \"\" : String(__value_{d}_{s});\n", .{
+            refs_expr,
+            ref_id,
+            ref_id,
+            suffix,
+            ref_id,
+            suffix,
+        });
+        try common.writeIndent(indent, out, allocator);
+        try out.appendSlice(allocator, "}\n");
         return;
     }
 
@@ -1692,9 +1799,9 @@ pub fn emitChildHandlersObject(
         switch (effect) {
             .event => |event_dir| {
                 if (idx > 0) try out.appendSlice(allocator, ", ");
-                try out.print(allocator, "\"{s}\": (payload) => {{ const resolved = ", .{event_dir.event_name});
+                try out.print(allocator, "\"{s}\": (payload) => runOwnedBoundary(instance, () => {{ const resolved = ", .{event_dir.event_name});
                 try emitResolvedExpression(event_dir.expression, scope_expr, bindings_json, out, allocator);
-                try out.appendSlice(allocator, "; if (typeof resolved === \"function\") { return runOwnedBoundary(instance, () => resolved(payload)); } return undefined; }");
+                try out.appendSlice(allocator, "; if (typeof resolved === \"function\") { return resolved(payload); } return resolved; })");
             },
             .bind => unreachable,
         }
@@ -1743,9 +1850,7 @@ pub fn emitResolvedExpression(
         } else |_| {}
     }
 
-    try out.appendSlice(allocator, "__weiv_evaluate(");
-    try common.emitString(expression, out, allocator);
-    try out.print(allocator, ", {s})", .{scope_expr});
+    return error.UnsupportedTemplateExpression;
 }
 
 fn isLiteralExpression(expression: []const u8) bool {

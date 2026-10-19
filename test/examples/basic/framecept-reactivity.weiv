@@ -1,0 +1,30 @@
+<template>
+  <button #for="clip in clips" @click="clip.select()">Select clip</button>
+  <section #if="selectedId >= 0">Selected {{ selectedId }}</section>
+  <section #if="selectedId < 0">No clip selected</section>
+
+  <button @click="startThumbnailLoad">Load thumbnail</button>
+  <img #for="asset in media" :src="asset.thumbnailUrl" alt="" />
+</template>
+
+<script lang="ts">
+  export interface Props {}
+  export let props: Props;
+
+  let selectedId = -1;
+  let clips = [{ id: 7, select: () => selectClip(7) }];
+  let media = [{ id: 1, thumbnailUrl: "pending" }];
+
+  function selectClip(id: number) {
+    selectedId = id;
+  }
+
+  function startThumbnailLoad() {
+    void loadMissingThumbnails();
+  }
+
+  async function loadMissingThumbnails() {
+    const url = await Promise.resolve("ready");
+    media = media.map((asset) => ({ ...asset, thumbnailUrl: url }));
+  }
+</script>
