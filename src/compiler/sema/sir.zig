@@ -5,7 +5,6 @@ const slot_manifest = @import("slot_manifest.zig");
 pub const ScriptFacts = struct {
     ok: bool,
     source_path: []const u8,
-    transpiled_code: []const u8,
     props: ?PropsFacts,
     imports: []ScriptImport,
     bindings: []ScriptBinding,
@@ -17,7 +16,6 @@ pub const ScriptFacts = struct {
             props.deinit(allocator);
         }
         allocator.free(self.source_path);
-        allocator.free(self.transpiled_code);
         for (self.imports) |*record| record.deinit(allocator);
         allocator.free(self.imports);
         for (self.bindings) |*binding| binding.deinit(allocator);
@@ -180,16 +178,31 @@ pub const CallbackRegistrationFacts = struct {
 
 pub const TemplateBindings = struct {
     component_refs: []ComponentRef,
+    expressions: []ExpressionFacts,
     diagnostics: []TemplateBindingDiagnostic,
     own_slot_manifest: slot_manifest.Manifest,
 
     pub fn deinit(self: *TemplateBindings, allocator: std.mem.Allocator) void {
         allocator.free(self.component_refs);
+        for (self.expressions) |expression| allocator.free(expression.references);
+        allocator.free(self.expressions);
         for (self.diagnostics) |*diagnostic| diagnostic.deinit(allocator);
         allocator.free(self.diagnostics);
         self.own_slot_manifest.deinit(allocator);
         self.* = undefined;
     }
+};
+
+pub const ExpressionFacts = struct {
+    /// Borrows a slice of the normalized template's expression source.
+    source: []const u8,
+    references: []ExpressionReference,
+};
+
+pub const ExpressionReference = struct {
+    /// Borrows a slice of ExpressionFacts.source.
+    name: []const u8,
+    call: bool,
 };
 
 pub const ComponentRef = struct {

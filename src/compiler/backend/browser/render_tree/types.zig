@@ -15,7 +15,9 @@ pub const InterpolationNode = struct {
 pub const ElementNode = struct {
     ref_id: usize,
     tag_name: []const u8,
+    /// Borrowed from LIR; the ComponentUnit must outlive this tree.
     attributes: []lir.Attribute,
+    /// The slices are owned by this tree; expression text inside them is borrowed.
     bind_effects: []lir.DirectiveEffect,
     event_effects: []lir.DirectiveEffect,
     children: []Node,
@@ -118,6 +120,7 @@ pub const Node = union(NodeTag) {
 };
 
 pub const Document = struct {
+    /// Owns node/effect arrays, but borrows source text and attributes from LIR.
     nodes: []Node,
     next_ref_id: usize,
 

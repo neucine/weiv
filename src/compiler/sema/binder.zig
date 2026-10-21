@@ -19,112 +19,21 @@ const Scope = struct {
     }
 };
 
-/// Loads and caches slot manifests for neighbour .weiv components referenced by the parent.
-const NeighbourLoader = struct {
-    parent_path: []const u8,
-    script: *const sir.ScriptFacts,
-    cache: std.StringHashMap(slot_manifest.Manifest),
-    allocator: std.mem.Allocator,
-
-    fn init(
-        allocator: std.mem.Allocator,
-        parent_path: []const u8,
-        script: *const sir.ScriptFacts,
-    ) NeighbourLoader {
-        return .{
-            .parent_path = parent_path,
-            .script = script,
-            .cache = std.StringHashMap(slot_manifest.Manifest).init(allocator),
-            .allocator = allocator,
-        };
-    }
-
-    fn deinit(self: *NeighbourLoader) void {
-        var it = self.cache.iterator();
-        while (it.next()) |entry| {
-            self.allocator.free(entry.key_ptr.*);
-            entry.value_ptr.deinit(self.allocator);
-        }
-        self.cache.deinit();
-    }
-
-    /// Returns null if:
-    ///  - tag_name has no matching import binding
-    ///  - the import is not a .weiv file
-    ///  - the file cannot be opened/parsed (treated as "unknown" — no diagnostic)
-    fn manifestFor(self: *NeighbourLoader, tag_name: []const u8) !?*const slot_manifest.Manifest {
-        const specifier = self.findImportSpecifier(tag_name) orelse return null;
-        if (!std.mem.endsWith(u8, specifier, ".weiv")) return null;
-
-        const abs_path = try self.resolve(specifier);
-        defer self.allocator.free(abs_path);
-
-        if (self.cache.getPtr(abs_path)) |existing| return existing;
-
-        if (!std.fs.path.isAbsolute(abs_path)) return null;
-        const file_source = std.Io.Dir.cwd().readFileAlloc(
-            std.Io.Threaded.global_single_threaded.io(),
-            abs_path,
-            self.allocator,
-            .limited(1024 * 1024),
-        ) catch return null;
-        defer self.allocator.free(file_source);
-
-        // Parse the SFC sections
-        const sfc_doc = sfc.parse(file_source) catch return null;
-        const template_content = sfc_doc.template.content;
-
-        // Parse template AST and normalize
-        var ast_doc = template.parse(template_content, self.allocator) catch return null;
-        defer ast_doc.deinit(self.allocator);
-
-        var normalized_doc = template.normalize(&ast_doc, self.allocator) catch return null;
-        defer normalized_doc.deinit(self.allocator);
-
-        // Build manifest (ignore duplicates — those are the child's own diagnostics)
-        const manifest_result = slot_manifest.build(&normalized_doc, self.allocator) catch return null;
-        // Free duplicates — we don't report them from the parent's perspective
-        for (manifest_result.duplicates) |dup| {
-            if (dup.name) |n| self.allocator.free(n);
-        }
-        self.allocator.free(manifest_result.duplicates);
-
-        const key = try self.allocator.dupe(u8, abs_path);
-        errdefer self.allocator.free(key);
-        try self.cache.put(key, manifest_result.manifest);
-        return self.cache.getPtr(key);
-    }
-
-    fn findImportSpecifier(self: *NeighbourLoader, tag_name: []const u8) ?[]const u8 {
-        for (self.script.imports) |record| {
-            if (std.mem.eql(u8, record.local_name, tag_name)) {
-                return record.source;
-            }
-        }
-        return null;
-    }
-
-    fn resolve(self: *NeighbourLoader, specifier: []const u8) ![]const u8 {
-        const parent_dir = std.fs.path.dirname(self.parent_path) orelse ".";
-        const joined = try std.fs.path.join(self.allocator, &.{ parent_dir, specifier });
-        defer self.allocator.free(joined);
-        // Try realpath first; fall back to the joined path if file doesn't exist yet
-        const real_path = std.Io.Dir.cwd().realPathFileAlloc(std.Io.Threaded.global_single_threaded.io(), joined, self.allocator) catch return try self.allocator.dupe(u8, joined);
-        defer self.allocator.free(real_path);
-        return try self.allocator.dupe(u8, real_path);
-    }
-};
-
 pub fn bind(
     document: *const template.NormalizedDocument,
     script: *const sir.ScriptFacts,
-    parent_path: []const u8,
+    provider: *slot_manifest.Provider,
     allocator: std.mem.Allocator,
 ) anyerror!TemplateBindings {
     var component_refs = std.ArrayList(ComponentRef).empty;
     defer component_refs.deinit(allocator);
     var diagnostics = std.ArrayList(Diagnostic).empty;
     defer diagnostics.deinit(allocator);
+    var expressions = std.ArrayList(sir.ExpressionFacts).empty;
+    defer {
+        for (expressions.items) |expression| allocator.free(expression.references);
+        expressions.deinit(allocator);
+    }
     var scopes = std.ArrayList(Scope).empty;
     defer scopes.deinit(allocator);
 
@@ -144,13 +53,11 @@ pub fn bind(
     try validateFrameworkBindings(script, &diagnostics, allocator);
     try validateStateModelDiagnostics(script, &diagnostics, allocator);
 
-    var loader = NeighbourLoader.init(allocator, parent_path, script);
-    defer loader.deinit();
-
-    try bindNodes(document.nodes, script, &component_refs, &diagnostics, &scopes, &loader, allocator);
+    try bindNodes(document.nodes, script, &component_refs, &diagnostics, &expressions, &scopes, provider, allocator);
 
     return .{
         .component_refs = try component_refs.toOwnedSlice(allocator),
+        .expressions = try expressions.toOwnedSlice(allocator),
         .diagnostics = try diagnostics.toOwnedSlice(allocator),
         .own_slot_manifest = manifest_result.manifest,
     };
@@ -238,30 +145,31 @@ fn bindNodes(
     script: *const sir.ScriptFacts,
     component_refs: *std.ArrayList(ComponentRef),
     diagnostics: *std.ArrayList(Diagnostic),
+    expressions: *std.ArrayList(sir.ExpressionFacts),
     scopes: *std.ArrayList(Scope),
-    loader: *NeighbourLoader,
+    provider: *slot_manifest.Provider,
     allocator: std.mem.Allocator,
 ) anyerror!void {
     for (nodes) |node| {
         switch (node) {
             .text => {},
-            .interpolation => |interp| try bindExpression(interp.expression, interp.span, script, diagnostics, scopes.items, allocator),
+            .interpolation => |interp| try bindExpression(interp.expression, interp.span, script, diagnostics, expressions, scopes.items, allocator),
             .slot_outlet => |slot_outlet| {
-                try bindNodes(slot_outlet.fallback_children, script, component_refs, diagnostics, scopes, loader, allocator);
+                try bindNodes(slot_outlet.fallback_children, script, component_refs, diagnostics, expressions, scopes, provider, allocator);
             },
             .conditional => |conditional| {
-                try bindExpression(conditional.condition, conditional.span, script, diagnostics, scopes.items, allocator);
-                try bindNodes(conditional.consequent, script, component_refs, diagnostics, scopes, loader, allocator);
-                try bindNodes(conditional.alternate, script, component_refs, diagnostics, scopes, loader, allocator);
+                try bindExpression(conditional.condition, conditional.span, script, diagnostics, expressions, scopes.items, allocator);
+                try bindNodes(conditional.consequent, script, component_refs, diagnostics, expressions, scopes, provider, allocator);
+                try bindNodes(conditional.alternate, script, component_refs, diagnostics, expressions, scopes, provider, allocator);
             },
             .for_loop => |for_loop| {
-                try bindExpression(for_loop.iterable_expr, for_loop.span, script, diagnostics, scopes.items, allocator);
+                try bindExpression(for_loop.iterable_expr, for_loop.span, script, diagnostics, expressions, scopes.items, allocator);
                 var loop_scope_names = [1][]const u8{for_loop.item_name};
                 try scopes.append(allocator, .{ .names = loop_scope_names[0..1] });
                 defer _ = scopes.pop();
-                try bindNodes(for_loop.body, script, component_refs, diagnostics, scopes, loader, allocator);
+                try bindNodes(for_loop.body, script, component_refs, diagnostics, expressions, scopes, provider, allocator);
             },
-            .element => |element| try bindElement(&element, script, component_refs, diagnostics, scopes, loader, allocator),
+            .element => |element| try bindElement(&element, script, component_refs, diagnostics, expressions, scopes, provider, allocator),
         }
     }
 }
@@ -271,8 +179,9 @@ fn bindElement(
     script: *const sir.ScriptFacts,
     component_refs: *std.ArrayList(ComponentRef),
     diagnostics: *std.ArrayList(Diagnostic),
+    expressions: *std.ArrayList(sir.ExpressionFacts),
     scopes: *std.ArrayList(Scope),
-    loader: *NeighbourLoader,
+    provider: *slot_manifest.Provider,
     allocator: std.mem.Allocator,
 ) anyerror!void {
     for (element.attributes) |attribute| {
@@ -322,7 +231,7 @@ fn bindElement(
                         allocator,
                     );
                 }
-                try bindExpression(bind_dir.expression, element.span, script, diagnostics, scopes.items, allocator);
+                try bindExpression(bind_dir.expression, element.span, script, diagnostics, expressions, scopes.items, allocator);
             },
             .event => |event_dir| {
                 if (event_dir.deprecated_syntax) {
@@ -335,7 +244,7 @@ fn bindElement(
                         allocator,
                     );
                 }
-                try bindExpression(event_dir.expression, element.span, script, diagnostics, scopes.items, allocator);
+                try bindExpression(event_dir.expression, element.span, script, diagnostics, expressions, scopes.items, allocator);
             },
             // slot:name placement (and <template slot:foo> placement) is enforced
             // as a hard error at parser/lower time in src/compiler/lower/lower.zig.
@@ -369,7 +278,7 @@ fn bindElement(
         }
 
         // Cross-component slot validation: check that provided slots exist in the child manifest.
-        if (try loader.manifestFor(element.tag_name)) |child_manifest| {
+        if (try provider.manifestFor(element.tag_name)) |child_manifest| {
             var has_unnamed_content = false;
             for (element.children) |child| {
                 switch (child) {
@@ -399,7 +308,7 @@ fn bindElement(
         }
     }
 
-    try bindNodes(element.children, script, component_refs, diagnostics, scopes, loader, allocator);
+    try bindNodes(element.children, script, component_refs, diagnostics, expressions, scopes, provider, allocator);
 }
 
 fn isWhitespaceOnly(s: []const u8) bool {
@@ -414,9 +323,12 @@ fn bindExpression(
     span: sfc.Span,
     script: *const sir.ScriptFacts,
     diagnostics: *std.ArrayList(Diagnostic),
+    expressions: *std.ArrayList(sir.ExpressionFacts),
     scopes: []const Scope,
     allocator: std.mem.Allocator,
 ) anyerror!void {
+    var references = std.ArrayList(sir.ExpressionReference).empty;
+    defer references.deinit(allocator);
     var seen = std.StringHashMap(void).init(allocator);
     defer seen.deinit();
 
@@ -466,9 +378,19 @@ fn bindExpression(
         const is_call = nextNonSpaceIs(expression, i, '(');
 
         if (isKeyword(ident)) continue;
-        if (start > 0 and expression[start - 1] == '.') continue;
-        if (seen.contains(ident)) continue;
+        if (isPropertyAccessExpression(expression, start)) continue;
+        if (seen.contains(ident)) {
+            if (is_call) {
+                for (references.items) |*reference| {
+                    if (std.mem.eql(u8, reference.name, ident)) reference.call = true;
+                }
+            }
+            continue;
+        }
         try seen.put(ident, {});
+        if (isNameVisible(ident, script, scopes)) {
+            try references.append(allocator, .{ .name = ident, .call = is_call });
+        }
 
         if (is_call) {
             if (findVisibleHelper(script, ident)) |helper| {
@@ -506,6 +428,12 @@ fn bindExpression(
             try appendDiagnostic(diagnostics, "unresolved_binding", ident, "Unresolved template binding", ident_span, allocator);
         }
     }
+    const owned_references = try references.toOwnedSlice(allocator);
+    errdefer allocator.free(owned_references);
+    try expressions.append(allocator, .{
+        .source = expression,
+        .references = owned_references,
+    });
 }
 
 fn appendDiagnostic(
@@ -599,6 +527,16 @@ fn nextNonSpaceIs(expr: []const u8, idx: usize, expected: u8) bool {
     while (cursor < expr.len) : (cursor += 1) {
         if (expr[cursor] == ' ' or expr[cursor] == '\n' or expr[cursor] == '\r' or expr[cursor] == '\t') continue;
         return expr[cursor] == expected;
+    }
+    return false;
+}
+
+fn isPropertyAccessExpression(expr: []const u8, ident_start: usize) bool {
+    var cursor = ident_start;
+    while (cursor > 0) {
+        cursor -= 1;
+        if (expr[cursor] == ' ' or expr[cursor] == '\n' or expr[cursor] == '\r' or expr[cursor] == '\t') continue;
+        return expr[cursor] == '.';
     }
     return false;
 }

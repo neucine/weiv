@@ -6,9 +6,9 @@ it produces, following the same broad shape as the sibling Cyna compiler:
 ```text
 source .weiv
   -> parser: SFC document + template AST
-  -> sema: SIR (ScriptFacts + TemplateBindings)
+  -> project resolver + sema: SIR (ScriptFacts + TemplateBindings)
   -> lower: LIR
-  -> ComponentUnit
+  -> ComponentUnit (owned compilation snapshot)
   -> backend/browser: RenderTree + BrowserComponent
   -> browser emit: JavaScript, scoped CSS, app bundles
 ```
@@ -24,14 +24,23 @@ source .weiv
   into `TemplateBindings`, and exposes those SIR model types from `sema/sir.zig`.
   Script parsing is delegated through the FFI script backend; semantic model
   names should use `ScriptFacts`, not the older "script analysis" wording.
-- `lower/` converts semantic/template data into LIR types in `lower/lir.zig`.
+- `project/` resolves neighboring component information, including slot
+  manifests. The binder receives a manifest provider and does not open files.
+- `lower/` converts normalized template structure and bound expression
+  references into LIR types in `lower/lir.zig`. LIR keeps expression source for
+  code generation and an owned table of references for dependency analysis.
 - `component_unit.zig` owns `ComponentUnit` and `ComponentCompileReport`, the
-  target-neutral bundle of phase outputs for one component. Target-neutral
-  compilation stops here. `ComponentCompileReport.takeUnit` transfers a
-  complete unit and clears the report's ownership of its phase outputs.
-- `backend/browser/render_tree/` lowers a `ComponentUnit` into a browser
-  `RenderTree`. This is the browser backend representation, not a complete
-  JavaScript module by itself.
+  compilation snapshot and diagnostic report for one component. The unit owns
+  a copy of the source buffer, parser, semantic, and LIR outputs, plus
+  transpiled script JavaScript. The JavaScript is an output artifact, not a
+  semantic fact. The parser, semantic, and LIR representations are target-neutral;
+  the unit currently also carries the script backend's JavaScript output for
+  browser emission. `ComponentCompileReport.takeUnit` transfers a complete unit
+  and clears the report's ownership of its phase outputs.
+- `backend/browser/render_tree/` lowers LIR into a browser `RenderTree`. Its
+  node arrays and effect arrays are owned, while source strings and attributes
+  borrow from the unit's earlier representations. The tree must be destroyed
+  before its unit. It is not a complete JavaScript module by itself.
 - `backend/browser/component.zig` owns `BrowserComponent`, the browser-specific
   lowering result. It holds the `ComponentUnit` reference and render tree;
   generated source and CSS belong to emitters.
@@ -51,12 +60,15 @@ source .weiv
   and graph inspection use the same table. These browser-specific files do
   not belong to target-neutral `sema/`.
 - `backend/browser/dependencies.zig` analyzes the static dependencies used by
-  runtime update guards. `backend/browser/region_graph.zig` combines these
-  dependencies with tracked paths and owns runtime region IDs. Build this graph
+  runtime update guards. It reads LIR expression references for template
+  expressions and scans helper bodies that are not part of template binding.
+  `backend/browser/region_graph.zig` combines these dependencies with tracked
+  paths and owns runtime region IDs. Build this graph
   once per browser module, then pass it to the metadata and DOM emitters.
 - `compile.zig` is the compile-unit coordinator for one `.weiv` component. It
-  orchestrates stages but does not own AST, SIR, LIR, render-tree, or emit
-  rules.
+  runs a single report-producing stage sequence. `compile` takes a complete
+  unit from that report and preserves the original stage error on failure.
+  The coordinator does not own AST, SIR, LIR, render-tree, or emit rules.
 - `inspect/` formats stage representations and derived debug views for CLI
   `emit` output. Its invalidation view uses the browser region graph, path
   table, and dependency analyzer. It adds explanatory nodes and warnings but
@@ -76,7 +88,8 @@ formatter, keep it at the top level of `compiler/`.
   callback ownership. It reports cases that cannot be tracked precisely.
   External registrations are unowned unless their mutation is enclosed in
   the component-provided `weivUpdate` boundary.
-- `lower/` preserves those decisions in target-neutral nodes and effects.
+- `lower/` preserves bound template references in LIR. Script state and callback
+  facts remain in the unit for backend analysis.
 - `backend/browser/` decides which DOM regions depend on those values and
   emits their update operations. Browser-specific proxy and scheduler code
   belongs here, not in semantic analysis. The browser setup supplies
@@ -136,3 +149,4 @@ The default app output directory is `dist`.
   Keep source strings and CSS out of that struct.
 - SIR is the semantic pair of `ScriptFacts` and `TemplateBindings`. There is no
   separate `SirDocument` allocation or ownership layer.
+- `ComponentUnit` names the owned compilation snapshot, not another IR stage.

@@ -97,7 +97,12 @@ const JsonCallbackRegistrationFacts = struct {
     reason: []const u8,
 };
 
-pub fn parseFromJson(json_source: []const u8, allocator: std.mem.Allocator) !sir.ScriptFacts {
+pub const ParsedScript = struct {
+    facts: sir.ScriptFacts,
+    transpiled_code: []const u8,
+};
+
+pub fn parseFromJson(json_source: []const u8, allocator: std.mem.Allocator) !ParsedScript {
     const parsed = try std.json.parseFromSlice(JsonScriptFacts, allocator, json_source, .{
         .ignore_unknown_fields = true,
         .allocate = .alloc_always,
@@ -206,10 +211,9 @@ pub fn parseFromJson(json_source: []const u8, allocator: std.mem.Allocator) !sir
         };
     }
 
-    return .{
+    const facts: sir.ScriptFacts = .{
         .ok = parsed.value.ok,
         .source_path = try allocator.dupe(u8, parsed.value.source_path),
-        .transpiled_code = try allocator.dupe(u8, parsed.value.transpiled_code),
         .props = if (parsed.value.props) |props| .{
             .has_props_export = props.has_props_export,
             .props_binding_name = if (props.props_binding_name) |value| try allocator.dupe(u8, value) else null,
@@ -224,6 +228,10 @@ pub fn parseFromJson(json_source: []const u8, allocator: std.mem.Allocator) !sir
             .callback_registrations = callbacks,
         },
         .diagnostics = diagnostics,
+    };
+    return .{
+        .facts = facts,
+        .transpiled_code = try allocator.dupe(u8, parsed.value.transpiled_code),
     };
 }
 

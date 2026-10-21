@@ -34,6 +34,16 @@ pub const Manifest = struct {
     }
 };
 
+/// Supplies imported component manifests to semantic binding.
+pub const Provider = struct {
+    context: *anyopaque,
+    manifest_for: *const fn (*anyopaque, []const u8) anyerror!?*const Manifest,
+
+    pub fn manifestFor(self: *Provider, tag_name: []const u8) anyerror!?*const Manifest {
+        return self.manifest_for(self.context, tag_name);
+    }
+};
+
 pub const DuplicateReport = struct {
     name: ?[]const u8,
     span: sfc.Span,

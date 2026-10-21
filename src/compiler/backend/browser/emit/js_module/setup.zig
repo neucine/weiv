@@ -49,7 +49,7 @@ pub fn buildSetupCode(model: *const component.ComponentUnit, allocator: std.mem.
         \\
     );
 
-    var lines = std.mem.tokenizeScalar(u8, model.script.transpiled_code, '\n');
+    var lines = std.mem.tokenizeScalar(u8, model.script_js, '\n');
     while (lines.next()) |line_raw| {
         const line = std.mem.trim(u8, line_raw, &std.ascii.whitespace);
         if (line.len == 0) continue;

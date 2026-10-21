@@ -21,6 +21,16 @@ pub const DirectiveEffect = union(enum) {
     },
 };
 
+pub const ExpressionReference = struct {
+    name: []const u8,
+    call: bool,
+};
+
+pub const ExpressionFacts = struct {
+    source: []const u8,
+    references: []ExpressionReference,
+};
+
 pub const Attribute = struct {
     name: []const u8,
     value: ?[]const u8,
@@ -115,8 +125,18 @@ pub const Node = union(NodeTag) {
 
 pub const Document = struct {
     nodes: []Node,
+    expressions: []ExpressionFacts,
+
+    pub fn findExpression(self: *const Document, source: []const u8) ?*const ExpressionFacts {
+        for (self.expressions) |*expression| {
+            if (expression.source.ptr == source.ptr and expression.source.len == source.len) return expression;
+        }
+        return null;
+    }
 
     pub fn deinit(self: *Document, allocator: std.mem.Allocator) void {
+        for (self.expressions) |expression| allocator.free(expression.references);
+        allocator.free(self.expressions);
         for (self.nodes) |*node| node.deinit(allocator);
         allocator.free(self.nodes);
         self.* = undefined;

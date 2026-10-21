@@ -13,9 +13,23 @@ pub fn lower(
     template_bindings: *const binding.TemplateBindings,
     allocator: std.mem.Allocator,
 ) anyerror!lir.Document {
-    _ = template_bindings;
+    const expressions = try allocator.alloc(lir.ExpressionFacts, template_bindings.expressions.len);
+    var initialized: usize = 0;
+    errdefer {
+        for (expressions[0..initialized]) |expression| allocator.free(expression.references);
+        allocator.free(expressions);
+    }
+    for (template_bindings.expressions, 0..) |expression, index| {
+        const references = try allocator.alloc(lir.ExpressionReference, expression.references.len);
+        for (expression.references, 0..) |reference, ref_index| {
+            references[ref_index] = .{ .name = reference.name, .call = reference.call };
+        }
+        expressions[index] = .{ .source = expression.source, .references = references };
+        initialized += 1;
+    }
     return .{
         .nodes = try lowerNodes(normalized_template.nodes, allocator),
+        .expressions = expressions,
     };
 }
 

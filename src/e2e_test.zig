@@ -12,6 +12,7 @@ const app_emit = browser_backend.emit.app;
 const ast = parser.template.ast;
 const browser_component = browser_backend.component;
 const browser_render_tree = browser_backend.render_tree;
+const browser_region_graph = @import("compiler/backend/browser/region_graph.zig");
 const directives = parser.template.directives;
 const js_module = browser_backend.emit.js_module;
 const invalidation_graph = inspect.invalidation_graph;
@@ -22,6 +23,36 @@ fn emitComponentJs(model: *const component.ComponentUnit, allocator: std.mem.All
     var browser_component_model = try browser_component.build(model, allocator);
     defer browser_component_model.deinit(allocator);
     return try js_module.emitModule(&browser_component_model, allocator);
+}
+
+test "template dependency analysis uses bound expression references" {
+    var gpa = std.heap.DebugAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const source =
+        \\<template>
+        \\  <p>{{ "count" }}</p>
+        \\  <p>{{ state . count }}</p>
+        \\</template>
+        \\<script lang="ts">
+        \\  let state = { count: 1 };
+        \\</script>
+    ;
+
+    const input = try allocator.dupe(u8, source);
+    var model = try compiler_compile.compile(input, "inline-bound-expressions.weiv", allocator);
+    allocator.free(input);
+    defer model.deinit(allocator);
+    var tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer tree.deinit(allocator);
+    var graph = try browser_region_graph.build(&model, &tree, allocator);
+    defer graph.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), graph.regions.items.len);
+    try std.testing.expectEqual(@as(usize, 0), graph.regions.items[0].dependency_names.items.len);
+    try std.testing.expectEqualSlices(u8, "state", graph.regions.items[1].dependency_names.items[0]);
+    try std.testing.expectEqual(@as(usize, 1), graph.regions.items[1].dependency_names.items.len);
 }
 
 test "classic todo app components build through current component pipeline" {

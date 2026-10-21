@@ -1419,10 +1419,12 @@ pub fn formatComponentCompileReport(report: component.ComponentCompileReport, al
     if (report.lir_document != null and report.template_bindings != null) {
         const success_model = component.ComponentUnit{
             .source_path = report.source_path,
+            .source = report.source.?,
             .sfc_document = report.sfc_document.?,
             .template_document = report.template_document.?,
             .normalized_template = report.normalized_template.?,
             .script = report.script.?,
+            .script_js = report.script_js.?,
             .template_bindings = report.template_bindings.?,
             .lir_document = report.lir_document.?,
         };

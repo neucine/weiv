@@ -3,7 +3,7 @@ const component = @import("../../component_unit.zig");
 const tracked_roots = @import("tracked_roots.zig");
 
 // Shared tracked-path inventory for browser code generation and inspection.
-// Slices in roots and paths borrow from the component or expression source.
+// Roots and path entries borrow from canonical paths owned by the table.
 pub const Root = struct {
     id: usize,
     binding_name: []const u8,
@@ -22,6 +22,7 @@ pub const Table = struct {
     component_model: *const component.ComponentUnit,
     roots: std.ArrayList(Root) = .empty,
     paths: std.ArrayList(Path) = .empty,
+    owned_paths: std.ArrayList([]const u8) = .empty,
 
     pub fn init(component_model: *const component.ComponentUnit, allocator: std.mem.Allocator) Table {
         return .{ .allocator = allocator, .component_model = component_model };
@@ -30,6 +31,8 @@ pub const Table = struct {
     pub fn deinit(self: *Table) void {
         self.roots.deinit(self.allocator);
         self.paths.deinit(self.allocator);
+        for (self.owned_paths.items) |path| self.allocator.free(path);
+        self.owned_paths.deinit(self.allocator);
     }
 
     pub fn findRoot(self: *const Table, binding_name: []const u8) ?Root {
@@ -40,6 +43,7 @@ pub const Table = struct {
     }
 
     pub fn collectExpressionIds(self: *Table, expr: []const u8, path_ids: *std.ArrayList(usize)) !void {
+        const bound_expression = self.component_model.lir_document.findExpression(expr);
         var i: usize = 0;
         while (i < expr.len) {
             const ch = expr[i];
@@ -56,10 +60,22 @@ pub const Table = struct {
             if (isKeyword(root_name)) continue;
             if (isPropertyAccessExpr(expr, root_start)) continue;
             if (tracked_roots.kindByName(self.component_model, root_name) == null) continue;
+            if (bound_expression) |facts| {
+                var bound = false;
+                for (facts.references) |reference| {
+                    if (std.mem.eql(u8, reference.name, root_name)) {
+                        bound = true;
+                        break;
+                    }
+                }
+                if (!bound) continue;
+            }
 
             var cursor = i;
             var segment_count: usize = 0;
-            var leaf_end = i;
+            var canonical_path = std.ArrayList(u8).empty;
+            defer canonical_path.deinit(self.allocator);
+            try canonical_path.appendSlice(self.allocator, root_name);
 
             while (true) {
                 const dot_index = nextNonSpaceIndex(expr, cursor) orelse break;
@@ -76,14 +92,14 @@ pub const Table = struct {
                 if (call_index != null and expr[call_index.?] == '(') break;
 
                 segment_count += 1;
-                leaf_end = segment_end;
+                try canonical_path.append(self.allocator, '.');
+                try canonical_path.appendSlice(self.allocator, expr[segment_start..segment_end]);
                 cursor = segment_end;
             }
 
             if (segment_count == 0) continue;
 
-            const full_path = std.mem.trimEnd(u8, expr[root_start..leaf_end], " \t\r\n");
-            const leaf_path_id = try self.ensurePathChain(full_path);
+            const leaf_path_id = try self.ensurePathChain(canonical_path.items);
             try appendUniqueUsize(self.allocator, path_ids, leaf_path_id);
         }
     }
@@ -106,17 +122,19 @@ pub const Table = struct {
 
     fn ensurePathChain(self: *Table, full_path: []const u8) !usize {
         if (self.findPathId(full_path)) |id| return id;
-        const first_dot = std.mem.indexOfScalar(u8, full_path, '.') orelse return error.InvalidTrackedPath;
-        const root_name = full_path[0..first_dot];
+        const path_copy = try self.allocator.dupe(u8, full_path);
+        errdefer self.allocator.free(path_copy);
+        const first_dot = std.mem.indexOfScalar(u8, path_copy, '.') orelse return error.InvalidTrackedPath;
+        const root_name = path_copy[0..first_dot];
         const kind = tracked_roots.kindByName(self.component_model, root_name) orelse return error.InvalidTrackedPath;
         const root_id = try self.ensureRoot(root_name, kind.label());
 
         var parent_path_id: ?usize = null;
         var search_from: usize = 0;
         while (true) {
-            const maybe_dot = std.mem.indexOfScalarPos(u8, full_path, search_from, '.');
-            const end_index = maybe_dot orelse full_path.len;
-            const prefix = full_path[0..end_index];
+            const maybe_dot = std.mem.indexOfScalarPos(u8, path_copy, search_from, '.');
+            const end_index = maybe_dot orelse path_copy.len;
+            const prefix = path_copy[0..end_index];
             const path_id = if (self.findPathId(prefix)) |existing|
                 existing
             else blk: {
@@ -130,7 +148,10 @@ pub const Table = struct {
                 break :blk new_id;
             };
             parent_path_id = path_id;
-            if (maybe_dot == null) return path_id;
+            if (maybe_dot == null) {
+                try self.owned_paths.append(self.allocator, path_copy);
+                return path_id;
+            }
             search_from = end_index + 1;
         }
     }

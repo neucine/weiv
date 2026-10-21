@@ -105,6 +105,26 @@ fn collectExpressionDepsWithTrail(
     allocator: std.mem.Allocator,
     call_trail: []const []const u8,
 ) anyerror!void {
+    if (component_model.lir_document.findExpression(expr)) |facts| {
+        for (facts.references) |reference| {
+            const ident = reference.name;
+            if (reference.call and tracked_roots.isImportedBinding(component_model, ident)) continue;
+            if (reference.call) {
+                if (findVisibleBinding(component_model, ident)) |binding| {
+                    try deps.appendUnique(allocator, ident);
+                    if (binding.callable and !containsName(call_trail, ident)) {
+                        try collectCallableBindingDeps(component_model, binding, deps, allocator, call_trail);
+                    }
+                    continue;
+                }
+            }
+            if (isVisibleBinding(component_model, ident) or containsName(loop_locals, ident)) {
+                try deps.appendUnique(allocator, ident);
+            }
+        }
+        return;
+    }
+
     var i: usize = 0;
     while (i < expr.len) {
         const ch = expr[i];
