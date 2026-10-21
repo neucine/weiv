@@ -172,6 +172,16 @@ fn validateFrameworkBindings(
                 allocator,
             );
         }
+        if (std.mem.eql(u8, binding.name, "weivUpdate")) {
+            try appendDiagnostic(
+                diagnostics,
+                "framework.reserved_binding",
+                "weivUpdate",
+                "`weivUpdate` is provided by Weiv for external callback updates; do not declare a binding with this name",
+                .{ .start = binding.span_start, .end = binding.span_end },
+                allocator,
+            );
+        }
     }
 }
 

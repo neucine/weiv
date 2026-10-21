@@ -2,85 +2,9 @@ const std = @import("std");
 const browser_render_tree = @import("../../render_tree/index.zig");
 const lir = @import("../../../../lower/lir.zig");
 const component = @import("../../../../component_unit.zig");
-const sir = @import("../../../../sema/sir.zig");
-const tracked_root = @import("../../../../sema/tracked_root.zig");
+const region_graph = @import("../../region_graph.zig");
 const common = @import("common.zig");
 const script_backend = @import("../../../../../ffi/script_backend.zig");
-
-const TrackedRoot = struct {
-    id: usize,
-    binding_name: []const u8,
-    kind: []const u8,
-};
-
-const TrackedPath = struct {
-    id: usize,
-    root_id: usize,
-    path: []const u8,
-    parent_path_id: ?usize,
-};
-
-const TrackedGraphBuilder = struct {
-    allocator: std.mem.Allocator,
-    component_model: *const component.ComponentUnit,
-    roots: std.ArrayList(TrackedRoot) = .empty,
-    paths: std.ArrayList(TrackedPath) = .empty,
-    region_paths: std.ArrayList(std.ArrayList(usize)) = .empty,
-
-    fn deinit(self: *TrackedGraphBuilder) void {
-        self.roots.deinit(self.allocator);
-        self.paths.deinit(self.allocator);
-        for (self.region_paths.items) |*items| items.deinit(self.allocator);
-        self.region_paths.deinit(self.allocator);
-    }
-
-    fn ensureRoot(self: *TrackedGraphBuilder, binding_name: []const u8, kind: []const u8) !usize {
-        for (self.roots.items) |root| {
-            if (std.mem.eql(u8, root.binding_name, binding_name)) return root.id;
-        }
-        const id = self.roots.items.len + 1;
-        try self.roots.append(self.allocator, .{ .id = id, .binding_name = binding_name, .kind = kind });
-        return id;
-    }
-
-    fn findPathId(self: *const TrackedGraphBuilder, path: []const u8) ?usize {
-        for (self.paths.items) |tracked_path| {
-            if (std.mem.eql(u8, tracked_path.path, path)) return tracked_path.id;
-        }
-        return null;
-    }
-
-    fn ensurePathChain(self: *TrackedGraphBuilder, full_path: []const u8) !usize {
-        if (self.findPathId(full_path)) |id| return id;
-        const first_dot = std.mem.indexOfScalar(u8, full_path, '.') orelse return error.InvalidTrackedPath;
-        const root_name = full_path[0..first_dot];
-        const kind = tracked_root.kindByName(self.component_model, root_name) orelse return error.InvalidTrackedPath;
-        const root_id = try self.ensureRoot(root_name, kind.label());
-
-        var parent_path_id: ?usize = null;
-        var search_from: usize = 0;
-        while (true) {
-            const maybe_dot = std.mem.indexOfScalarPos(u8, full_path, search_from, '.');
-            const end_index = maybe_dot orelse full_path.len;
-            const prefix = full_path[0..end_index];
-            const path_id = if (self.findPathId(prefix)) |existing|
-                existing
-            else blk: {
-                const new_id = self.paths.items.len + 1;
-                try self.paths.append(self.allocator, .{
-                    .id = new_id,
-                    .root_id = root_id,
-                    .path = prefix,
-                    .parent_path_id = parent_path_id,
-                });
-                break :blk new_id;
-            };
-            parent_path_id = path_id;
-            if (maybe_dot == null) return path_id;
-            search_from = end_index + 1;
-        }
-    }
-};
 
 pub fn emitCreateFunction(
     render_tree: browser_render_tree.Document,
@@ -345,25 +269,8 @@ pub fn emitUpdateFunction(
     );
 }
 
-pub fn emitTrackedStateGraphMetadata(
-    component_model: *const component.ComponentUnit,
-    render_tree: browser_render_tree.Document,
-    out: *std.ArrayList(u8),
-    allocator: std.mem.Allocator,
-) !void {
-    var builder = TrackedGraphBuilder{ .allocator = allocator, .component_model = component_model };
-    defer builder.deinit();
-
-    try builder.region_paths.ensureTotalCapacity(allocator, countRegions(render_tree.nodes));
-    try collectTrackedGraphForNodes(component_model, render_tree.nodes, &builder, allocator);
-
-    try out.appendSlice(allocator, "export const trackedStateGraph = ");
-    try emitTrackedStateGraphObject(&builder, out, allocator);
-    try out.appendSlice(allocator, ";\n");
-}
-
 pub fn emitSelectiveUpdateFunction(
-    component_model: *const component.ComponentUnit,
+    graph: *const region_graph.Graph,
     render_tree: browser_render_tree.Document,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
@@ -373,6 +280,7 @@ pub fn emitSelectiveUpdateFunction(
         \\  const refs = instance.refs;
         \\  const normalizedDirtyState = normalizeDirtyState(dirtyState);
         \\  const dirtySet = new Set(normalizedDirtyState.bindings);
+        \\  const preciseBindingSet = new Set(normalizedDirtyState.preciseBindings);
         \\  const dirtyPathSet = new Set(normalizedDirtyState.paths);
         \\  const dirtyRegionSet = new Set();
         \\  if (dirtyPathSet.size > 0 && trackedStateGraph && Array.isArray(trackedStateGraph.regions)) {
@@ -390,8 +298,9 @@ pub fn emitSelectiveUpdateFunction(
     );
     var next_region_id: usize = 1;
     for (render_tree.nodes) |node| {
-        try emitSelectiveUpdateNode(component_model, node, out, allocator, 1, "scope", "refs", &.{}, &next_region_id);
+        try emitSelectiveUpdateNode(graph, node, out, allocator, 1, "scope", "refs", &next_region_id);
     }
+    if (next_region_id != graph.regions.items.len + 1) return error.RegionGraphMismatch;
     try out.appendSlice(allocator,
         \\}
         \\
@@ -469,195 +378,6 @@ fn emitRegionUpdateFunctionsForNode(
             }
         },
     }
-}
-
-fn emitTrackedStateGraphObject(
-    builder: *const TrackedGraphBuilder,
-    out: *std.ArrayList(u8),
-    allocator: std.mem.Allocator,
-) !void {
-    try out.appendSlice(allocator, "{ roots: [");
-    for (builder.roots.items, 0..) |root, idx| {
-        if (idx > 0) try out.appendSlice(allocator, ", ");
-        try out.print(allocator, "{{ rootId: {d}, bindingName: ", .{root.id});
-        try common.emitString(root.binding_name, out, allocator);
-        try out.appendSlice(allocator, ", kind: \"");
-        try out.appendSlice(allocator, root.kind);
-        try out.appendSlice(allocator, "\" }");
-    }
-    try out.appendSlice(allocator, "], paths: [");
-    for (builder.paths.items, 0..) |path, idx| {
-        if (idx > 0) try out.appendSlice(allocator, ", ");
-        try out.print(allocator, "{{ pathId: {d}, rootId: {d}, path: ", .{ path.id, path.root_id });
-        try common.emitString(path.path, out, allocator);
-        if (path.parent_path_id) |parent_id| {
-            try out.print(allocator, ", parentPathId: {d} }}", .{parent_id});
-        } else {
-            try out.appendSlice(allocator, ", parentPathId: null }");
-        }
-    }
-    try out.appendSlice(allocator, "], regions: [");
-    var wrote_region = false;
-    for (builder.region_paths.items, 0..) |region_paths, idx| {
-        if (region_paths.items.len == 0) continue;
-        if (wrote_region) try out.appendSlice(allocator, ", ");
-        try out.print(allocator, "{{ regionId: {d}, trackedPathIds: [", .{idx + 1});
-        for (region_paths.items, 0..) |path_id, path_idx| {
-            if (path_idx > 0) try out.appendSlice(allocator, ", ");
-            try out.print(allocator, "{d}", .{path_id});
-        }
-        try out.appendSlice(allocator, "] }");
-        wrote_region = true;
-    }
-    try out.appendSlice(allocator, "] }");
-}
-
-fn collectTrackedGraphForNodes(
-    component_model: *const component.ComponentUnit,
-    nodes: []const browser_render_tree.Node,
-    builder: *TrackedGraphBuilder,
-    allocator: std.mem.Allocator,
-) !void {
-    for (nodes) |node| {
-        switch (node) {
-            .text => {},
-            .interpolation => |interp| try appendRegionTrackedPaths(component_model, interp.expression, builder, allocator),
-            .element => |element| {
-                for (element.bind_effects) |effect| {
-                    switch (effect) {
-                        .bind => |bind| try appendRegionTrackedPaths(component_model, bind.expression, builder, allocator),
-                        .event => {},
-                    }
-                }
-                try collectTrackedGraphForNodes(component_model, element.children, builder, allocator);
-            },
-            .conditional => |conditional| {
-                try appendRegionTrackedPaths(component_model, conditional.condition, builder, allocator);
-            },
-            .for_loop => |for_loop| {
-                try appendRegionTrackedPaths(component_model, for_loop.iterable_expr, builder, allocator);
-            },
-            .component => |component_node| {
-                var paths = std.ArrayList(usize).empty;
-                errdefer paths.deinit(allocator);
-                for (component_node.bind_effects) |effect| {
-                    switch (effect) {
-                        .bind => |bind| try collectTrackedPathIds(component_model, bind.expression, &paths, builder, allocator),
-                        .event => {},
-                    }
-                }
-                for (component_node.event_effects) |effect| {
-                    switch (effect) {
-                        .bind => |bind| try collectTrackedPathIds(component_model, bind.expression, &paths, builder, allocator),
-                        .event => |event| try collectTrackedPathIds(component_model, event.expression, &paths, builder, allocator),
-                    }
-                }
-                try builder.region_paths.append(allocator, paths);
-            },
-            .slot_outlet => {
-                try builder.region_paths.append(allocator, std.ArrayList(usize).empty);
-            },
-        }
-    }
-}
-
-fn appendRegionTrackedPaths(
-    component_model: *const component.ComponentUnit,
-    expr: []const u8,
-    builder: *TrackedGraphBuilder,
-    allocator: std.mem.Allocator,
-) !void {
-    var paths = std.ArrayList(usize).empty;
-    errdefer paths.deinit(allocator);
-    try collectTrackedPathIds(component_model, expr, &paths, builder, allocator);
-    try builder.region_paths.append(allocator, paths);
-}
-
-fn collectTrackedPathIds(
-    component_model: *const component.ComponentUnit,
-    expr: []const u8,
-    path_ids: *std.ArrayList(usize),
-    builder: *TrackedGraphBuilder,
-    allocator: std.mem.Allocator,
-) !void {
-    var i: usize = 0;
-    while (i < expr.len) {
-        const ch = expr[i];
-        if (!isIdentStart(ch)) {
-            i += 1;
-            continue;
-        }
-
-        const root_start = i;
-        i += 1;
-        while (i < expr.len and isIdentContinue(expr[i])) i += 1;
-        const root_name = expr[root_start..i];
-
-        if (isKeyword(root_name)) continue;
-        if (isPropertyAccessExpr(expr, root_start)) continue;
-        if (tracked_root.kindByName(component_model, root_name) == null) continue;
-
-        var cursor = i;
-        var segment_count: usize = 0;
-        var leaf_end = i;
-
-        while (true) {
-            const dot_index = nextNonSpaceIndex(expr, cursor) orelse break;
-            if (expr[dot_index] != '.') break;
-
-            var segment_start = dot_index + 1;
-            while (segment_start < expr.len and isWhitespace(expr[segment_start])) segment_start += 1;
-            if (segment_start >= expr.len or !isIdentStart(expr[segment_start])) break;
-
-            var segment_end = segment_start + 1;
-            while (segment_end < expr.len and isIdentContinue(expr[segment_end])) segment_end += 1;
-
-            const call_index = nextNonSpaceIndex(expr, segment_end);
-            if (call_index != null and expr[call_index.?] == '(') break;
-
-            segment_count += 1;
-            leaf_end = segment_end;
-            cursor = segment_end;
-        }
-
-        if (segment_count == 0) continue;
-
-        const full_path = std.mem.trimEnd(u8, expr[root_start..leaf_end], " \t\r\n");
-        const leaf_path_id = try builder.ensurePathChain(full_path);
-        try appendUniqueUsize(allocator, path_ids, leaf_path_id);
-    }
-}
-
-fn countRegions(nodes: []const browser_render_tree.Node) usize {
-    var total: usize = 0;
-    for (nodes) |node| {
-        switch (node) {
-            .text => {},
-            .interpolation => total += 1,
-            .element => |element| {
-                for (element.bind_effects) |effect| {
-                    switch (effect) {
-                        .bind => total += 1,
-                        .event => {},
-                    }
-                }
-                total += countRegions(element.children);
-            },
-            .conditional => {
-                total += 1;
-            },
-            .for_loop => {
-                total += 1;
-            },
-            .component => {
-                total += 1;
-            },
-            .slot_outlet => {
-                total += 1;
-            },
-        }
-    }
-    return total;
 }
 
 fn emitTextRegionUpdateFunction(
@@ -745,42 +465,33 @@ fn emitSlotRegionUpdateFunction(
 }
 
 fn emitSelectiveUpdateNode(
-    component_model: *const component.ComponentUnit,
+    graph: *const region_graph.Graph,
     node: browser_render_tree.Node,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
     indent: usize,
     scope_expr: []const u8,
     refs_expr: []const u8,
-    loop_locals: []const []const u8,
     next_region_id: *usize,
 ) !void {
     switch (node) {
         .text => {},
         .interpolation => |interp| {
-            var deps = DepList{};
-            defer deps.deinit(allocator);
-            try collectExpressionDeps(component_model, interp.expression, loop_locals, &deps, allocator);
-            retainVisibleBindingDeps(component_model, &deps);
-            const region_id = next_region_id.*;
-            next_region_id.* += 1;
-            try emitSelectiveStep(indent, deps.items.items, region_id, out, allocator);
+            const region = try consumeRegion(graph, next_region_id, "text", interp.ref_id);
+            const region_id = region.id;
+            try emitSelectiveStep(indent, region.dependency_names.items, region.precise_import_name, region_id, out, allocator);
             try out.print(allocator, "updateRegion_text_{d}(instance, {s}, {s});\n", .{ interp.ref_id, scope_expr, refs_expr });
-            if (deps.items.items.len > 0 or region_id > 0) {
+            if (region.dependency_names.items.len > 0 or region_id > 0) {
                 try common.writeIndent(indent, out, allocator);
                 try out.appendSlice(allocator, "}\n");
             }
         },
         .slot_outlet => |slot_outlet| {
-            var deps = DepList{};
-            defer deps.deinit(allocator);
-            try collectNodeDeps(component_model, node, loop_locals, &deps, allocator);
-            retainVisibleBindingDeps(component_model, &deps);
-            const region_id = next_region_id.*;
-            next_region_id.* += 1;
-            try emitSelectiveStep(indent, deps.items.items, region_id, out, allocator);
+            const region = try consumeRegion(graph, next_region_id, "slot", slot_outlet.handle_ref_id);
+            const region_id = region.id;
+            try emitSelectiveStep(indent, region.dependency_names.items, region.precise_import_name, region_id, out, allocator);
             try out.print(allocator, "updateRegion_slot_{d}(instance, {s}, {s});\n", .{ slot_outlet.handle_ref_id, scope_expr, refs_expr });
-            if (deps.items.items.len > 0 or region_id > 0) {
+            if (region.dependency_names.items.len > 0 or region_id > 0) {
                 try common.writeIndent(indent, out, allocator);
                 try out.appendSlice(allocator, "}\n");
             }
@@ -789,22 +500,18 @@ fn emitSelectiveUpdateNode(
             for (element.bind_effects) |effect| {
                 switch (effect) {
                     .bind => |bind_dir| {
-                        var deps = DepList{};
-                        defer deps.deinit(allocator);
-                        try collectExpressionDeps(component_model, bind_dir.expression, loop_locals, &deps, allocator);
-                        retainVisibleBindingDeps(component_model, &deps);
+                        const region = try consumeRegion(graph, next_region_id, "attribute", element.ref_id);
                         const suffix = try sanitizedIdentifierFragment(bind_dir.target_name, allocator);
                         defer allocator.free(suffix);
-                        const region_id = next_region_id.*;
-                        next_region_id.* += 1;
-                        try emitSelectiveStep(indent, deps.items.items, region_id, out, allocator);
+                        const region_id = region.id;
+                        try emitSelectiveStep(indent, region.dependency_names.items, region.precise_import_name, region_id, out, allocator);
                         try out.print(allocator, "updateRegion_attribute_{d}_{s}(instance, {s}, {s});\n", .{
                             element.ref_id,
                             suffix,
                             scope_expr,
                             refs_expr,
                         });
-                        if (deps.items.items.len > 0 or region_id > 0) {
+                        if (region.dependency_names.items.len > 0 or region_id > 0) {
                             try common.writeIndent(indent, out, allocator);
                             try out.appendSlice(allocator, "}\n");
                         }
@@ -813,47 +520,35 @@ fn emitSelectiveUpdateNode(
                 }
             }
             for (element.children) |child| {
-                try emitSelectiveUpdateNode(component_model, child, out, allocator, indent, scope_expr, refs_expr, loop_locals, next_region_id);
+                try emitSelectiveUpdateNode(graph, child, out, allocator, indent, scope_expr, refs_expr, next_region_id);
             }
         },
         .conditional => |conditional| {
-            var deps = DepList{};
-            defer deps.deinit(allocator);
-            try collectNodeDeps(component_model, node, loop_locals, &deps, allocator);
-            retainVisibleBindingDeps(component_model, &deps);
-            const region_id = next_region_id.*;
-            next_region_id.* += 1;
-            try emitSelectiveStep(indent, deps.items.items, region_id, out, allocator);
+            const region = try consumeRegion(graph, next_region_id, "conditional", conditional.state_ref_id);
+            const region_id = region.id;
+            try emitSelectiveStep(indent, region.dependency_names.items, region.precise_import_name, region_id, out, allocator);
             try out.print(allocator, "updateRegion_conditional_{d}(instance, {s}, {s});\n", .{ conditional.start_ref_id, scope_expr, refs_expr });
-            if (deps.items.items.len > 0 or region_id > 0) {
+            if (region.dependency_names.items.len > 0 or region_id > 0) {
                 try common.writeIndent(indent, out, allocator);
                 try out.appendSlice(allocator, "}\n");
             }
         },
         .component => |component_node| {
-            var deps = DepList{};
-            defer deps.deinit(allocator);
-            try collectNodeDeps(component_model, node, loop_locals, &deps, allocator);
-            retainVisibleBindingDeps(component_model, &deps);
-            const region_id = next_region_id.*;
-            next_region_id.* += 1;
-            try emitSelectiveStep(indent, deps.items.items, region_id, out, allocator);
+            const region = try consumeRegion(graph, next_region_id, "child", component_node.handle_ref_id);
+            const region_id = region.id;
+            try emitSelectiveStep(indent, region.dependency_names.items, region.precise_import_name, region_id, out, allocator);
             try out.print(allocator, "updateRegion_child_{d}(instance, {s}, {s});\n", .{ component_node.handle_ref_id, scope_expr, refs_expr });
-            if (deps.items.items.len > 0 or region_id > 0) {
+            if (region.dependency_names.items.len > 0 or region_id > 0) {
                 try common.writeIndent(indent, out, allocator);
                 try out.appendSlice(allocator, "}\n");
             }
         },
         .for_loop => |for_loop| {
-            var deps = DepList{};
-            defer deps.deinit(allocator);
-            try collectNodeDeps(component_model, node, loop_locals, &deps, allocator);
-            retainVisibleBindingDeps(component_model, &deps);
-            const region_id = next_region_id.*;
-            next_region_id.* += 1;
-            try emitSelectiveStep(indent, deps.items.items, region_id, out, allocator);
+            const region = try consumeRegion(graph, next_region_id, "loop", for_loop.state_ref_id);
+            const region_id = region.id;
+            try emitSelectiveStep(indent, region.dependency_names.items, region.precise_import_name, region_id, out, allocator);
             try out.print(allocator, "updateRegion_loop_{d}(instance, {s}, {s});\n", .{ for_loop.start_ref_id, scope_expr, refs_expr });
-            if (deps.items.items.len > 0 or region_id > 0) {
+            if (region.dependency_names.items.len > 0 or region_id > 0) {
                 try common.writeIndent(indent, out, allocator);
                 try out.appendSlice(allocator, "}\n");
             }
@@ -861,22 +556,15 @@ fn emitSelectiveUpdateNode(
     }
 }
 
-const DepList = struct {
-    items: std.ArrayList([]const u8) = .empty,
+fn consumeRegion(graph: *const region_graph.Graph, next_region_id: *usize, kind: []const u8, ref_id: usize) !*const region_graph.Region {
+    if (next_region_id.* == 0 or next_region_id.* > graph.regions.items.len) return error.RegionGraphMismatch;
+    const region = graph.region(next_region_id.*);
+    if (!std.mem.eql(u8, region.kind, kind) or region.ref_id != ref_id) return error.RegionGraphMismatch;
+    next_region_id.* += 1;
+    return region;
+}
 
-    fn deinit(self: *DepList, allocator: std.mem.Allocator) void {
-        self.items.deinit(allocator);
-    }
-
-    fn appendUnique(self: *DepList, allocator: std.mem.Allocator, name: []const u8) !void {
-        for (self.items.items) |item| {
-            if (std.mem.eql(u8, item, name)) return;
-        }
-        try self.items.append(allocator, name);
-    }
-};
-
-fn emitSelectiveStep(indent: usize, deps: []const []const u8, region_id: usize, out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void {
+fn emitSelectiveStep(indent: usize, deps: []const []const u8, precise_import_name: ?[]const u8, region_id: usize, out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void {
     if (deps.len == 0 and region_id == 0) return;
     try common.writeIndent(indent, out, allocator);
     try out.appendSlice(allocator, "if (");
@@ -887,6 +575,13 @@ fn emitSelectiveStep(indent: usize, deps: []const []const u8, region_id: usize, 
         try out.appendSlice(allocator, "dirtySet.has(");
         try common.emitString(dep, out, allocator);
         try out.appendSlice(allocator, ")");
+        if (precise_import_name) |name| {
+            if (std.mem.eql(u8, name, dep)) {
+                try out.appendSlice(allocator, " && !preciseBindingSet.has(");
+                try common.emitString(dep, out, allocator);
+                try out.appendSlice(allocator, ")");
+            }
+        }
         wrote_clause = true;
     }
     if (region_id != 0) {
@@ -897,162 +592,10 @@ fn emitSelectiveStep(indent: usize, deps: []const []const u8, region_id: usize, 
     try common.writeIndent(indent + 1, out, allocator);
 }
 
-fn collectNodeDeps(
-    component_model: *const component.ComponentUnit,
-    node: browser_render_tree.Node,
-    loop_locals: []const []const u8,
-    deps: *DepList,
-    allocator: std.mem.Allocator,
-) !void {
-    switch (node) {
-        .text => {},
-        .interpolation => |interp| try collectExpressionDeps(component_model, interp.expression, loop_locals, deps, allocator),
-        .element => |element| {
-            for (element.bind_effects) |effect| {
-                switch (effect) {
-                    .bind => |bind_dir| try collectExpressionDeps(component_model, bind_dir.expression, loop_locals, deps, allocator),
-                    .event => {},
-                }
-            }
-            for (element.children) |child| {
-                try collectNodeDeps(component_model, child, loop_locals, deps, allocator);
-            }
-        },
-        .conditional => |conditional| {
-            try collectExpressionDeps(component_model, conditional.condition, loop_locals, deps, allocator);
-            for (conditional.consequent) |child| {
-                try collectNodeDeps(component_model, child, loop_locals, deps, allocator);
-            }
-            for (conditional.alternate) |child| {
-                try collectNodeDeps(component_model, child, loop_locals, deps, allocator);
-            }
-        },
-        .for_loop => |for_loop| {
-            try collectExpressionDeps(component_model, for_loop.iterable_expr, loop_locals, deps, allocator);
-            var next_locals = std.ArrayList([]const u8).empty;
-            defer next_locals.deinit(allocator);
-            try next_locals.appendSlice(allocator, loop_locals);
-            try next_locals.append(allocator, for_loop.item_name);
-            for (for_loop.body) |child| {
-                try collectNodeDeps(component_model, child, next_locals.items, deps, allocator);
-            }
-        },
-        .component => |component_node| {
-            for (component_node.bind_effects) |effect| {
-                switch (effect) {
-                    .bind => |bind_dir| try collectExpressionDeps(component_model, bind_dir.expression, loop_locals, deps, allocator),
-                    .event => |event_dir| try collectExpressionDeps(component_model, event_dir.expression, loop_locals, deps, allocator),
-                }
-            }
-            for (component_node.event_effects) |effect| {
-                switch (effect) {
-                    .bind => |bind_dir| try collectExpressionDeps(component_model, bind_dir.expression, loop_locals, deps, allocator),
-                    .event => |event_dir| try collectExpressionDeps(component_model, event_dir.expression, loop_locals, deps, allocator),
-                }
-            }
-            for (component_node.slot_provisions) |slot| {
-                for (slot.children) |child| {
-                    try collectNodeDeps(component_model, child, loop_locals, deps, allocator);
-                }
-            }
-        },
-        .slot_outlet => |slot_outlet| {
-            for (slot_outlet.fallback_children) |child| {
-                try collectNodeDeps(component_model, child, loop_locals, deps, allocator);
-            }
-        },
-    }
-}
-
-fn collectExpressionDeps(
-    component_model: *const component.ComponentUnit,
-    expr: []const u8,
-    loop_locals: []const []const u8,
-    deps: *DepList,
-    allocator: std.mem.Allocator,
-) anyerror!void {
-    try collectExpressionDepsWithTrail(component_model, expr, loop_locals, deps, allocator, &.{});
-}
-
-fn collectExpressionDepsWithTrail(
-    component_model: *const component.ComponentUnit,
-    expr: []const u8,
-    loop_locals: []const []const u8,
-    deps: *DepList,
-    allocator: std.mem.Allocator,
-    call_trail: []const []const u8,
-) anyerror!void {
-    var i: usize = 0;
-    while (i < expr.len) {
-        const ch = expr[i];
-        if (!isIdentStart(ch)) {
-            i += 1;
-            continue;
-        }
-
-        const start = i;
-        i += 1;
-        while (i < expr.len and isIdentContinue(expr[i])) i += 1;
-        const ident = expr[start..i];
-        const call = nextNonSpaceIs(expr, i, '(');
-
-        if (isKeyword(ident)) continue;
-        if (isPropertyAccessExpr(expr, start)) continue;
-        if (call and tracked_root.isImportedBinding(component_model, ident)) continue;
-
-        if (call) {
-            if (findVisibleBinding(component_model, ident)) |binding| {
-                try deps.appendUnique(allocator, ident);
-                if (binding.callable and !containsName(call_trail, ident)) {
-                    try collectCallableBindingDeps(component_model, binding, deps, allocator, call_trail);
-                }
-                continue;
-            }
-        }
-
-        if (isVisibleBinding(component_model, ident) or containsName(loop_locals, ident)) {
-            try deps.appendUnique(allocator, ident);
-        }
-    }
-}
-
-fn isVisibleBinding(component_model: *const component.ComponentUnit, name: []const u8) bool {
-    return findVisibleBinding(component_model, name) != null;
-}
-
-fn findVisibleBinding(
-    component_model: *const component.ComponentUnit,
-    name: []const u8,
-) ?sir.ScriptBinding {
-    for (component_model.script.bindings) |binding| {
-        if (binding.template_visible and std.mem.eql(u8, binding.name, name)) return binding;
-    }
-    return null;
-}
-
-fn retainVisibleBindingDeps(component_model: *const component.ComponentUnit, deps: *DepList) void {
-    var write_index: usize = 0;
-    for (deps.items.items) |dep| {
-        if (!isVisibleBinding(component_model, dep)) continue;
-        deps.items.items[write_index] = dep;
-        write_index += 1;
-    }
-    deps.items.items.len = write_index;
-}
-
 fn nextNonSpaceIs(expr: []const u8, start: usize, needle: u8) bool {
     var cursor = start;
     while (cursor < expr.len and isWhitespace(expr[cursor])) cursor += 1;
     return cursor < expr.len and expr[cursor] == needle;
-}
-
-fn nextNonSpaceIndex(expr: []const u8, start: usize) ?usize {
-    var cursor = start;
-    while (cursor < expr.len) : (cursor += 1) {
-        if (isWhitespace(expr[cursor])) continue;
-        return cursor;
-    }
-    return null;
 }
 
 fn isPropertyAccessExpr(expr: []const u8, ident_start: usize) bool {
@@ -1093,52 +636,6 @@ fn isIdentContinue(ch: u8) bool {
 
 fn isWhitespace(ch: u8) bool {
     return ch == ' ' or ch == '\n' or ch == '\r' or ch == '\t';
-}
-
-fn appendUniqueUsize(allocator: std.mem.Allocator, list: *std.ArrayList(usize), value: usize) !void {
-    for (list.items) |item| {
-        if (item == value) return;
-    }
-    try list.append(allocator, value);
-}
-
-fn collectCallableBindingDeps(
-    component_model: *const component.ComponentUnit,
-    binding: sir.ScriptBinding,
-    deps: *DepList,
-    allocator: std.mem.Allocator,
-    call_trail: []const []const u8,
-) anyerror!void {
-    const helper = findHelperFacts(component_model, binding.name) orelse return;
-
-    var next_trail = std.ArrayList([]const u8).empty;
-    defer next_trail.deinit(allocator);
-    try next_trail.appendSlice(allocator, call_trail);
-    try next_trail.append(allocator, binding.name);
-
-    for (helper.reads) |name| {
-        try deps.appendUnique(allocator, name);
-    }
-
-    for (helper.calls) |name| {
-        try deps.appendUnique(allocator, name);
-        if (containsName(next_trail.items, name)) continue;
-        if (findVisibleBinding(component_model, name)) |next_binding| {
-            if (next_binding.callable) {
-                try collectCallableBindingDeps(component_model, next_binding, deps, allocator, next_trail.items);
-            }
-        }
-    }
-}
-
-fn findHelperFacts(
-    component_model: *const component.ComponentUnit,
-    name: []const u8,
-) ?sir.HelperFacts {
-    for (component_model.script.state_facts.helpers) |helper| {
-        if (std.mem.eql(u8, helper.name, name)) return helper;
-    }
-    return null;
 }
 
 pub fn emitDestroyFunction(

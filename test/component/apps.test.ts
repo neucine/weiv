@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   FakeDocument,
+  FakeTextNode,
   byClass,
   byTag,
   byTagAndClass,
@@ -146,10 +147,16 @@ test("imported observable shared state wakes component updates", async () => {
 
 export const shared = observable({
   count: 1,
+  label: "steady",
+  items: ["first"],
 });
+export const sharedAlias = shared;
 
 export function incrementShared() {
   shared.count += 1;
+}
+export function appendShared() {
+  shared.items.push("second");
 }
 `,
       "utf8",
@@ -159,12 +166,18 @@ export function incrementShared() {
       `<template>
   <section class="shared-observable-app">
     <p class="count">{{ shared.count }}</p>
+    <p class="alias-count">{{ sharedAlias.count }}</p>
+    <p class="label">{{ shared.label }}</p>
+    <p class="item-count">{{ shared.items.length }}</p>
+    <p class="unrelated">{{ local }}</p>
     <button class="increment" on:click="incrementShared">Increment shared</button>
+    <button class="append" on:click="appendShared">Append shared</button>
   </section>
 </template>
 
 <script lang="ts">
-  import { incrementShared, shared } from "./shared.ts";
+  import { appendShared, incrementShared, shared, sharedAlias } from "./shared.ts";
+  let local = "stable";
 </script>
 `,
       "utf8",
@@ -185,6 +198,33 @@ export function incrementShared() {
     if (!count || count.textContent.trim() !== "1") {
       throw new Error("Observable app did not render initial shared count");
     }
+    const aliasCount = findElement(fakeDocument.body, byClass("alias-count"));
+    if (!aliasCount || aliasCount.textContent.trim() !== "1") {
+      throw new Error("Observable app did not render initial aliased count");
+    }
+
+    const unrelated = findElement(fakeDocument.body, byClass("unrelated"));
+    const unrelatedText = unrelated?.childNodes[0];
+    if (!(unrelatedText instanceof FakeTextNode) || unrelatedText.data !== "stable") {
+      throw new Error("Observable app did not render the unrelated binding");
+    }
+    const label = findElement(fakeDocument.body, byClass("label"));
+    const labelText = label?.childNodes[0];
+    if (!(labelText instanceof FakeTextNode) || labelText.data !== "steady") {
+      throw new Error("Observable app did not render the sibling property");
+    }
+    let labelReads = 0;
+    let labelData = labelText.data;
+    Object.defineProperty(labelText, "data", {
+      get() { labelReads += 1; return labelData; },
+      set(value: string) { labelData = value; },
+    });
+    let unrelatedReads = 0;
+    let unrelatedData = unrelatedText.data;
+    Object.defineProperty(unrelatedText, "data", {
+      get() { unrelatedReads += 1; return unrelatedData; },
+      set(value: string) { unrelatedData = value; },
+    });
 
     const incrementButton = findElement(fakeDocument.body, byClass("increment"));
     if (!incrementButton) {
@@ -196,6 +236,25 @@ export function incrementShared() {
 
     if (count.textContent.trim() !== "2") {
       throw new Error(`Observable app did not refresh after shared mutation, found ${count.textContent.trim()}`);
+    }
+    if (aliasCount.textContent.trim() !== "2") {
+      throw new Error(`Observable alias did not refresh after shared mutation, found ${aliasCount.textContent.trim()}`);
+    }
+    if (unrelatedReads !== 0) {
+      throw new Error(`Shared mutation revisited an unrelated binding ${unrelatedReads} times`);
+    }
+    if (labelReads !== 0) {
+      throw new Error(`Shared count mutation revisited a sibling property ${labelReads} times`);
+    }
+    const appendButton = findElement(fakeDocument.body, byClass("append"));
+    const itemCount = findElement(fakeDocument.body, byClass("item-count"));
+    if (!appendButton || !itemCount || itemCount.textContent.trim() !== "1") {
+      throw new Error("Observable app did not render the array length");
+    }
+    click(appendButton);
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    if (itemCount.textContent.trim() !== "2") {
+      throw new Error(`Array index write did not update direct length binding: ${itemCount.textContent.trim()}`);
     }
     if (appTarget.replaceChildrenCalls !== 1) {
       throw new Error("Observable app rerendered the root instead of patching in place");

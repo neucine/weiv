@@ -2,6 +2,8 @@ const std = @import("std");
 const browser_component = @import("../component.zig");
 const helpers = @import("js_module/helpers.zig");
 const node_codegen = @import("js_module/node_codegen.zig");
+const tracked_graph = @import("js_module/tracked_graph.zig");
+const region_graph = @import("../region_graph.zig");
 
 pub fn emitModule(component: *const browser_component.BrowserComponent, allocator: std.mem.Allocator) ![]u8 {
     const model = component.unit;
@@ -17,7 +19,9 @@ pub fn emitModule(component: *const browser_component.BrowserComponent, allocato
     try @import("js_module/common.zig").emitString(component.css, &body, allocator);
     try body.appendSlice(allocator, ";\n\n");
 
-    try node_codegen.emitTrackedStateGraphMetadata(model, render_tree, &body, allocator);
+    var runtime_graph = try region_graph.build(model, &render_tree, allocator);
+    defer runtime_graph.deinit();
+    try tracked_graph.emitTrackedStateGraphMetadata(&runtime_graph, &body, allocator);
     try body.appendSlice(allocator, "\n");
     try node_codegen.emitCreateFunction(render_tree, component.scope_id, &body, allocator);
     try body.appendSlice(allocator, "\n");
@@ -25,7 +29,7 @@ pub fn emitModule(component: *const browser_component.BrowserComponent, allocato
     try body.appendSlice(allocator, "\n");
     try node_codegen.emitUpdateFunction(render_tree, &body, allocator);
     try body.appendSlice(allocator, "\n");
-    try node_codegen.emitSelectiveUpdateFunction(model, render_tree, &body, allocator);
+    try node_codegen.emitSelectiveUpdateFunction(&runtime_graph, render_tree, &body, allocator);
     try body.appendSlice(allocator, "\n");
     try node_codegen.emitDestroyFunction(render_tree, &body, allocator);
     try body.appendSlice(allocator,

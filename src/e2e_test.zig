@@ -439,8 +439,8 @@ test "direct browser module emits tracked state graph metadata for imported nest
     try std.testing.expect(std.mem.indexOf(u8, js, "__weiv_scheduleTrackedFlush();") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtyPathSet.size > 0 && trackedStateGraph && Array.isArray(trackedStateGraph.regions)) {") != null);
     try std.testing.expect(std.mem.indexOf(u8, js, "dirtyRegionSet.add(region.regionId);") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"workspace\") || dirtyRegionSet.has(1)) {") != null);
-    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"workspace\") || dirtyRegionSet.has(2)) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"workspace\") && !preciseBindingSet.has(\"workspace\") || dirtyRegionSet.has(1)) {") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "if (dirtySet.has(\"workspace\") && !preciseBindingSet.has(\"workspace\") || dirtyRegionSet.has(2)) {") != null);
 }
 
 test "direct browser module emits tracked state graph metadata for prop nested paths" {
@@ -727,6 +727,9 @@ test "invalidation graph formatter inventories tracked imported nested paths" {
     try std.testing.expect(std.mem.indexOf(u8, formatted, "tracked-paths\n  path id=1 root=1 path=workspace\n  path id=2 root=1 path=workspace.sidebar parent=1\n  path id=3 root=1 path=workspace.sidebar.collapsed parent=2\n  path id=4 root=1 path=workspace.currentProject parent=1\n  path id=5 root=1 path=workspace.currentProject.name parent=4\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=workspace.sidebar.collapsed eval=direct deps=[workspace] tracked_paths=[3]") != null);
     try std.testing.expect(std.mem.indexOf(u8, formatted, "expr=workspace.currentProject.name eval=direct deps=[workspace] tracked_paths=[5]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "runtime-regions\n  #1 text ref=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "deps=[workspace] tracked_paths=[3]\n  #2 text ref=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "deps=[workspace] tracked_paths=[5]\ntracked-roots") != null);
 }
 
 test "invalidation graph formatter inventories tracked prop nested paths" {
@@ -2791,6 +2794,28 @@ test "user-defined emit binding reports framework conflict diagnostic" {
     try std.testing.expect(std.mem.indexOf(u8, diagnostic.message, "`emit` is provided by Weiv") != null);
 }
 
+test "user-defined weivUpdate binding reports framework conflict diagnostic" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template><p>{{ count }}</p></template>
+        \\<script lang="ts">
+        \\  export interface Props {}
+        \\  export let props: Props;
+        \\  let count = 0;
+        \\  const weivUpdate = (callback: () => void) => callback();
+        \\</script>
+    ;
+
+    var model = try compiler_compile.compile(source, "test/examples/framework-update-conflict.weiv", allocator);
+    defer model.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), model.template_bindings.diagnostics.len);
+    const diagnostic = model.template_bindings.diagnostics[0];
+    try std.testing.expectEqualStrings("error", diagnostic.severity);
+    try std.testing.expectEqualStrings("framework.reserved_binding", diagnostic.kind);
+    try std.testing.expectEqualStrings("weivUpdate", diagnostic.name);
+}
+
 test "template helper with external reads reports conservative diagnostic" {
     const allocator = std.testing.allocator;
     const source =
@@ -2909,6 +2934,28 @@ test "unowned callback mutation reports conservative diagnostic" {
     try std.testing.expectEqualStrings("callback.unowned_mutation", diagnostic.kind);
     try std.testing.expectEqualStrings("count", diagnostic.name);
     try std.testing.expect(std.mem.indexOf(u8, diagnostic.message, "callback boundary that Weiv does not own") != null);
+}
+
+test "external listeners require an explicit owned update boundary" {
+    const allocator = std.testing.allocator;
+    const source = try readFixture(allocator, "test/examples/basic/external-callback.weiv");
+    defer allocator.free(source);
+
+    var model = try compiler_compile.compile(source, "test/examples/basic/external-callback.weiv", allocator);
+    defer model.deinit(allocator);
+
+    var unowned_count: usize = 0;
+    for (model.template_bindings.diagnostics) |diagnostic| {
+        if (std.mem.eql(u8, diagnostic.kind, "callback.unowned_mutation")) unowned_count += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 1), unowned_count);
+
+    var render_tree = try browser_render_tree.lower(&model.lir_document, allocator);
+    defer render_tree.deinit(allocator);
+    const formatted = try invalidation_graph.formatDocument(&model, &render_tree, allocator);
+    defer allocator.free(formatted);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "callback callee=window.addEventListener kind=inline_arrow owned_candidate=false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, formatted, "callback callee=weivUpdate kind=inline_arrow owned_candidate=true") != null);
 }
 
 test "alias mutation reports conservative diagnostic" {

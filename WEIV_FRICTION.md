@@ -1,8 +1,43 @@
 # Weiv integration friction
 
-This report records friction found while building the interactive Roam, Muse,
-and Hearth demos with Weiv. It is prepared as product feedback; no external
-issue has been submitted.
+This report records reproducible Weiv integration and tooling friction. No
+external issue has been submitted.
+
+## External event listener ownership (2026-10-21)
+
+- **Classification:** confirmed compiler analysis defect, fixed in current source.
+- **Context:** `.weiv` component with local state, macOS arm64, Zig 0.16.0,
+  Bun 1.2.16, Weiv checkout based on `8470b95`.
+- **Reproduction:** in a component script, register
+  `window.addEventListener("change", () => { count += 1; })` and render
+  `{{ count }}`. Dispatch the event after mounting.
+- **Expected:** the analyzer marks this callback unowned or the runtime wraps
+  it so the text updates.
+- **Actual:** the Rust analyzer marked every `.addEventListener` callback as
+  owned, while the generated component did not wrap script-registered listeners.
+  The DOM kept the prior count after dispatch. There was no build error output.
+- **Fix and workaround:** the analyzer now marks these listeners unowned.
+  Place the mutation inside `weivUpdate(() => { count += 1; })` to flush it.
+  A DOM regression and analyzer test cover both behaviors.
+
+## Compiler toolchain selection (2026-10-21)
+
+- **Classification:** tooling and documentation gap, not a confirmed compiler defect.
+- **Context:** checking a browser backend file-organization refactor at the
+  current checkout. macOS arm64, Bun 1.2.16, Homebrew Zig 0.17.0 on `PATH`.
+- **Reproduction:** run `zig build test` from the repository root with Zig
+  0.17.0. `bun test test/inspect` reaches the same build error because its
+  tests invoke the compiler through `zig build`.
+- **Expected:** the repository states or selects the Zig version needed to
+  build it, and the documented test command uses that version.
+- **Actual:** `build.zig:51:11: error: no field named 'args' in struct 'Build'`
+  (`/opt/homebrew/Cellar/zig/0.17.0/lib/zig/std/Build.zig:1:1: note: struct declared here`).
+- **Workaround:** install Homebrew `zig@0.16` and run
+  `PATH=/opt/homebrew/opt/zig@0.16/bin:$PATH zig build test`. This passed.
+  The mismatch is reproducible; no Weiv source change is needed for this refactor.
+
+The following sections record friction found while building the interactive
+Roam, Muse, and Hearth demos with Weiv.
 
 ## Environment
 

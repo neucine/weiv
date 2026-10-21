@@ -143,6 +143,9 @@ Public docs live at [weiv.dev](https://weiv.dev).
 
 ## Contributor Commands
 
+Use Zig 0.16 for the compiler commands below. Zig 0.17 is not yet compatible
+with this repository's `build.zig`.
+
 ```bash
 zig build test
 zig build component-test

@@ -24,9 +24,10 @@
 
 ## Should-Have (v1 quality bar)
 
-- [ ] Dependency precision — tighter dirty-region guards, reduce unnecessary updates
-- [ ] Observable-to-region mapping — shared state wakes specific regions, not whole component
-- [ ] IDE `emit` typing — virtual declarations from `export interface Emits`
+- [ ] Dependency precision — direct imported observable member paths are selective; extend safe precision to compound expressions and dynamic access
+- [x] Observable-to-region mapping — shared state wakes regions depending on the imported binding, not the whole component
+- [x] IDE `emit` typing — sibling VS Code extension supplies virtual TypeScript declarations from `export interface Emits`
+- [x] IDE `weivUpdate` typing — sibling VS Code extension supplies a virtual generic helper declaration
 
 ## Bundler Integration
 

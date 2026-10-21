@@ -19,6 +19,10 @@ Semantics:
 - nested objects are wrapped lazily on read
 - repeated reads return stable nested proxy identities
 - sync writes are batched into one microtask notification wave
+- subscribers receive a set of changed property paths relative to the value
+  they subscribed to; symbol-keyed writes report an unknown path (`null`)
+- components importing an observable use those paths to update direct member
+  bindings precisely; complex expressions still invalidate by imported binding
 - nested writes notify both the nested node and its parent chain
 - replacing or deleting a nested object detaches the old child from the former
   parent chain

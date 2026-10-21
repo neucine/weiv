@@ -43,6 +43,21 @@ test("observable notifies nested and root subscribers for nested mutation", asyn
   expect(nestedCalls).toBe(1);
 });
 
+test("observable reports batched property paths to root and nested subscribers", async () => {
+  const state = observable({ detail: { status: "open", label: "draft" }, other: 0 });
+  let rootPaths: ReadonlySet<string> | null = null;
+  let nestedPaths: ReadonlySet<string> | null = null;
+  subscribe(state, (paths) => { rootPaths = paths; });
+  subscribe(state.detail, (paths) => { nestedPaths = paths; });
+
+  state.detail.status = "done";
+  state.other = 1;
+  await new Promise((resolve) => queueMicrotask(resolve));
+
+  expect([...rootPaths!].sort()).toEqual(["detail.status", "other"]);
+  expect([...nestedPaths!]).toEqual(["status"]);
+});
+
 test("snapshot returns a frozen plain view of current state", () => {
   const state = observable({
     count: 2,
@@ -74,6 +89,17 @@ test("array mutations notify subscribers", async () => {
 
   await new Promise((resolve) => queueMicrotask(resolve));
   expect(calls).toBe(1);
+});
+
+test("array index writes report length as a dependent path", async () => {
+  const state = observable({ items: ["a"] });
+  let paths: ReadonlySet<string> | null = null;
+  subscribe(state, (changed) => { paths = changed; });
+
+  state.items.push("b");
+  await new Promise((resolve) => queueMicrotask(resolve));
+
+  expect(paths?.has("items.length")).toBe(true);
 });
 
 test("observable preserves nested proxy identity across repeated reads", () => {

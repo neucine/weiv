@@ -47,6 +47,26 @@ test("basic counter works with jsdom real DOM", async () => {
   }
 });
 
+test("external callbacks update through the explicit Weiv boundary", async () => {
+  const modules = await loadModules({
+    "ExternalCallback.mjs": emitDirectBrowserModule("test/examples/basic/external-callback.weiv"),
+  });
+  const { document: doc, window: win } = installJsdom();
+  (globalThis as any).window = win;
+  const target = doc.createElement("div");
+  doc.body.appendChild(target);
+
+  modules["ExternalCallback.mjs"].mount(target, {});
+  const count = target.querySelector(".count");
+  if (count?.textContent?.trim() !== "0") throw new Error("External callback fixture did not render initial state");
+
+  win.dispatchEvent(new win.Event("weiv-unowned"));
+  if (count.textContent?.trim() !== "0") throw new Error("Unowned callback unexpectedly flushed local state");
+
+  win.dispatchEvent(new win.Event("weiv-owned"));
+  if (count.textContent?.trim() !== "2") throw new Error(`Explicit update boundary did not flush local state: ${count.textContent}`);
+});
+
 test("conditional toggle works with jsdom real DOM", async () => {
   const modules = await loadModules({
     "ConditionalToggle.mjs": emitDirectBrowserModule("test/examples/basic/conditional-toggle.weiv"),

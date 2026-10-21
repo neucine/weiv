@@ -1,9 +1,9 @@
-type Listener = () => void;
+type Listener = (paths: ReadonlySet<string> | null) => void;
 
 const WEIV_OBSERVABLE = Symbol.for("weiv.observable");
 
 type RootState = {
-  pending: Set<NodeState>;
+  pending: Map<NodeState, Set<string> | null>;
   scheduled: boolean;
 };
 
@@ -12,7 +12,7 @@ type NodeState = {
   target: object;
   proxy: object;
   listeners: Set<Listener>;
-  parents: Set<NodeState>;
+  parents: Map<NodeState, Set<string>>;
 };
 
 const rawToNode = new WeakMap<object, NodeState>();
@@ -54,53 +54,77 @@ function scheduleFlush(root: RootState) {
     const notifying = Array.from(root.pending);
     root.pending.clear();
 
-    for (const node of notifying) {
+    for (const [node, paths] of notifying) {
       for (const listener of node.listeners) {
-        listener();
+        listener(paths);
       }
     }
   });
 }
 
-function linkParent(child: NodeState, parent: NodeState) {
-  child.parents.add(parent);
+function linkParent(child: NodeState, parent: NodeState, key: PropertyKey) {
+  if (typeof key === "symbol") return;
+  let keys = child.parents.get(parent);
+  if (!keys) child.parents.set(parent, (keys = new Set()));
+  keys.add(String(key));
 }
 
-function unlinkParent(child: NodeState, parent: NodeState) {
-  child.parents.delete(parent);
+function unlinkParent(child: NodeState, parent: NodeState, key: PropertyKey) {
+  const keys = child.parents.get(parent);
+  keys?.delete(String(key));
+  if (keys?.size === 0) child.parents.delete(parent);
 }
 
-function unlinkRemovedChildren(previous: unknown, next: unknown, parent: NodeState) {
+function unlinkRemovedChildren(previous: unknown, next: unknown, parent: NodeState, key: PropertyKey) {
   if (!isObject(previous)) return;
   if (Object.is(previous, next)) return;
 
   const previousNode = rawToNode.get(previous);
   if (!previousNode) return;
 
-  unlinkParent(previousNode, parent);
+  unlinkParent(previousNode, parent, key);
 }
 
-function markChanged(node: NodeState) {
-  const queue = [node];
-  const seen = new Set<NodeState>();
-
+function markChanged(node: NodeState, key: PropertyKey) {
+  const touchedRoots = new Set<RootState>();
+  const queue: Array<{ node: NodeState; path: string | null; ancestors: Set<NodeState> }> = [
+    { node, path: typeof key === "symbol" ? null : String(key), ancestors: new Set([node]) },
+  ];
   while (queue.length > 0) {
     const current = queue.pop()!;
-    if (seen.has(current)) continue;
-    seen.add(current);
-    current.root.pending.add(current);
-    for (const parent of current.parents) {
-      queue.push(parent);
+    const pending = current.node.root.pending;
+    touchedRoots.add(current.node.root);
+    const existing = pending.get(current.node);
+    if (!pending.has(current.node)) {
+      pending.set(current.node, current.path === null ? null : new Set([current.path]));
+    } else if (current.path === null) {
+      pending.set(current.node, null);
+    } else {
+      existing?.add(current.path);
+    }
+    for (const [parent, keys] of current.node.parents) {
+      if (current.ancestors.has(parent)) {
+        parent.root.pending.set(parent, null);
+        touchedRoots.add(parent.root);
+        continue;
+      }
+      for (const parentKey of keys) {
+        queue.push({
+          node: parent,
+          path: current.path === null ? null : `${parentKey}.${current.path}`,
+          ancestors: new Set([...current.ancestors, parent]),
+        });
+      }
     }
   }
 
-  scheduleFlush(node.root);
+  for (const root of touchedRoots) scheduleFlush(root);
 }
 
-function ensureObservableNode(target: object, root: RootState, parent: NodeState | null): NodeState {
+function ensureObservableNode(target: object, root: RootState, parent: NodeState | null, key?: PropertyKey): NodeState {
   const existing = rawToNode.get(target);
   if (existing) {
-    if (parent) linkParent(existing, parent);
+    if (parent && key !== undefined) linkParent(existing, parent, key);
     return existing;
   }
 
@@ -109,32 +133,33 @@ function ensureObservableNode(target: object, root: RootState, parent: NodeState
     target,
     proxy: undefined as unknown as object,
     listeners: new Set(),
-    parents: new Set(),
+    parents: new Map(),
   };
-  if (parent) linkParent(node, parent);
+  if (parent && key !== undefined) linkParent(node, parent, key);
 
   const proxy = new Proxy(target, {
     get(currentTarget, prop, receiver) {
       const value = Reflect.get(currentTarget, prop, receiver);
       if (prop === WEIV_OBSERVABLE) return value;
       if (!isObject(value)) return value;
-      return ensureObservableNode(value, root, node).proxy;
+      return ensureObservableNode(value, root, node, prop).proxy;
     },
 
     set(currentTarget, prop, value, receiver) {
       const previous = Reflect.get(currentTarget, prop, receiver);
       const next = unwrapValue(value);
-      unlinkRemovedChildren(previous, next, node);
+      unlinkRemovedChildren(previous, next, node, prop);
 
       const updated = Reflect.set(currentTarget, prop, next, receiver);
       if (!updated) return false;
 
       if (isObject(next)) {
-        ensureObservableNode(next, root, node);
+        ensureObservableNode(next, root, node, prop);
       }
 
       if (!Object.is(previous, next)) {
-        markChanged(node);
+        markChanged(node, prop);
+        if (Array.isArray(currentTarget) && prop !== "length") markChanged(node, "length");
       }
       return true;
     },
@@ -144,8 +169,9 @@ function ensureObservableNode(target: object, root: RootState, parent: NodeState
       const hadKey = Reflect.has(currentTarget, prop);
       const updated = Reflect.deleteProperty(currentTarget, prop);
       if (updated && hadKey) {
-        unlinkRemovedChildren(previous, undefined, node);
-        markChanged(node);
+        unlinkRemovedChildren(previous, undefined, node, prop);
+        markChanged(node, prop);
+        if (Array.isArray(currentTarget) && prop !== "length") markChanged(node, "length");
       }
       return updated;
     },
@@ -165,7 +191,7 @@ export function observable<T extends object>(value: T): T {
   }
 
   const root: RootState = {
-    pending: new Set(),
+    pending: new Map(),
     scheduled: false,
   };
 

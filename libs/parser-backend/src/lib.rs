@@ -1450,8 +1450,11 @@ fn is_known_mutating_call_name(callee_name: &str) -> bool {
 
 fn is_owned_callback_callee(callee: &Expression<'_>, source: &str) -> bool {
     match callee_name(callee, source).as_deref() {
-        Some("setTimeout") | Some("setInterval") | Some("queueMicrotask") | Some("requestAnimationFrame") => true,
-        Some(name) if name.ends_with(".addEventListener") => true,
+        Some("setTimeout")
+        | Some("setInterval")
+        | Some("queueMicrotask")
+        | Some("requestAnimationFrame")
+        | Some("weivUpdate") => true,
         _ => false,
     }
 }

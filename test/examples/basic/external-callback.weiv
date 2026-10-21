@@ -1,0 +1,19 @@
+<template>
+  <section class="external-callback">
+    <p class="count">{{ count }}</p>
+  </section>
+</template>
+
+<script lang="ts">
+  let count = 0;
+
+  window.addEventListener("weiv-unowned", () => {
+    count += 1;
+  });
+
+  window.addEventListener("weiv-owned", () => {
+    weivUpdate(() => {
+      count += 1;
+    });
+  });
+</script>

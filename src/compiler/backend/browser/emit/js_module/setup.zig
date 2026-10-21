@@ -12,6 +12,7 @@ pub fn buildSetupCode(model: *const component.ComponentUnit, allocator: std.mem.
         \\  let props = __weiv_props;
         \\  let __weiv_handlers = __weiv_event_handlers;
         \\  let __weiv_runBoundary = (callback) => callback();
+        \\  const weivUpdate = (callback) => __weiv_runBoundary(callback);
         \\  const __weiv_wrapCallback = (callback) => {
         \\    if (typeof callback !== "function") {
         \\      return callback;
@@ -112,18 +113,35 @@ pub fn buildSetupCode(model: *const component.ComponentUnit, allocator: std.mem.
     try out.appendSlice(allocator, "  function __weiv_setBoundaryRunner(nextRunner) {\n    __weiv_runBoundary = nextRunner;\n  }\n");
     try out.appendSlice(allocator, "  function __weiv_subscribeImportedObservables(instance) {\n");
     try out.appendSlice(allocator, "    const __weiv_unsubscribes = [];\n");
-    try out.appendSlice(allocator, "    const __weiv_seen = new Set();\n");
-    try out.appendSlice(allocator, "    const __weiv_register = (value) => {\n");
+    try out.appendSlice(allocator, "    const __weiv_seen = new Map();\n");
+    try out.appendSlice(allocator, "    const __weiv_register = (bindingName, value) => {\n");
     try out.appendSlice(allocator, "      const __weiv_node = __weiv_getObservableNode(value);\n");
-    try out.appendSlice(allocator, "      if (!__weiv_node || __weiv_seen.has(__weiv_node) || !__weiv_node.listeners || typeof __weiv_node.listeners.add !== \"function\") {\n");
+    try out.appendSlice(allocator, "      if (!__weiv_node || !__weiv_node.listeners || typeof __weiv_node.listeners.add !== \"function\") {\n");
     try out.appendSlice(allocator, "        return;\n");
     try out.appendSlice(allocator, "      }\n");
-    try out.appendSlice(allocator, "      __weiv_seen.add(__weiv_node);\n");
-    try out.appendSlice(allocator, "      const __weiv_listener = () => {\n");
+    try out.appendSlice(allocator, "      const __weiv_existingNames = __weiv_seen.get(__weiv_node);\n");
+    try out.appendSlice(allocator, "      if (__weiv_existingNames) { __weiv_existingNames.add(bindingName); return; }\n");
+    try out.appendSlice(allocator, "      const __weiv_bindingNames = new Set([bindingName]);\n");
+    try out.appendSlice(allocator, "      __weiv_seen.set(__weiv_node, __weiv_bindingNames);\n");
+    try out.appendSlice(allocator, "      const __weiv_listener = (changedPaths) => {\n");
     try out.appendSlice(allocator, "        if (instance.destroyed) {\n");
     try out.appendSlice(allocator, "          return;\n");
     try out.appendSlice(allocator, "        }\n");
-    try out.appendSlice(allocator, "        if (typeof instance.update === \"function\") {\n");
+    try out.appendSlice(allocator, "        if (typeof instance.updateDirty === \"function\") {\n");
+    try out.appendSlice(allocator, "          const __weiv_preciseNames = changedPaths instanceof Set ? Array.from(__weiv_bindingNames) : [];\n");
+    try out.appendSlice(allocator, "          const __weiv_dirtyPaths = new Set();\n");
+    try out.appendSlice(allocator, "          if (__weiv_preciseNames.length > 0 && trackedStateGraph && Array.isArray(trackedStateGraph.paths)) {\n");
+    try out.appendSlice(allocator, "            for (const __weiv_name of __weiv_preciseNames) {\n");
+    try out.appendSlice(allocator, "              for (const __weiv_changedPath of changedPaths) {\n");
+    try out.appendSlice(allocator, "                const __weiv_fullPath = `${__weiv_name}.${__weiv_changedPath}`;\n");
+    try out.appendSlice(allocator, "                for (const __weiv_record of trackedStateGraph.paths) {\n");
+    try out.appendSlice(allocator, "                  if (__weiv_record.path === __weiv_fullPath || __weiv_record.path.startsWith(`${__weiv_fullPath}.`) || __weiv_fullPath.startsWith(`${__weiv_record.path}.`)) __weiv_dirtyPaths.add(__weiv_record.pathId);\n");
+    try out.appendSlice(allocator, "                }\n");
+    try out.appendSlice(allocator, "              }\n");
+    try out.appendSlice(allocator, "            }\n");
+    try out.appendSlice(allocator, "          }\n");
+    try out.appendSlice(allocator, "          instance.updateDirty({ bindings: Array.from(__weiv_bindingNames), paths: Array.from(__weiv_dirtyPaths), preciseBindings: __weiv_preciseNames }, instance.refresh());\n");
+    try out.appendSlice(allocator, "        } else if (typeof instance.update === \"function\") {\n");
     try out.appendSlice(allocator, "          instance.update();\n");
     try out.appendSlice(allocator, "        }\n");
     try out.appendSlice(allocator, "      };\n");
@@ -133,7 +151,7 @@ pub fn buildSetupCode(model: *const component.ComponentUnit, allocator: std.mem.
     for (model.script.imports) |import_record| {
         if (import_record.local_name.len == 0) continue;
         if (std.mem.endsWith(u8, import_record.source, ".weiv")) continue;
-        try out.print(allocator, "    __weiv_register({s});\n", .{import_record.local_name});
+        try out.print(allocator, "    __weiv_register(\"{s}\", {s});\n", .{ import_record.local_name, import_record.local_name });
     }
     try out.appendSlice(allocator, "    return () => {\n");
     try out.appendSlice(allocator, "      for (const __weiv_unsubscribe of __weiv_unsubscribes) {\n");

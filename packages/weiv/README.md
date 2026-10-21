@@ -56,6 +56,30 @@ You can build normal components without any `weiv:*` imports.
 
 Use `weiv:*` imports only when you need shared state or routing.
 
+### Updates from external callbacks
+
+Weiv owns template event handlers and callbacks passed to the locally wrapped
+`setTimeout`, `setInterval`, `queueMicrotask`, and `requestAnimationFrame`.
+Callbacks registered with another API, such as `window.addEventListener` or an
+external store, need an explicit update boundary when they change local state:
+
+```html
+<script lang="ts">
+  let count = 0;
+
+  window.addEventListener("message", () => {
+    weivUpdate(() => {
+      count += 1;
+    });
+  });
+</script>
+```
+
+`weivUpdate` is provided inside each component script and runs the callback
+immediately. It flushes changed bindings afterward and again when a returned
+Promise settles. Clean up external subscriptions when their lifetime should
+end; `weivUpdate` handles updates, not listener disposal.
+
 ### DOM bindings and input state
 
 Weiv directives always begin with a symbol:

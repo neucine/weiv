@@ -38,6 +38,16 @@ source .weiv
   `css_scoped/` emits scoped CSS, and `app/` builds whole app bundles. App
   bundles additionally use an app graph to collect component and runtime
   dependencies.
+- `backend/browser/emit/js_module/tracked_graph.zig` builds tracked-path
+  metadata embedded in browser modules from the shared runtime graph.
+  `node_codegen.zig` emits DOM creation and update code from that graph.
+- `backend/browser/tracked_paths.zig` owns tracked root/path discovery and ID
+  assignment. Browser emission and graph inspection both use this table;
+  neither should implement its own tracked-path scanner.
+- `backend/browser/dependencies.zig` analyzes the static dependencies used by
+  runtime update guards. `backend/browser/region_graph.zig` combines these
+  dependencies with tracked paths and owns runtime region IDs. Build this graph
+  once per browser module, then pass it to the metadata and DOM emitters.
 - `compile.zig` is the compile-unit coordinator for one `.weiv` component. It
   orchestrates stages but does not own AST, SIR, LIR, render-tree, or emit
   rules.
@@ -50,6 +60,32 @@ component orchestration belongs in `compile.zig`; target-specific output belongs
 under `backend/<target>/`; representation formatters belong in `inspect/`. If
 code does not clearly belong to a phase, target, compile-unit coordinator, or
 formatter, keep it at the top level of `compiler/`.
+
+## Reactivity Ownership
+
+- `sema/` identifies script bindings, template references, mutations, and
+  callback ownership. It reports cases that cannot be tracked precisely.
+  External registrations are unowned unless their mutation is enclosed in
+  the component-provided `weivUpdate` boundary.
+- `lower/` preserves those decisions in target-neutral nodes and effects.
+- `backend/browser/` decides which DOM regions depend on those values and
+  emits their update operations. Browser-specific proxy and scheduler code
+  belongs here, not in semantic analysis. The browser setup supplies
+  `weivUpdate` as a component-scoped function for external callbacks.
+- `packages/weiv/src/runtime/observable.ts` provides explicitly shared state.
+  Its public `observable` and `subscribe` API is separate from compiler-owned
+  local state tracking. Generated browser modules bridge imported observables
+  into selective updates by their imported binding names. Aliases of the same
+  observable share one listener and invalidate each matching binding name.
+- `inspect/invalidation_graph.zig` explains the analyzed graph. Its
+  `runtime-regions` section reads the same browser graph as code generation.
+  Its existing `regions` section also displays nested explanatory nodes that
+  are not independent runtime update regions. Keep that distinction explicit.
+
+Imported observable notifications include changed property paths. Direct member
+expressions such as `shared.count` use those paths to select individual regions.
+Expressions involving calls or operators keep the imported-binding fallback.
+Compiler-tracked local paths also select individual nested paths.
 
 ## CLI Stage Output
 

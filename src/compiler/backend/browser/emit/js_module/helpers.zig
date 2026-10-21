@@ -83,14 +83,15 @@ pub fn emitPrelude(out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void 
         \\
         \\function normalizeDirtyState(dirtyState) {
         \\  if (Array.isArray(dirtyState)) {
-        \\    return { bindings: dirtyState, paths: [] };
+        \\    return { bindings: dirtyState, paths: [], preciseBindings: [] };
         \\  }
         \\  if (!dirtyState || typeof dirtyState !== "object") {
-        \\    return { bindings: [], paths: [] };
+        \\    return { bindings: [], paths: [], preciseBindings: [] };
         \\  }
         \\  return {
         \\    bindings: Array.isArray(dirtyState.bindings) ? dirtyState.bindings : [],
         \\    paths: Array.isArray(dirtyState.paths) ? dirtyState.paths : [],
+        \\    preciseBindings: Array.isArray(dirtyState.preciseBindings) ? dirtyState.preciseBindings : [],
         \\  };
         \\}
         \\

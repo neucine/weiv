@@ -3,6 +3,8 @@ const browser_render_tree = @import("../backend/browser/render_tree/index.zig");
 const component_unit = @import("../component_unit.zig");
 const sir = @import("../sema/sir.zig");
 const tracked_root = @import("../sema/tracked_root.zig");
+const tracked_paths = @import("../backend/browser/tracked_paths.zig");
+const region_graph = @import("../backend/browser/region_graph.zig");
 
 const DepList = struct {
     items: std.ArrayList([]const u8) = .empty,
@@ -48,50 +50,27 @@ const Diagnostic = struct {
     reason: ?[]const u8 = null,
 };
 
-const TrackedRoot = struct {
-    id: usize,
-    binding_name: []const u8,
-    kind: []const u8,
-
-    fn deinit(self: *TrackedRoot, allocator: std.mem.Allocator) void {
-        allocator.free(self.binding_name);
-        allocator.free(self.kind);
-    }
-};
-
-const TrackedPath = struct {
-    id: usize,
-    root_id: usize,
-    path: []const u8,
-    parent_path_id: ?usize,
-
-    fn deinit(self: *TrackedPath, allocator: std.mem.Allocator) void {
-        allocator.free(self.path);
-    }
-};
-
 const Formatter = struct {
     component: *const component_unit.ComponentUnit,
     out: *std.ArrayList(u8),
     allocator: std.mem.Allocator,
     next_region_id: usize = 1,
     diagnostics: std.ArrayList(Diagnostic) = .empty,
-    tracked_roots: std.ArrayList(TrackedRoot) = .empty,
-    tracked_paths: std.ArrayList(TrackedPath) = .empty,
+    tracked_table: tracked_paths.Table,
+    runtime_graph: *const region_graph.Graph,
 
     fn deinit(self: *Formatter) void {
         self.diagnostics.deinit(self.allocator);
-        for (self.tracked_roots.items) |*root| root.deinit(self.allocator);
-        self.tracked_roots.deinit(self.allocator);
-        for (self.tracked_paths.items) |*path| path.deinit(self.allocator);
-        self.tracked_paths.deinit(self.allocator);
+        self.tracked_table.deinit();
     }
 
     fn format(self: *Formatter, render_tree: *const browser_render_tree.Document) !void {
         try self.out.print(self.allocator, "invalidation-graph source={s}\n", .{self.component.source_path});
         try self.out.appendSlice(self.allocator, "regions\n");
         try self.formatNodes(render_tree.nodes, 1, &.{});
-        if (self.tracked_roots.items.len > 0) {
+        try self.out.appendSlice(self.allocator, "runtime-regions\n");
+        try self.formatRuntimeRegions();
+        if (self.tracked_table.roots.items.len > 0) {
             try self.out.appendSlice(self.allocator, "tracked-roots\n");
             try self.formatTrackedRoots();
             try self.out.appendSlice(self.allocator, "tracked-paths\n");
@@ -244,8 +223,8 @@ const Formatter = struct {
             const absolute_offset = self.component.sfc_document.script.content_span.start + mutation.span_start;
 
             if (self.findAliasTarget(mutation.binding)) |target| {
-                if (self.isVisibleBinding(target) or self.findTrackedRoot(target) != null) {
-                    if (self.findTrackedRoot(target) != null) {
+                if (self.isVisibleBinding(target) or self.tracked_table.findRoot(target) != null) {
+                    if (self.tracked_table.findRoot(target) != null) {
                         try self.diagnostics.append(self.allocator, .{
                             .severity = .warning,
                             .kind = .escape_warning,
@@ -266,7 +245,7 @@ const Formatter = struct {
                 continue;
             }
 
-            if (!self.isVisibleBinding(mutation.binding) and self.findTrackedRoot(mutation.binding) == null) continue;
+            if (!self.isVisibleBinding(mutation.binding) and self.tracked_table.findRoot(mutation.binding) == null) continue;
 
             if (!mutation.statement_position) {
                 try self.diagnostics.append(self.allocator, .{
@@ -279,7 +258,7 @@ const Formatter = struct {
             }
 
             if (mutation.inside_callback and !mutation.callback_owned_candidate) {
-                if (self.findTrackedRoot(mutation.binding) != null) {
+                if (self.tracked_table.findRoot(mutation.binding) != null) {
                     try self.diagnostics.append(self.allocator, .{
                         .severity = .warning,
                         .kind = .escape_warning,
@@ -324,7 +303,7 @@ const Formatter = struct {
     }
 
     fn formatTrackedRoots(self: *Formatter) !void {
-        for (self.tracked_roots.items) |root| {
+        for (self.tracked_table.roots.items) |root| {
             try self.writeIndent(1);
             try self.out.print(self.allocator, "root id={d} binding={s} kind={s}\n", .{
                 root.id,
@@ -334,8 +313,27 @@ const Formatter = struct {
         }
     }
 
+    fn formatRuntimeRegions(self: *Formatter) !void {
+        for (self.runtime_graph.regions.items) |region| {
+            try self.writeIndent(1);
+            try self.out.print(self.allocator, "#{d} {s} ref={d}", .{ region.id, region.kind, region.ref_id });
+            if (region.name) |name| try self.out.print(self.allocator, " name={s}", .{name});
+            try self.out.appendSlice(self.allocator, " deps=[");
+            for (region.dependency_names.items, 0..) |dep, idx| {
+                if (idx > 0) try self.out.appendSlice(self.allocator, ",");
+                try self.out.appendSlice(self.allocator, dep);
+            }
+            try self.out.appendSlice(self.allocator, "] tracked_paths=[");
+            for (region.tracked_path_ids.items, 0..) |id, idx| {
+                if (idx > 0) try self.out.appendSlice(self.allocator, ",");
+                try self.out.print(self.allocator, "{d}", .{id});
+            }
+            try self.out.appendSlice(self.allocator, "]\n");
+        }
+    }
+
     fn formatTrackedPaths(self: *Formatter) !void {
-        for (self.tracked_paths.items) |path| {
+        for (self.tracked_table.paths.items) |path| {
             try self.writeIndent(1);
             try self.out.print(self.allocator, "path id={d} root={d} path={s}", .{
                 path.id,
@@ -355,7 +353,7 @@ const Formatter = struct {
         try self.collectExpressionDeps(expr, loop_locals, &deps);
         var tracked_path_ids = std.ArrayList(usize).empty;
         defer tracked_path_ids.deinit(self.allocator);
-        try self.collectTrackedPathIds(expr, &tracked_path_ids);
+        try self.tracked_table.collectExpressionIds(expr, &tracked_path_ids);
         try self.writeRegionLine(indent, kind, ref_id, null, expr, deps.items.items, tracked_path_ids.items);
     }
 
@@ -373,7 +371,7 @@ const Formatter = struct {
         try self.collectExpressionDeps(expr, loop_locals, &deps);
         var tracked_path_ids = std.ArrayList(usize).empty;
         defer tracked_path_ids.deinit(self.allocator);
-        try self.collectTrackedPathIds(expr, &tracked_path_ids);
+        try self.tracked_table.collectExpressionIds(expr, &tracked_path_ids);
         try self.writeRegionLine(indent, kind, ref_id, name, expr, deps.items.items, tracked_path_ids.items);
     }
 
@@ -515,117 +513,6 @@ const Formatter = struct {
         }
     }
 
-    fn collectTrackedPathIds(self: *Formatter, expr: []const u8, path_ids: *std.ArrayList(usize)) !void {
-        var i: usize = 0;
-        while (i < expr.len) {
-            const ch = expr[i];
-            if (!isIdentStart(ch)) {
-                i += 1;
-                continue;
-            }
-
-            const root_start = i;
-            i += 1;
-            while (i < expr.len and isIdentContinue(expr[i])) i += 1;
-            const root_name = expr[root_start..i];
-
-            if (isKeyword(root_name)) continue;
-            if (isPropertyAccess(expr, root_start)) continue;
-            if (tracked_root.kindByName(self.component, root_name) == null) continue;
-
-            var cursor = i;
-            var segment_count: usize = 0;
-            var leaf_end = i;
-
-            while (true) {
-                const dot_index = nextNonSpaceIndex(expr, cursor) orelse break;
-                if (expr[dot_index] != '.') break;
-
-                var segment_start = dot_index + 1;
-                while (segment_start < expr.len and isWhitespace(expr[segment_start])) segment_start += 1;
-                if (segment_start >= expr.len or !isIdentStart(expr[segment_start])) break;
-
-                var segment_end = segment_start + 1;
-                while (segment_end < expr.len and isIdentContinue(expr[segment_end])) segment_end += 1;
-
-                const call_index = nextNonSpaceIndex(expr, segment_end);
-                if (call_index != null and expr[call_index.?] == '(') break;
-
-                segment_count += 1;
-                leaf_end = segment_end;
-                cursor = segment_end;
-            }
-
-            if (segment_count == 0) continue;
-
-            const full_path = std.mem.trimEnd(u8, expr[root_start..leaf_end], " \t\r\n");
-            const leaf_path_id = try self.ensureTrackedPathChain(full_path);
-            try appendUniqueUsize(self.allocator, path_ids, leaf_path_id);
-        }
-    }
-
-    fn ensureTrackedRoot(self: *Formatter, binding_name: []const u8, kind: []const u8) !usize {
-        for (self.tracked_roots.items) |root| {
-            if (std.mem.eql(u8, root.binding_name, binding_name)) return root.id;
-        }
-
-        const id = self.tracked_roots.items.len + 1;
-        try self.tracked_roots.append(self.allocator, .{
-            .id = id,
-            .binding_name = try self.allocator.dupe(u8, binding_name),
-            .kind = try self.allocator.dupe(u8, kind),
-        });
-        return id;
-    }
-
-    fn findTrackedPathId(self: *const Formatter, path: []const u8) ?usize {
-        for (self.tracked_paths.items) |tracked_path| {
-            if (std.mem.eql(u8, tracked_path.path, path)) return tracked_path.id;
-        }
-        return null;
-    }
-
-    fn findTrackedRoot(self: *const Formatter, binding_name: []const u8) ?TrackedRoot {
-        for (self.tracked_roots.items) |root| {
-            if (std.mem.eql(u8, root.binding_name, binding_name)) return root;
-        }
-        return null;
-    }
-
-    fn ensureTrackedPathChain(self: *Formatter, full_path: []const u8) !usize {
-        if (self.findTrackedPathId(full_path)) |existing| return existing;
-
-        const first_dot = std.mem.indexOfScalar(u8, full_path, '.') orelse return error.InvalidTrackedPath;
-        const root_name = full_path[0..first_dot];
-        const kind = tracked_root.kindByName(self.component, root_name) orelse return error.InvalidTrackedPath;
-        const root_id = try self.ensureTrackedRoot(root_name, kind.label());
-
-        var parent_path_id: ?usize = null;
-        var search_from: usize = 0;
-        while (true) {
-            const maybe_dot = std.mem.indexOfScalarPos(u8, full_path, search_from, '.');
-            const end_index = maybe_dot orelse full_path.len;
-            const prefix = full_path[0..end_index];
-
-            const path_id = if (self.findTrackedPathId(prefix)) |existing|
-                existing
-            else blk: {
-                const new_id = self.tracked_paths.items.len + 1;
-                try self.tracked_paths.append(self.allocator, .{
-                    .id = new_id,
-                    .root_id = root_id,
-                    .path = try self.allocator.dupe(u8, prefix),
-                    .parent_path_id = parent_path_id,
-                });
-                break :blk new_id;
-            };
-
-            parent_path_id = path_id;
-            if (maybe_dot == null) return path_id;
-            search_from = end_index + 1;
-        }
-    }
-
     fn isVisibleBinding(self: *const Formatter, name: []const u8) bool {
         return self.findVisibleBinding(name) != null;
     }
@@ -699,10 +586,15 @@ pub fn formatDocument(
     var out = std.ArrayList(u8).empty;
     defer out.deinit(allocator);
 
+    var runtime_graph = try region_graph.build(component, render_tree, allocator);
+    defer runtime_graph.deinit();
+
     var formatter = Formatter{
         .component = component,
         .out = &out,
         .allocator = allocator,
+        .tracked_table = tracked_paths.Table.init(component, allocator),
+        .runtime_graph = &runtime_graph,
     };
     defer formatter.deinit();
 
@@ -735,22 +627,6 @@ fn nextNonSpaceIs(expr: []const u8, idx: usize, expected: u8) bool {
         return expr[cursor] == expected;
     }
     return false;
-}
-
-fn nextNonSpaceIndex(expr: []const u8, idx: usize) ?usize {
-    var cursor = idx;
-    while (cursor < expr.len) : (cursor += 1) {
-        if (isWhitespace(expr[cursor])) continue;
-        return cursor;
-    }
-    return null;
-}
-
-fn appendUniqueUsize(allocator: std.mem.Allocator, list: *std.ArrayList(usize), value: usize) !void {
-    for (list.items) |item| {
-        if (item == value) return;
-    }
-    try list.append(allocator, value);
 }
 
 fn isKeyword(value: []const u8) bool {
