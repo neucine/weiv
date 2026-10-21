@@ -1,6 +1,6 @@
 const std = @import("std");
 const component = @import("../../component_unit.zig");
-const tracked_root = @import("../../sema/tracked_root.zig");
+const tracked_roots = @import("tracked_roots.zig");
 
 // Shared tracked-path inventory for browser code generation and inspection.
 // Slices in roots and paths borrow from the component or expression source.
@@ -55,7 +55,7 @@ pub const Table = struct {
 
             if (isKeyword(root_name)) continue;
             if (isPropertyAccessExpr(expr, root_start)) continue;
-            if (tracked_root.kindByName(self.component_model, root_name) == null) continue;
+            if (tracked_roots.kindByName(self.component_model, root_name) == null) continue;
 
             var cursor = i;
             var segment_count: usize = 0;
@@ -108,7 +108,7 @@ pub const Table = struct {
         if (self.findPathId(full_path)) |id| return id;
         const first_dot = std.mem.indexOfScalar(u8, full_path, '.') orelse return error.InvalidTrackedPath;
         const root_name = full_path[0..first_dot];
-        const kind = tracked_root.kindByName(self.component_model, root_name) orelse return error.InvalidTrackedPath;
+        const kind = tracked_roots.kindByName(self.component_model, root_name) orelse return error.InvalidTrackedPath;
         const root_id = try self.ensureRoot(root_name, kind.label());
 
         var parent_path_id: ?usize = null;

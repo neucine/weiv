@@ -2,7 +2,7 @@ const std = @import("std");
 const browser_render_tree = @import("render_tree/index.zig");
 const component = @import("../../component_unit.zig");
 const sir = @import("../../sema/sir.zig");
-const tracked_root = @import("../../sema/tracked_root.zig");
+const tracked_roots = @import("tracked_roots.zig");
 
 // Dependency analysis used by the browser runtime-region plan.
 pub const DepList = struct {
@@ -121,7 +121,7 @@ fn collectExpressionDepsWithTrail(
 
         if (isKeyword(ident)) continue;
         if (isPropertyAccessExpr(expr, start)) continue;
-        if (call and tracked_root.isImportedBinding(component_model, ident)) continue;
+        if (call and tracked_roots.isImportedBinding(component_model, ident)) continue;
 
         if (call) {
             if (findVisibleBinding(component_model, ident)) |binding| {

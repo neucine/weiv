@@ -6,7 +6,7 @@ it produces, following the same broad shape as the sibling Cyna compiler:
 ```text
 source .weiv
   -> parser: SFC document + template AST
-  -> sema: ScriptFacts + TemplateBindings + SIR
+  -> sema: SIR (ScriptFacts + TemplateBindings)
   -> lower: LIR
   -> ComponentUnit
   -> backend/browser: RenderTree + BrowserComponent
@@ -21,29 +21,35 @@ source .weiv
   section text at this layer so the parser owns structure, not TypeScript or CSS
   semantics.
 - `sema/` turns raw script text into `ScriptFacts`, binds template references
-  into `TemplateBindings`, and exposes all SIR model types from `sema/sir.zig`.
+  into `TemplateBindings`, and exposes those SIR model types from `sema/sir.zig`.
   Script parsing is delegated through the FFI script backend; semantic model
   names should use `ScriptFacts`, not the older "script analysis" wording.
 - `lower/` converts semantic/template data into LIR types in `lower/lir.zig`.
 - `component_unit.zig` owns `ComponentUnit` and `ComponentCompileReport`, the
   target-neutral bundle of phase outputs for one component. Target-neutral
-  compilation stops here.
+  compilation stops here. `ComponentCompileReport.takeUnit` transfers a
+  complete unit and clears the report's ownership of its phase outputs.
 - `backend/browser/render_tree/` lowers a `ComponentUnit` into a browser
   `RenderTree`. This is the browser backend representation, not a complete
   JavaScript module by itself.
 - `backend/browser/component.zig` owns `BrowserComponent`, the browser-specific
-  container that combines the render tree with the other facts required by
-  browser emitters.
+  lowering result. It holds the `ComponentUnit` reference and render tree;
+  generated source and CSS belong to emitters.
 - `backend/browser/emit/` owns browser output. `js_module/` emits component JS,
-  `css_scoped/` emits scoped CSS, and `app/` builds whole app bundles. App
-  bundles additionally use an app graph to collect component and runtime
-  dependencies.
-- `backend/browser/emit/js_module/tracked_graph.zig` builds tracked-path
-  metadata embedded in browser modules from the shared runtime graph.
-  `node_codegen.zig` emits DOM creation and update code from that graph.
-- `backend/browser/tracked_paths.zig` owns tracked root/path discovery and ID
-  assignment. Browser emission and graph inspection both use this table;
-  neither should implement its own tracked-path scanner.
+  `scoped_css.zig` emits scoped CSS, and `app/` builds whole app bundles.
+  `app/graph.zig` owns `BundleGraph` collection and module copying;
+  `app/bundle_outputs.zig` emits the app entry and preview files;
+  `app/runtime_imports.zig` classifies and rewrites runtime module imports;
+  `app/preview_props.zig`
+  infers demo props from the declared interface.
+- `backend/browser/emit/js_module/` separates script setup, static runtime
+  prelude, expression and component binding emission, structural helper
+  emission, DOM creation, DOM updates, DOM destruction, and slot emission.
+  `tracked_metadata.zig` serializes graph metadata into the generated module.
+- `backend/browser/tracked_roots.zig` classifies browser-trackable bindings;
+  `tracked_paths.zig` owns path discovery and ID assignment. Browser emission
+  and graph inspection use the same table. These browser-specific files do
+  not belong to target-neutral `sema/`.
 - `backend/browser/dependencies.zig` analyzes the static dependencies used by
   runtime update guards. `backend/browser/region_graph.zig` combines these
   dependencies with tracked paths and owns runtime region IDs. Build this graph
@@ -52,7 +58,10 @@ source .weiv
   orchestrates stages but does not own AST, SIR, LIR, render-tree, or emit
   rules.
 - `inspect/` formats stage representations and derived debug views for CLI
-  `emit` output. It is a formatter layer, not a compiler stage.
+  `emit` output. Its invalidation view uses the browser region graph, path
+  table, and dependency analyzer. It adds explanatory nodes and warnings but
+  does not assign a second set of path IDs. It is a formatter layer, not a
+  compiler stage.
 - `diagnostics.zig` contains shared diagnostic types and formatting helpers.
 
 Keep new compiler code inside the phase that owns the data it creates. One-file
@@ -119,3 +128,11 @@ The default app output directory is `dist`.
 - Prefer `lir` over the older generic `ir` wording.
 - Prefer `script_backend` for the Zig FFI wrapper. The native Rust library is
   still named `weiv_parser_backend` until the Rust crate is renamed separately.
+- Use `BundleGraph` for the app module graph. Its nodes are components; it
+  also tracks runtime imports copied into the bundle. Use
+  `region_graph.Graph` for DOM update regions. `tracked_metadata` names
+  serialization; it does not build the graph.
+- A `BrowserComponent` is a lowered browser component, not an emitted module.
+  Keep source strings and CSS out of that struct.
+- SIR is the semantic pair of `ScriptFacts` and `TemplateBindings`. There is no
+  separate `SirDocument` allocation or ownership layer.

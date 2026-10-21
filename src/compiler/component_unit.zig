@@ -50,7 +50,7 @@ pub const ComponentCompileReport = struct {
         self.* = undefined;
     }
 
-    pub fn intoComponentUnit(self: *ComponentCompileReport) !ComponentUnit {
+    pub fn takeUnit(self: *ComponentCompileReport, allocator: std.mem.Allocator) !ComponentUnit {
         if (self.sfc_document == null or
             self.template_document == null or
             self.normalized_template == null or
@@ -70,6 +70,18 @@ pub const ComponentCompileReport = struct {
             .template_bindings = self.template_bindings.?,
             .lir_document = self.lir_document.?,
         };
+
+        for (self.diagnostics) |*diagnostic| diagnostic.deinit(allocator);
+        if (self.diagnostics.len != 0) allocator.free(self.diagnostics);
+        self.diagnostics = &.{};
+        self.source_path = &.{};
+        self.sfc_document = null;
+        self.template_document = null;
+        self.normalized_template = null;
+        self.script = null;
+        self.template_bindings = null;
+        self.lir_document = null;
+        self.halted_after = null;
 
         return result;
     }

@@ -2,17 +2,6 @@ const std = @import("std");
 const sfc = @import("../parser/sfc.zig");
 const slot_manifest = @import("slot_manifest.zig");
 
-pub const SirDocument = struct {
-    script: ScriptFacts,
-    template_bindings: TemplateBindings,
-
-    pub fn deinit(self: *SirDocument, allocator: std.mem.Allocator) void {
-        self.script.deinit(allocator);
-        self.template_bindings.deinit(allocator);
-        self.* = undefined;
-    }
-};
-
 pub const ScriptFacts = struct {
     ok: bool,
     source_path: []const u8,

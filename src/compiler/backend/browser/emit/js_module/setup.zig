@@ -1,7 +1,24 @@
 const std = @import("std");
 const component = @import("../../../../component_unit.zig");
-const tracked_root = @import("../../../../sema/tracked_root.zig");
+const tracked_roots = @import("../../tracked_roots.zig");
 const common = @import("common.zig");
+
+pub fn buildTemplateBindingsJson(unit: *const component.ComponentUnit, allocator: std.mem.Allocator) ![]u8 {
+    var json = std.ArrayList(u8).empty;
+    defer json.deinit(allocator);
+    try json.append(allocator, '[');
+    var first = true;
+    for (unit.script.bindings) |binding| {
+        if (!binding.template_visible) continue;
+        if (!first) try json.append(allocator, ',');
+        try json.append(allocator, '"');
+        try json.appendSlice(allocator, binding.name);
+        try json.append(allocator, '"');
+        first = false;
+    }
+    try json.append(allocator, ']');
+    return try json.toOwnedSlice(allocator);
+}
 
 pub fn buildSetupCode(model: *const component.ComponentUnit, allocator: std.mem.Allocator) ![]u8 {
     var out = std.ArrayList(u8).empty;
@@ -74,7 +91,7 @@ pub fn buildSetupCode(model: *const component.ComponentUnit, allocator: std.mem.
         }
     }
     for (model.script.bindings) |binding| {
-        if (!tracked_root.isLocalTrackedBinding(model, binding.name)) continue;
+        if (!tracked_roots.isLocalTrackedBinding(model, binding.name)) continue;
         try out.print(allocator, "  {s} = __weiv_getTrackedRoot(\"{s}\", {s});\n", .{
             binding.name,
             binding.name,

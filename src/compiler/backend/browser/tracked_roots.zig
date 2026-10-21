@@ -1,6 +1,6 @@
 const std = @import("std");
-const component = @import("../component_unit.zig");
-const sir = @import("sir.zig");
+const component = @import("../../component_unit.zig");
+const sir = @import("../../sema/sir.zig");
 
 pub const Kind = enum {
     imported_tracked,

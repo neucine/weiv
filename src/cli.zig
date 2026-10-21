@@ -497,23 +497,11 @@ fn loadComponent(path: []const u8, allocator: std.mem.Allocator) !LoadedComponen
         return error.Reported;
     }
 
-    var model = report.intoComponentUnit() catch |err| {
+    var model = report.takeUnit(allocator) catch |err| {
         try printCliStageError("compile component", path, .lowering, "component.model_conversion_failed", err, allocator);
         return error.Reported;
     };
     errdefer model.deinit(allocator);
-
-    for (report.diagnostics) |*diagnostic| diagnostic.deinit(allocator);
-    if (report.diagnostics.len != 0) allocator.free(report.diagnostics);
-    report.diagnostics = &.{};
-    report.source_path = &.{};
-    report.sfc_document = null;
-    report.template_document = null;
-    report.normalized_template = null;
-    report.script = null;
-    report.template_bindings = null;
-    report.lir_document = null;
-    report.halted_after = null;
 
     return .{
         .source = source,

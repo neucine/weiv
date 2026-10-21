@@ -2,24 +2,12 @@ const std = @import("std");
 const browser_render_tree = @import("../backend/browser/render_tree/index.zig");
 const component_unit = @import("../component_unit.zig");
 const sir = @import("../sema/sir.zig");
-const tracked_root = @import("../sema/tracked_root.zig");
+const tracked_roots = @import("../backend/browser/tracked_roots.zig");
 const tracked_paths = @import("../backend/browser/tracked_paths.zig");
 const region_graph = @import("../backend/browser/region_graph.zig");
+const dependencies = @import("../backend/browser/dependencies.zig");
 
-const DepList = struct {
-    items: std.ArrayList([]const u8) = .empty,
-
-    fn deinit(self: *DepList, allocator: std.mem.Allocator) void {
-        self.items.deinit(allocator);
-    }
-
-    fn appendUnique(self: *DepList, allocator: std.mem.Allocator, name: []const u8) !void {
-        for (self.items.items) |item| {
-            if (std.mem.eql(u8, item, name)) return;
-        }
-        try self.items.append(allocator, name);
-    }
-};
+const DepList = dependencies.DepList;
 
 const BoundaryKind = enum {
     template_event,
@@ -56,12 +44,11 @@ const Formatter = struct {
     allocator: std.mem.Allocator,
     next_region_id: usize = 1,
     diagnostics: std.ArrayList(Diagnostic) = .empty,
-    tracked_table: tracked_paths.Table,
+    tracked_table: *tracked_paths.Table,
     runtime_graph: *const region_graph.Graph,
 
     fn deinit(self: *Formatter) void {
         self.diagnostics.deinit(self.allocator);
-        self.tracked_table.deinit();
     }
 
     fn format(self: *Formatter, render_tree: *const browser_render_tree.Document) !void {
@@ -441,68 +428,40 @@ const Formatter = struct {
     }
 
     fn collectExpressionDeps(self: *Formatter, expr: []const u8, loop_locals: []const []const u8, deps: *DepList) anyerror!void {
-        try self.collectExpressionDepsWithTrail(expr, loop_locals, deps, &.{});
-    }
-
-    fn collectExpressionDepsWithTrail(
-        self: *Formatter,
-        expr: []const u8,
-        loop_locals: []const []const u8,
-        deps: *DepList,
-        call_trail: []const []const u8,
-    ) anyerror!void {
+        try dependencies.collectExpressionDeps(self.component, expr, loop_locals, deps, self.allocator);
         var saw_call = false;
         var i: usize = 0;
         while (i < expr.len) {
-            const ch = expr[i];
-            if (!isIdentStart(ch)) {
+            if (!isIdentStart(expr[i])) {
                 i += 1;
                 continue;
             }
-
             const start = i;
             i += 1;
             while (i < expr.len and isIdentContinue(expr[i])) i += 1;
             const ident = expr[start..i];
-            const call = nextNonSpaceIs(expr, i, '(');
-            if (call) saw_call = true;
-
-            if (isKeyword(ident)) continue;
-            if (isPropertyAccess(expr, start)) continue;
-            if (call and tracked_root.isImportedBinding(self.component, ident)) continue;
-
-            if (call) {
-                if (self.findVisibleBinding(ident)) |binding| {
-                    try deps.appendUnique(self.allocator, ident);
-                    if (binding.callable and !containsName(call_trail, ident)) {
-                        if (self.findHelperFacts(binding.name)) |helper| {
-                            if (helper.contains_external_reads) {
-                                try self.diagnostics.append(self.allocator, .{
-                                    .severity = .warning,
-                                    .kind = .hidden_state,
-                                    .subject = expr,
-                                    .reason = "helper-contains-external-reads",
-                                });
-                            } else if (helper.contains_side_effects) {
-                                try self.diagnostics.append(self.allocator, .{
-                                    .severity = .warning,
-                                    .kind = .hidden_state,
-                                    .subject = expr,
-                                    .reason = "helper-contains-side-effects",
-                                });
-                            }
-                        }
-                        try self.collectCallableBindingDeps(binding, deps, call_trail);
-                    }
-                    continue;
-                }
-            }
-
-            if (self.isVisibleBinding(ident) or containsName(loop_locals, ident)) {
-                try deps.appendUnique(self.allocator, ident);
+            if (!nextNonSpaceIs(expr, i, '(')) continue;
+            saw_call = true;
+            if (isKeyword(ident) or isPropertyAccess(expr, start) or tracked_roots.isImportedBinding(self.component, ident)) continue;
+            const binding = self.findVisibleBinding(ident) orelse continue;
+            if (!binding.callable) continue;
+            const helper = self.findHelperFacts(binding.name) orelse continue;
+            if (helper.contains_external_reads) {
+                try self.diagnostics.append(self.allocator, .{
+                    .severity = .warning,
+                    .kind = .hidden_state,
+                    .subject = expr,
+                    .reason = "helper-contains-external-reads",
+                });
+            } else if (helper.contains_side_effects) {
+                try self.diagnostics.append(self.allocator, .{
+                    .severity = .warning,
+                    .kind = .hidden_state,
+                    .subject = expr,
+                    .reason = "helper-contains-side-effects",
+                });
             }
         }
-
         if (deps.items.items.len == 0 and saw_call) {
             try self.diagnostics.append(self.allocator, .{
                 .severity = .warning,
@@ -522,34 +481,6 @@ const Formatter = struct {
             if (binding.template_visible and std.mem.eql(u8, binding.name, name)) return binding;
         }
         return null;
-    }
-
-    fn collectCallableBindingDeps(
-        self: *Formatter,
-        binding: sir.ScriptBinding,
-        deps: *DepList,
-        call_trail: []const []const u8,
-    ) anyerror!void {
-        const helper = self.findHelperFacts(binding.name) orelse return;
-
-        var next_trail = std.ArrayList([]const u8).empty;
-        defer next_trail.deinit(self.allocator);
-        try next_trail.appendSlice(self.allocator, call_trail);
-        try next_trail.append(self.allocator, binding.name);
-
-        for (helper.reads) |name| {
-            try deps.appendUnique(self.allocator, name);
-        }
-
-        for (helper.calls) |name| {
-            try deps.appendUnique(self.allocator, name);
-            if (containsName(next_trail.items, name)) continue;
-            if (self.findVisibleBinding(name)) |next_binding| {
-                if (next_binding.callable) {
-                    try self.collectCallableBindingDeps(next_binding, deps, next_trail.items);
-                }
-            }
-        }
     }
 
     fn findHelperFacts(self: *const Formatter, name: []const u8) ?sir.HelperFacts {
@@ -593,7 +524,7 @@ pub fn formatDocument(
         .component = component,
         .out = &out,
         .allocator = allocator,
-        .tracked_table = tracked_paths.Table.init(component, allocator),
+        .tracked_table = &runtime_graph.table,
         .runtime_graph = &runtime_graph,
     };
     defer formatter.deinit();
