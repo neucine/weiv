@@ -947,7 +947,7 @@ These findings were recorded in the local Atelier project while using published 
 
 ### Current-source verification (2026-10-27)
 
-Retested against checkout `1633af0` with the changes in this working tree, Node 22.22.1, Vite 7.3.7, and Zig 0.16.0. These results do not establish what is available in the published `0.1.1` package.
+Retested against checkout `1633af0` with the fixes released in `weivjs@0.1.2`, Node 22.22.1, Vite 7.3.7, and Zig 0.16.0. These results do not establish what is available in the published `0.1.1` package. A fresh registry install of `0.1.2` confirmed that the packaged Mac compiler defines `weivUpdate`.
 
 | Atelier finding | Current-source result |
 | --- | --- |

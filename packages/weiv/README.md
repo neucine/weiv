@@ -66,10 +66,9 @@ locally wrapped `setTimeout`, `setInterval`, `queueMicrotask`, and
 A callback registered with another API runs outside that update boundary. If it
 changes template-bound local state, wrap the change in `weivUpdate`. This applies
 to browser listeners, Tauri events, external stores, and similar subscriptions.
-**The `weivUpdate` examples below require the current source checkout; the
-published `weivjs@0.1.1` release does not provide it.** See the `0.1.1`
-workaround below. With current source, a keyboard shortcut can update a panel
-directly:
+**The `weivUpdate` examples below require `weivjs@0.1.2` or newer; published
+`0.1.1` does not provide it.** See the `0.1.1` workaround below. With `0.1.2`,
+a keyboard shortcut can update a panel directly:
 
 ```html
 <script lang="ts">
@@ -99,8 +98,8 @@ The same pattern works with Tauri's event API:
 </script>
 ```
 
-`weivUpdate` is available inside each `.weiv` component script in the current
-source checkout. Do not import or declare it. It runs the callback immediately,
+`weivUpdate` is available inside each `.weiv` component script in `0.1.2` and
+newer. Do not import or declare it. It runs the callback immediately,
 then flushes changed bindings.
 If the callback returns a Promise, it flushes again when the Promise settles.
 Call it in the external callback at the point where state changes. A hidden
@@ -147,8 +146,8 @@ calls, so a direct top-level `listen(...)` can fail before mount.
 ```
 
 A focused `0.1.1` browser-event fixture was compiled and mounted to verify
-that the rendered state updates after the microtask. Use `weivUpdate` when
-running a Weiv version that provides it.
+that the rendered state updates after the microtask. Upgrade to `0.1.2` to
+use `weivUpdate` directly.
 
 ### DOM bindings and input state
 
