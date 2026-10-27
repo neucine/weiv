@@ -48,6 +48,9 @@ npx weiv --help
 npx weiv dev path/to/App.weiv
 ```
 
+When browser listeners, Tauri events, or other external callbacks change local
+component state, use the [external callback update guide](packages/weiv/README.md#updates-from-external-callbacks).
+
 If you want a static bundle instead of the dev server:
 
 ```bash

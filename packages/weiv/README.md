@@ -58,27 +58,97 @@ Use `weiv:*` imports only when you need shared state or routing.
 
 ### Updates from external callbacks
 
-Weiv owns template event handlers and callbacks passed to the locally wrapped
-`setTimeout`, `setInterval`, `queueMicrotask`, and `requestAnimationFrame`.
-Callbacks registered with another API, such as `window.addEventListener` or an
-external store, need an explicit update boundary when they change local state:
+Weiv flushes local state changes automatically after template handlers such as
+`@click="openFiles"`. It also owns callbacks passed to the component script's
+locally wrapped `setTimeout`, `setInterval`, `queueMicrotask`, and
+`requestAnimationFrame`.
+
+A callback registered with another API runs outside that update boundary. If it
+changes template-bound local state, wrap the change in `weivUpdate`. This applies
+to browser listeners, Tauri events, external stores, and similar subscriptions.
+**The `weivUpdate` examples below require the current source checkout; the
+published `weivjs@0.1.1` release does not provide it.** See the `0.1.1`
+workaround below. With current source, a keyboard shortcut can update a panel
+directly:
 
 ```html
 <script lang="ts">
-  let count = 0;
+  let panelMode = "none";
 
-  window.addEventListener("message", () => {
+  window.addEventListener("keydown", (event) => {
+    if (!(event.metaKey && event.key.toLowerCase() === "p")) return;
     weivUpdate(() => {
-      count += 1;
+      panelMode = "files";
     });
   });
 </script>
 ```
 
-`weivUpdate` is provided inside each component script and runs the callback
-immediately. It flushes changed bindings afterward and again when a returned
-Promise settles. Clean up external subscriptions when their lifetime should
-end; `weivUpdate` handles updates, not listener disposal.
+The same pattern works with Tauri's event API:
+
+```html
+<script lang="ts">
+  import { listen } from "@tauri-apps/api/event";
+
+  let latestRunText = "";
+  listen<string>("run-event", (event) => {
+    weivUpdate(() => {
+      latestRunText = event.payload;
+    });
+  });
+</script>
+```
+
+`weivUpdate` is available inside each `.weiv` component script in the current
+source checkout. Do not import or declare it. It runs the callback immediately,
+then flushes changed bindings.
+If the callback returns a Promise, it flushes again when the Promise settles.
+Call it in the external callback at the point where state changes. A hidden
+button or synthetic click is unnecessary. If no component state changes, no
+update boundary is needed. Clean up external subscriptions when their lifetime
+should end; `weivUpdate` handles updates, not listener disposal.
+
+**Published `weivjs@0.1.1` caveat:** that release does not inject `weivUpdate`
+into component scripts. Calling it throws `ReferenceError: weivUpdate is not
+defined`. In `0.1.1`, schedule the state change through the component script's
+locally wrapped `queueMicrotask`, which runs its callback in Weiv's update
+boundary:
+
+```html
+<script lang="ts">
+  let panelMode = "none";
+
+  window.addEventListener("keydown", (event) => {
+    if (!(event.metaKey && event.key.toLowerCase() === "p")) return;
+    queueMicrotask(() => {
+      panelMode = "files";
+    });
+  });
+</script>
+```
+
+For a Tauri subscription in `0.1.1`, also defer registration to a microtask:
+that package initializes imported aliases after top-level component script
+calls, so a direct top-level `listen(...)` can fail before mount.
+
+```html
+<script lang="ts">
+  import { listen } from "@tauri-apps/api/event";
+
+  let latestRunText = "";
+  queueMicrotask(() => {
+    listen<string>("run-event", (event) => {
+      queueMicrotask(() => {
+        latestRunText = event.payload;
+      });
+    });
+  });
+</script>
+```
+
+A focused `0.1.1` browser-event fixture was compiled and mounted to verify
+that the rendered state updates after the microtask. Use `weivUpdate` when
+running a Weiv version that provides it.
 
 ### DOM bindings and input state
 

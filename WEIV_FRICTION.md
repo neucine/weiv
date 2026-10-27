@@ -1,5 +1,33 @@
 # Weiv integration friction
 
+## Published 0.1.1 external callbacks require `queueMicrotask` (2026-10-27)
+
+- **Classification:** released-package/version documentation gap. The latest guide now distinguishes current-source `weivUpdate` from the published 0.1.1 workaround.
+- **Context:** CC GUI command palette, `weivjs@0.1.1`, local Weiv checkout `1633af0`, macOS arm64, Node 22.22.1, pnpm 10.29.3, Vite 6.4.3.
+- **Reproduction:** in `src/weiv/CommandPalette.weiv`, register a window `keydown` listener from a queued initialization and call `weivUpdate(togglePalette)` for Ctrl+K. Run the Vite fixture at `http://localhost:1420/tests/browser/weiv-timeline-search.html`, focus the page, and press Ctrl+K.
+- **Expected:** the latest `packages/weiv/README.md` says published 0.1.1 must schedule external state changes through its wrapped `queueMicrotask`; current source supports `weivUpdate`.
+- **Actual:** the fixture accessibility tree shows `ReferenceError: weivUpdate is not defined` with the generated handler at `CommandPalette.weiv`, and the palette does not open.
+- **Workaround:** use `queueMicrotask(() => { togglePalette(); })` for window listeners and the same wrapper for registry subscriptions. The browser fixture then opened the palette with Ctrl+K, filtered commands, updated from a dynamically registered command, executed local and registered commands, navigated with arrows, wrapped Tab focus, and closed with Escape.
+- **Upgrade check:** when moving to a package that provides `weivUpdate`, replace the 0.1.1 microtask workaround and retest native WKWebView.
+
+## Native WKWebView accessibility exposes only the first command option (2026-10-27)
+
+- **Classification:** WKWebView/Weiv accessibility interoperability gap; browser behavior is correct and the root cause is not yet isolated.
+- **Context:** CC GUI command palette, packaged `CC GUI Weiv Preview.app`, `weivjs@0.1.1`, macOS arm64.
+- **Reproduction:** build the isolated preview, launch it, focus the Weiv web content, press Cmd+K, and inspect the native macOS accessibility tree. The screenshot visibly contains Open Settings, Search chats, New chat, Toggle Files panel, Toggle Changes panel, Toggle terminal, Split right, Split down and Exit split view.
+- **Expected:** every visible option with `role="option"` is exposed as a native accessibility child.
+- **Actual:** the full native tree lists the dialog and a list containing only `text Open Settings`; the remaining visible buttons are absent from the accessibility tree. The Chrome browser fixture exposes every option. Keyboard ArrowDown plus Enter still runs the second visible command and Escape still closes the palette, so mouse and keyboard behavior works despite the tree omission.
+- **Workaround:** none applied. Native keyboard operation remains available; a future cleanup should replace the list container/button structure with an accessibility arrangement verified by macOS VoiceOver.
+
+## Nested Git row template expression scoping (2026-10-27)
+
+- **Classification:** compiler/template-expression issue; precise minimal root cause not yet isolated.
+- **Context:** CC GUI Weiv Changes panel, `weivjs@0.1.1`, Weiv checkout `1633af0`, macOS arm64, Node 22.22.1, pnpm 10.29.3, Vite 6.4.3.
+- **Reproduction:** in `GitChanges.weiv`, nest `#for="row in group.rows"` inside `#for="group in props.view.groups"`; inside the row use conditions such as `#if="row.isDir"` and a computed attribute `:style="'padding-left:' + (row.depth * 14) + 'px'"`. Run `corepack pnpm build`, then open `tests/browser/weiv-timeline-search.html?manyChanges=1` and open Changes.
+- **Expected:** the mounted directory/file rows render with their indentation.
+- **Actual:** the build passed, but the Weiv error boundary showed `ReferenceError: row is not defined`, and the Changes body was partially rendered.
+- **Workaround:** project `indentStyle` and `groupId` as simple row properties in `git-changes-view.ts`, then bind `:style="row.indentStyle"` and `:data-group="row.groupId"`. The 2,000-file browser fixture then showed bounded rows and worked on deep scroll. This narrows the problem to template expression or nested-loop scoping but does not prove which expression caused the error.
+
 This report records reproducible Weiv integration and tooling friction. No
 external issue has been submitted.
 
@@ -912,3 +940,247 @@ the static class tokens while applying and clearing the dynamic class value.
 - Replaced inline app import maps with same-origin package URLs. The generated
   Bun server resolves and browser-bundles bare dependencies on demand, caches
   the result, and returns JavaScript without requiring `unsafe-inline`.
+
+## Atelier integration findings (2026-10-27)
+
+These findings were recorded in the local Atelier project while using published `weivjs@0.1.1` with Tauri 2 and Vite 7. The original observations below describe that package; current-source verification follows separately. The source report is `/Users/chao.yang/Private/atelier/WEIV_FRICTION.md`.
+
+### Current-source verification (2026-10-27)
+
+Retested against checkout `1633af0` with the changes in this working tree, Node 22.22.1, Vite 7.3.7, and Zig 0.16.0. These results do not establish what is available in the published `0.1.1` package.
+
+| Atelier finding | Current-source result |
+| --- | --- |
+| Top-level `const` reassignment | Reproduced; fixed by emitting a mutable internal binding for tracked locals. `node --check` passes. |
+| Imported function called before initialization | Fixed by initializing imported aliases before user script execution. A top-level `listen` fixture mounts successfully. |
+| Published Vite plugin omits CSS | Current plugin emits CSS. An additional relative `?weiv-style.css` import failure appeared in Atelier and was fixed in the plugin resolver. |
+| Call-expression event handler misses update boundary | Focused `@click="selectEngine('codex')"` fixture updates the DOM. |
+| Compound expression loses loop scope | Reproduced; fixed by resolving called helpers and loop items through the same scope. Focused fixture mounts and renders `Codex`. |
+| `weivUpdate` unavailable in deferred callback | Focused deferred window-event fixture updates the DOM through `weivUpdate` in current source. Published `0.1.1` still emits an unresolved `weivUpdate` reference; its wrapped `queueMicrotask` works as a release-specific workaround. |
+| Keyboard listener misses state flush | Direct external listeners need an update boundary. A current-source keyboard fixture works with `weivUpdate`, and a published `0.1.1` fixture works with its wrapped `queueMicrotask`. The package README now distinguishes those versions. |
+| Invalid scoped global selectors | Current CSS emitter produces valid selectors for `*`, `body`, and `button`. |
+| Conditional sibling loses loop scope | Focused two-message fixture renders both sibling branches correctly. |
+
+The Atelier desktop and remote pages built with the local compiler and Vite plugin. The remote smoke test passed. The desktop smoke test passed after allowing one pending tracked-state microtask to run before closing jsdom; without that test-only wait, its assertions passed but a queued DOM update ran after `dom.window.close()`.
+
+### Release-check binary detection false positive (2026-10-27)
+
+- **Classification:** confirmed release-tooling defect, fixed in this checkout.
+- **Context:** preparing `weivjs@0.1.2` on macOS arm64 with Node 22.22.1 and a Zig 0.16.0 `ReleaseFast` compiler binary.
+- **Reproduce:** rebuild `packages/weiv-darwin-arm64/bin/weiv` from current source, then run `node tools/npm-release-check.mjs`.
+- **Expected:** accept a real Mach-O binary and check only platform packages being published at the main package's version.
+- **Actual:** the script decoded binary bytes as UTF-8 and rejected the real executable because embedded text contained `placeholder`. It also attempted to check older platform packages whose checked-in files are intentional placeholders.
+- **Fix:** identify ELF, Mach-O, and PE binaries by magic bytes, then pack only platform packages matching the main package version. The release check now passes.
+
+### Top-level `const` rewritten as an assignment
+
+- **Category:** confirmed compiler defect in generated JavaScript; workaround available.
+- **Context:** Tauri 2 + Vite 7 app using `weivjs` 0.1.1 on macOS, Node 22.22.1.
+- **Reproduce:** place `const projectKey = "atelier.projects.v1";` in a `.weiv` component script and reference it from component logic. Run `npm run build`.
+- **Expected:** generated module keeps a valid immutable binding or avoids reassigning it.
+- **Actual:** Vite/Rollup reports `Cannot reassign a variable declared with const`. The transformed module contains `projectKey = __weiv_getTrackedRoot("projectKey", projectKey);`.
+- **Workaround:** declare the binding with `let`. The build then completes without the warning.
+- **Source:** `src/App.weiv`; generated output can be inspected through Vite at `/src/App.weiv?import` during development.
+
+### Top-level call to an imported function runs before initialization
+
+- **Category:** confirmed compiler defect in generated JavaScript; workaround available.
+- **Context:** Atelier's Weiv 0.1.1 component imports `listen` from `@tauri-apps/api/event` and registers a listener at script top level. macOS Tauri 2 release webview; Vite 7, Node 22.22.1.
+- **Reproduce:** add `import { listen } from "@tauri-apps/api/event";` followed by `listen("run-event", handler);` at top level of a `.weiv` component script. Build with `npm run build`, then run the bundle or evaluate it in a DOM environment.
+- **Expected:** imported binding is initialized before the call.
+- **Actual:** mount throws `ReferenceError: Cannot access 'listen' before initialization` (minified name `H` in the release bundle), leaving the Tauri window blank. The generated component initialization calls the listener before its tracked import binding is initialized.
+- **Workaround:** defer registration with `queueMicrotask(() => listen("run-event", handler))`. The rendered DOM then mounts successfully.
+- **Verification:** the release JavaScript was evaluated in jsdom before and after the change; before it threw that error, afterward it rendered the sidebar and welcome text.
+
+### Published Vite plugin omits component styles
+
+- **Category:** packaging/tooling defect in published `weivjs` 0.1.1.
+- **Context:** Atelier imports `App.weiv` through `weivjs/vite` with Vite 7.3.7 and packages the result in Tauri 2 on macOS.
+- **Reproduce:** create a `.weiv` component with a `<style>` block, import it from a Vite entry, and run `vite build` using the published `weivjs/vite` plugin.
+- **Expected:** a CSS asset is emitted and referenced by the built HTML.
+- **Actual:** Vite emits only JavaScript; the app renders as unstyled HTML. The installed `node_modules/weivjs/dist/vite.mjs` compiles only `js`, while the newer local Weiv source includes a CSS virtual module path.
+- **Workaround:** `vite.config.ts` adds a small virtual CSS loader that invokes `weiv compile emit css` for `App.weiv`, and `src/main.ts` imports that virtual style module. Vite now emits a CSS asset referenced by `dist/index.html`.
+
+### Some event expressions run outside Weiv's update boundary
+
+- **Category:** compiler/runtime integration defect.
+- **Context:** Weiv 0.1.1 component with a button using `@click="selectEngine('codex')"`.
+- **Reproduce:** in a component, update a template-bound `let selectedEngine` inside `selectEngine`; bind the button using a call expression and click it.
+- **Expected:** the selected button and related text update immediately.
+- **Actual:** localStorage changed, but template content did not update. Generated code evaluated `instance.refresh().selectEngine("codex")` before checking whether the result was a function to run in Weiv's update boundary.
+- **Workaround:** bind a named function, `@click="selectCodex"`, whose body calls `selectEngine("codex")`. The named handler runs inside the update boundary.
+
+### Compound expressions lose component or loop scope
+
+- **Category:** compiler defect in generated JavaScript.
+- **Context:** Weiv 0.1.1 template with a conditional conversation view and a `#for` message loop.
+- **Reproduce:** bind a placeholder with `:placeholder="'Ask ' + engineName()"`, or render `{{ message.role === 'user' ? 'You' : engineName() }}` inside `#for="message in messages"`.
+- **Expected:** both the component function and loop variable resolve correctly.
+- **Actual:** the first expression emitted an unscoped `engineName()` and threw `ReferenceError: engineName is not defined` when the conversation view appeared. The second emitted unscoped `message.role` and threw `ReferenceError: message is not defined` when messages rendered.
+- **Workaround:** use a static placeholder and keep the loop label expression independent of the component function. The built-app smoke test now covers both transitions.
+
+### `weivUpdate` is unavailable in a deferred external callback
+
+- **Category:** compiler/runtime integration defect.
+- **Context:** Tauri event subscription registered in a microtask to avoid the import initialization bug above.
+- **Reproduce:** call `weivUpdate(() => { ... })` in the Tauri event callback and deliver a `run-event` message.
+- **Expected:** local state changes flush to the component, as described in Weiv's external callback documentation.
+- **Actual:** generated code retains `weivUpdate(...)` as an unresolved global and throws `ReferenceError: weivUpdate is not defined`.
+- **Workaround:** the external callback stores the event, then clicks a hidden component button bound to the named `applyRunEvent` handler. The state change runs in Weiv's own event boundary. The smoke test delivers session, answer, and done events through this path.
+
+### Window keyboard listeners do not flush component state
+
+- **Category:** runtime integration defect; same external update boundary issue as Tauri event callbacks.
+- **Context:** Atelier with Weiv 0.1.1, Vite 7.3.7, Node 22.22.1, Tauri 2; reproduced in the built UI smoke test with jsdom 29.1.1.
+- **Reproduce:** register `window.addEventListener("keydown", handler)` from a `.weiv` script via `queueMicrotask`. In the handler, call a component function that updates template-bound state, such as `openFilesPanel()` assigning `panelMode = "files"`. Dispatch Cmd+P.
+- **Expected:** the Files panel appears, as it does when its visible Weiv button is clicked.
+- **Actual:** the listener runs but the panel is absent because its state changes occur outside Weiv's update boundary. The smoke test failed with `AssertionError: file search shortcut must open Files` and `document.querySelector(".inspector") === null`.
+- **Workaround:** the keyboard listener programmatically clicks hidden buttons bound to named Weiv handlers. The same smoke test then passes and the panel appears.
+
+### Scoped style compiler produces invalid global selectors
+
+- **Category:** confirmed compiler/tooling defect in Weiv 0.1.1; workaround available.
+- **Context:** Atelier's separate Weiv remote page (`src/Remote.weiv`) with Vite 7.3.7, Node 22.22.1, macOS, and the `weiv compile emit css` workaround for the published Vite plugin.
+- **Reproduce:** put `* { box-sizing: border-box; } body { margin: 0; } button { cursor: pointer; }` in a `.weiv` `<style>` block, import its emitted CSS, then run `npm run build:remote`.
+- **Expected:** valid scoped CSS or a clear unsupported-global-selector diagnostic.
+- **Actual:** esbuild warns `Unexpected "*" [css-syntax-error]` for a selector shaped `[data-weiv-scope="..."]*`, and similarly warns for `body` and `button`; those rules are not applied.
+- **Workaround:** anchor the rules under the component root (`.remote-shell *`, `.remote-shell button`) and place document-wide styles outside the scoped component if needed. The remote build then has no CSS warnings.
+
+### Conditional sibling after a looped message body loses loop scope
+
+- **Category:** confirmed generated JavaScript defect in Weiv 0.1.1.
+- **Context:** Atelier chat timeline in `src/App.weiv`, Vite 7.3.7, Node 22.22.1, jsdom 29.1.1, macOS. The local Weiv source checkout was at commit `1633af0` during this work; the app uses the published 0.1.1 package.
+- **Reproduce:** inside `<article #for="message in messages">`, render a `<div #if="message.role !== 'tool'">` and a following sibling `<details #if="message.role === 'tool'">` with `{{ message.text }}`. Build with `npm run test:ui`, then deliver a chat run event in the smoke test.
+- **Expected:** the sibling conditional and interpolation resolve the current `message` loop item.
+- **Actual:** the build succeeds, but rendering logs the following error repeatedly and the smoke test fails at `AssertionError: question card must appear` because rendering stops. Removing those sibling conditionals makes the same test pass.
+
+  ```text
+  ReferenceError: message is not defined
+      at ag (evalmachine.<anonymous>:24:26474)
+      at x_ (evalmachine.<anonymous>:17:59015)
+      at og (evalmachine.<anonymous>:24:26429)
+      at h (evalmachine.<anonymous>:17:52002)
+      at l_ (evalmachine.<anonymous>:17:53460)
+      at c_ (evalmachine.<anonymous>:17:53720)
+      at $m (evalmachine.<anonymous>:24:24220)
+      at n_ (evalmachine.<anonymous>:17:49757)
+      at na (evalmachine.<anonymous>:24:23669)
+      at w1 (evalmachine.<anonymous>:25:15669)
+  AssertionError [ERR_ASSERTION]: question card must appear
+      at file:///Users/chao.yang/Private/atelier/test/smoke.mjs:128:1
+  ```
+- **Workaround:** render the standard body and a `<details>` body unconditionally inside the loop, then use the article role class to show the appropriate one with CSS. A compiler fix should preserve loop scope for sibling `#if` nodes.
+
+## CC GUI desktop migration follow-up (2026-10-27)
+
+Context: adding a Weiv chat entry alongside the existing React entry in CC GUI. Environment: macOS arm64, Node 22.22.1, pnpm 10.29.3, Vite 6.4.3, `weivjs` 0.1.1.
+
+## Confirmed compiler defect: imported function used before initialization
+
+Reproduction: create a `.weiv` component with `<script lang="ts">import { snapshot } from "./adapter"; let initial = snapshot();</script>`, compile it with `weiv compile emit js`, and mount it. Expected: `snapshot()` runs during setup. Actual: the generated `setup()` calls `snapshot()` before its later `const snapshot = __weiv_getTrackedRoot(...)` declaration. Chrome reports `ReferenceError: Cannot access 'snapshot' before initialization`, leaving only root comment nodes in the page. Workaround in `src/weiv/App.weiv`: initialize local values without the import, then read the store in a queued microtask after setup completes. The fallback text in `src/weiv/main.ts` also prevents a silent blank page if mounting throws again.
+
+## Tooling gap: component styles are omitted by the Vite plugin
+
+Reproduction: add `<style>.example { color: red }</style>` to a `.weiv` component, import the component through `weivjs/vite`, and build with Vite. Expected: the component's CSS appears in the page. Actual: the emitted JavaScript includes the component, but the CSS is absent. Current workaround: keep shared styles in `src/weiv/app.css` and import that file from `src/weiv/main.ts`. An earlier workaround called `weiv compile emit css` through a local Vite plugin, but splitting the UI made a normal stylesheet simpler.
+
+## Tooling gap: sibling component imports do not resolve in Vite
+
+Reproduction: create `Parent.weiv` with `import * as Child from "./Child.weiv"` and `<Child />`, then run Vite build with `weivjs/vite`. Expected: Vite bundles both components. Actual: Weiv emits `import * as Child from "./Child.mjs"`, and Vite reports `Could not resolve "./Child.mjs" from "Parent.weiv"`. Workaround: the small `ccgui-weiv-component-imports` Vite resolver maps an emitted local `.mjs` import back to an existing `.weiv` source.
+
+## Compiler defect: object shorthand in component props emits invalid JavaScript
+
+Reproduction: pass `:view="{ open, page }"` to a child component and run `weiv compile emit js Parent.weiv`. Expected: generated JS uses `open: scope.open, page: scope.page`. Actual: it emits `{ scope.open, scope.page }`, which Rollup rejects with `Unexpected token '.'`. Workaround: spell every object key explicitly, such as `:view="{ open: open, page: page }"`.
+
+## Compiler defect: child component in a conditional branch can update before mount
+
+Reproduction: put `<Child :view="{ value: value }" />` inside a `#if="selected"` section, change `selected` from false to true, and update the parent. Expected: Child mounts and receives props. Actual: the generated `updateRegion_child` calls `refs[index].setProps(...)` while that ref is undefined, throwing `Cannot read properties of undefined (reading 'setProps')`. Workaround: keep the chat section mounted and bind its native `hidden` attribute; CSS hides `[hidden]` without tearing down the child component.
+
+## Compiler defect: complex prop member expression can remain unscoped
+
+Reproduction: in a child component, use `:disabled="(!props.view.draft.trim() && !props.view.attachments.length) || !props.view.hasActiveChat"`. Expected: generated render code resolves `props` through `scope`. Actual: it emits bare `props.view...` in the initial render and throws `ReferenceError: props is not defined`. Workaround: derive `sendDisabled` in the parent and bind the child attribute to `props.view.sendDisabled`.
+
+The same unscoped expression occurred in a Settings `#if` combining `!props.view.settingsQuery` with `String.includes(props.view.settingsQuery)`. Deriving simple `showGeneral` / `showClaude` / `showCodex` booleans in the parent avoided the crash.
+
+## Diagnostics gap: HTML void tags reported as mismatched close at template start
+
+Reproduction: add `<label>Name<input name="name"></label>` to a Weiv template and run `weiv compile emit js`. Expected: the parser accepts the HTML void tag or points at the input that needs closing. Actual: compilation stops with `error template.mismatched_close_tag [template_parse] [1:11] [10..11] fatal: Closing tag does not match the currently open element`, which points at the beginning of `<template>` rather than the offending input. Workaround: write `<input name="name" />` explicitly. This is a diagnostics and HTML compatibility gap, not a confirmed runtime defect.
+
+## Confirmed reactivity gap: assignments after await do not repaint
+
+Reproduction: in a `.weiv` event handler, call an async function that sets `busy = true`, awaits an IPC promise, then sets `busy = false` and replaces a list used by `#for`. Expected: the busy state clears and the list repaints when the promise settles. Actual: the busy indicator stays visible and the list keeps its old rows even though the backend mutation and reload finish. A no-op DOM event dispatched afterward also fails because Weiv takes its before-snapshot after the lexical assignments have already occurred. Workaround: keep the `mount()` handle and call its public `update()` method after async assignments (`src/weiv/ui-refresh.ts`). Verified with a mocked Tauri IPC flow that saved a provider profile and then displayed its row.
+
+## Loop identity can recreate a streaming message row
+
+In the emitted `#for` code for `message in messages`, the key is `item?.id ?? item`. Chat messages have `seq` but no `id`; an immutable update to a live message therefore changes the object key and replaces that row's DOM. This can reset selection or an expanded tool output while text streams. Workaround in `src/weiv/chat-adapter.ts`: project each message to a stable `id` based on session key and sequence, caching unchanged source messages in a `WeakMap`. This is an integration constraint of the default loop key, not a confirmed compiler defect.
+
+These reports are local engineering notes; no external issue was submitted.
+
+## Packaged app CSP incompatibility: component prop objects use runtime evaluation
+
+Context: packaging the Weiv 0.1.1 entry in Tauri 2.11.5 on macOS arm64 with the project's production CSP (`script-src 'self' blob: pluginasset: http://pluginasset.localhost`). Reproduction: build `weiv.html` with Vite, package it as the Tauri window URL, then launch the `.app`. Expected: the compiled component props mount under the existing CSP. Actual: the window displays `EvalError: Refused to evaluate a string as JavaScript because 'unsafe-eval' or 'trusted-types-eval' is not an allowed source of script`. `weiv compile emit js src/weiv/App.weiv` showed that inline object-valued component props called `__weiv_evaluate`, which uses the `Function` constructor; the production asset contained the same fallback. Workaround verified: move each object expression into a named component function and bind `:view="timelineView()"` rather than an inline object. The generated Weiv entry asset then contained no `Function(...)` call or runtime fallback warning. The unsigned macOS preview launched under the normal CSP and restored a transcript, opened Settings, and searched the transcript in WKWebView. This is a Weiv compiler/runtime capability gap in published 0.1.1; the local Weiv checkout reports a fix in current source.
+
+## Project-specific Tauri preview window conflict
+
+Context: the same isolated native preview. Reproduction: override `app.windows` with a `main` window in `tauri.weiv.bundle.conf.json` while `src-tauri/src/lib.rs` also creates `main` during setup, then package and launch. Expected: one Weiv window. Actual: startup aborts with `failed to create main window: WebviewLabelAlreadyExists("main")`. Workaround: keep `app.windows` empty and choose `weiv.html` in the existing window builder when the preview bundle identifier is active. This is a project integration issue rather than a Weiv defect.
+
+## Template compatibility gap: HTML entity is shown literally
+
+Context: the Weiv 0.1.1 settings rail on macOS arm64, Node 22.22.1, pnpm 10.29.3, Vite 6.4.3. Reproduction: put `<div>WORKSPACE &amp; DATA</div>` in a `.weiv` template, build with `corepack pnpm build`, and mount it in Chrome via Vite. Expected: the accessible text and rendered heading say `WORKSPACE & DATA`. Actual: the browser accessibility tree says `WORKSPACE &amp; DATA`. Workaround tried and retained: use `WORKSPACE AND DATA` in the template. This is an HTML entity compatibility gap, not a settings data defect.
+
+## Compiler defect: local const is reassigned during setup
+
+Context: adding collapsible workspace groups to `App.weiv`, same Weiv 0.1.1 macOS/Node/pnpm/Vite environment above. Reproduction: declare `const collapsedGroups = new Set<string>();` in a component script and read it from a function used by the template. Build succeeds, but mounting the component throws `TypeError: Assignment to constant variable.` The emitted `setup()` contains `collapsedGroups = __weiv_getTrackedRoot("collapsedGroups", collapsedGroups);` after the original `const` declaration. Expected: the compiler preserves `const` or uses a separate binding. Actual: it writes to the constant. Workaround: declare the set with `let`; a browser fixture then mounts. This is a confirmed compiler defect.
+
+## Compiler defect: type-only named import becomes a runtime reference
+
+Context: adding `SessionSearch.weiv` to the Weiv 0.1.1 entry. In `App.weiv`, add `import { ipc, type MessageSearchHit } from "@/lib/ipc";` and use `MessageSearchHit[]` only as a TypeScript annotation. Build with `corepack pnpm build` and open `weiv.html`. Expected: the type import is erased and the app mounts. Actual: the build succeeds, but mounting throws `ReferenceError: __weiv_import_MessageSearchHit is not defined`, shown by the app's error fallback. Workaround: import only the runtime `ipc` value and use a local structural type for the search hits. This was verified by rerunning the mocked Tauri UI smoke: mount, chat send, provider save, theme switch, and search IPC call then worked without runtime exceptions.
+
+The same defect recurred in `Sidebar.weiv` during worktree progress migration with a pure `import type { PendingCreation } from "@/features/worktree/store";` and `PendingCreation[]` as a function return type. `corepack pnpm build` and a Tauri debug bundle both succeeded, but the native WKWebView error fallback showed `ReferenceError: Can't find variable: __weiv_import_PendingCreation`. Replacing the import with a local structural `type PendingCreation = { ... }` is the workaround. This confirms the problem also affects standalone `import type`, not only inline `type` specifiers.
+
+## Investigation: nested worktree progress loop coincides with duplicate sidebar rows
+
+Context: CC GUI's `Sidebar.weiv` on Weiv 0.1.1, Node 22.22.1, pnpm 10.29.3, Vite 6.4.3, Tauri 2.11.5, macOS arm64. Add a pending worktree `#for` inside an existing nested `#for` over workspace sections/workspaces, with `#if="workspace.children.length || pendingFor(workspace.id).length"`, where `pendingFor` filters a prop array. Build and launch the native preview, then open a workspace action menu and select New Worktree. Expected: one workspace row and a creation dialog. Actual observed: every UI refresh appended another visible copy of the workspace row and its session row; the dialog did not appear. The browser fixture exposed the cause: `ReferenceError: workspace is not defined` at `updateConditional_55`, and emitted JS contains `Boolean(workspace.children.length || scope.pendingFor(workspace.id).length)` inside a scope where only `scope.workspace` exists. Classification: **confirmed compiler scoping defect** for a nested-loop condition calling a function with the loop item. Workaround: project `pending` onto each workspace node in TypeScript, then use `#if="workspace.children.length || workspace.pending.length"` and `#for="pending in workspace.pending"`. After that change, the browser fixture renders one workspace row and opens the creation dialog. Native retest is pending. No external issue submitted.
+
+The same unscoped expression defect occurred in `WorktreeDelete.weiv` with `{{ props.view.locked || props.actions.text('worktree.lockedDeleteDisabled') }}`. `weiv compile emit js` produced `String((props.view.locked || props.actions.text(...)) ?? "")` instead of `scope.props`, and native WKWebView showed `ReferenceError: Can't find variable: props` on opening the delete dialog. Workaround: compute `lockedLabel` in its TypeScript controller and bind `{{ props.view.lockedLabel }}`. The regenerated JS has no bare `props` expression at that text binding. The native preview then showed the Git lock reason and kept Delete disabled; after unlocking the disposable worktree, deletion succeeded.
+
+The existing-branch tab in `WorktreeCreate.weiv` hit a similar failure with `{{ props.view.occupied.includes(branch.name) ? ' · checked out' : '' }}` inside an `<option #for="branch in ...">`. The browser fixture reported `ReferenceError: props is not defined` at `updateRegion_text_45`; the emitted JS used bare `props.view.occupied` and `branch.name`. The native selector consequently showed a branch but did not advance the form. Workaround: project `{ name, label, occupied }` branch options in the TypeScript controller and bind the simple `branch.label` and `branch.occupied` properties. The fixture then displayed the suggested location and enabled Create after choosing the existing branch; the native preview also created a worktree from that retained branch. A follow-up UI issue showed the selector visually reverting to its placeholder even though the controller kept the selected branch. Explicit `:selected` bindings on projected option properties fixed that display in the browser fixture and in the packaged macOS WKWebView preview: selecting `feature/select-smoke` kept the branch name visible and filled the corresponding location. The test dialog was canceled and the disposable branch removed.
+
+### Diagnostics gap: malformed TypeScript silently discards the component script
+
+- **Classification:** confirmed compiler diagnostics defect in published `weivjs@0.1.1`; current source was not yet retested.
+- **Context:** `Sidebar.weiv` in the CC GUI Tauri migration, macOS arm64, Node 22.22.1, pnpm 10.29.3, Vite 6.4.3.
+- **Minimal reproduction:** create `<template><button @click="click">Go</button></template><script lang="ts">let id = "a"; let rows: any[] = []; function click() { rows.some((row: any) => row.id === id; }</script>` (the call deliberately lacks a closing `)`). Run `weiv compile emit js component.weiv`.
+- **Expected:** a syntax diagnostic and nonzero exit, pointing to the unmatched parenthesis.
+- **Actual:** exit status 0 with no diagnostic output. The emitted `setup()` contains only the generated `props` binding; `click` and all other component script declarations are omitted. The page mounts but its buttons silently do nothing. In the CC GUI case, the malformed expression had 8 opening and 7 closing parentheses; `corepack pnpm build` succeeded and the browser fixture showed no action after clicking.
+- **Workaround:** simplify the expression, fix the syntax, and inspect generated JavaScript for expected functions. The corrected `Sidebar.weiv` emitted `function showWorkspaceMenu` and the browser action worked.
+
+## Integration gap: boolean data binding does not round-trip as string "true"
+
+- **Classification:** template/DOM interoperability gap in published `weivjs@0.1.1`; no compiler defect established.
+- **Context:** CC GUI React-to-Weiv file tree, macOS arm64, Node 22.22.1, pnpm 10.29.3, Vite 6.4.3. The row click handler distinguishes folders from files using a `data-*` value.
+- **Reproduce:** render `<button :data-dir="row.isDir" @click="openRow">Open</button>` inside `#for="row in props.view.rows"`, with `row.isDir === true`. In `openRow`, read `(event.currentTarget as HTMLElement).dataset.dir === "true"` and click the folder in the browser fixture `tests/browser/weiv-timeline-search.html`.
+- **Expected:** the dataset comparison is true and the folder expands, or the binding documentation makes the boolean-to-attribute conversion explicit.
+- **Actual:** the comparison is false; clicking `src` calls the file-open path and creates a `src` editor tab. The generated attribute is not a dependable string `"true"` for this handler.
+- **Workaround:** project `kind: row.isDir ? "dir" : "file"` in `src/weiv/file-tree-view.ts`, bind `:data-kind="row.kind"`, and compare with `"dir"`. The browser fixture then expanded `src` and displayed its `main.ts` child. No private workspace content is needed for reproduction.
+The type-only import defect recurred during Git-list virtualization (macOS arm64, Node 22.22.1, pnpm 10.29.3, Vite 6.4.3, `weivjs@0.1.1`, Weiv checkout `1633af0`). In `src/weiv/App.weiv`, `import { projectGitChanges, type GitListMode } from "./git-changes-view"; let gitViewMode = "tree" as GitListMode;` passed `corepack pnpm build`, but the Chrome fixture `tests/browser/weiv-timeline-search.html?manyChanges=1` failed at mount with `ReferenceError: __weiv_import_GitListMode is not defined` in generated `setup()`. Expected: the type-only binding is erased. Removing the imported type and its assertion restored mounting. This is the same confirmed compiler defect described above.
+
+
+## Packaged diff rows overlapped with per-row absolute positioning
+
+- **Classification:** Weiv/Tauri production rendering interoperability gap; the exact compiler or WKWebView cause is not established, so this is not a confirmed Weiv defect.
+- **Context:** CC GUI Weiv Git diff migration, `weivjs@0.1.1` (local Weiv checkout `1633af0`), macOS arm64 WKWebView in Tauri, Node 22.22.1, pnpm 10.29.3, Vite 6.4.3. Chrome Vite fixture rendered the same diff correctly.
+- **Reproduce:** in `GitDiff.weiv`, render projected diff rows with `#for="line in props.view.lines"`, bind each row's `:style="line.style"` where `line.style` is `top:0px`, `top:20px`, etc., and set `.git-diff-line { position:absolute; height:20px }`. Build with `corepack pnpm exec tauri build --debug --bundles app --config src-tauri/tauri.weiv.bundle.conf.json --no-sign`, launch the preview, and open an untracked two-line text file from Changes. A Chrome fixture at `tests/browser/weiv-timeline-search.html` is the comparison.
+- **Expected:** each diff row appears at its projected vertical offset in both Chrome and packaged WKWebView.
+- **Actual:** Chrome showed separate lines; the packaged app painted all diff text on top of itself at the first row. No JavaScript error was observed. The first native screenshot was taken after the diff loaded, and the app's Git status and target file were correct.
+- **Workaround:** remove per-row absolute positioning and render the bounded row window in normal flow, with a single projected `padding-top` offset on its wrapper and a total-height sizer. Rebuilding the app displayed the header, hunk, two green additions, and line numbers on separate rows. This is a confirmed project integration workaround; root cause remains open.
+
+The same imported-binding initialization defect recurred while adding the Weiv terminal dock. `App.weiv` declared `let terminalOpen = useTerminalStore.getState().open;` at component setup, with `useTerminalStore` imported from `@/features/terminal/store`. `corepack pnpm build` succeeded, but the Chrome fixture failed to mount with `ReferenceError: Cannot access 'useTerminalStore' before initialization` at generated `setup()` line 1391. Expected: the imported store is initialized before the setup expression. Moving the store read and `WeivTerminalController` construction into the existing `queueMicrotask` initialization restored mounting; the packaged macOS preview then opened a PTY and displayed shell output. Environment: `weivjs@0.1.1`, local Weiv checkout `1633af0`, macOS arm64, Node 22.22.1, pnpm 10.29.3, Vite 6.4.3. This is a recurrence of the confirmed compiler defect above, not a new issue.
+
+## Packaged terminal context menu ignored bound position
+
+- **Classification:** production Weiv/WKWebView style-binding interoperability gap; root cause unconfirmed.
+- **Context:** CC GUI Weiv terminal dock, `weivjs@0.1.1` (local checkout `1633af0`), macOS arm64, Tauri packaged WKWebView, Node 22.22.1, pnpm 10.29.3, Vite 6.4.3.
+- **Reproduce:** select text in the xterm dock, right-click near the middle of the dock, render `<div class="weiv-terminal-menu" :style="props.view.menu.style">` with `position:fixed` CSS and a projected `left:${x}px;top:${y}px` string from the pointer event. Build with `corepack pnpm exec tauri build --debug --bundles app --config src-tauri/tauri.weiv.bundle.conf.json --no-sign` and launch the preview.
+- **Expected:** the menu appears by the pointer, clamped to the viewport.
+- **Actual:** the packaged menu appeared at the terminal dock's left edge regardless of the projected position. No runtime error appeared; right-click selection and menu entries worked. The screenshot showed the click around x=700 and menu starting at the main pane's x=520. A browser comparison was not performed for this exact binding.
+- **Workaround:** after Weiv renders the menu, set the menu element's `style.left` and `style.top` directly from the saved pointer coordinates, including after view refreshes. The next native build placed the menu beside the pointer. A final packaged build verified that focusing the menu allows Escape to close it.

@@ -25,6 +25,54 @@ fn emitComponentJs(model: *const component.ComponentUnit, allocator: std.mem.All
     return try js_module.emitModule(&browser_component_model, allocator);
 }
 
+test "Atelier immutable local binding remains valid after tracked-root setup" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template><p>{{ projectKey }}</p></template>
+        \\<script lang="ts">const projectKey = "atelier.projects.v1";</script>
+    ;
+    var model = try compiler_compile.compile(source, "atelier-const.weiv", allocator);
+    defer model.deinit(allocator);
+    const js = try emitComponentJs(&model, allocator);
+    defer allocator.free(js);
+    try std.testing.expect(std.mem.indexOf(u8, js, "let projectKey = \"atelier.projects.v1\";") != null);
+    try std.testing.expect(std.mem.indexOf(u8, js, "projectKey = __weiv_getTrackedRoot(\"projectKey\", projectKey);") != null);
+}
+
+test "Atelier imported function is initialized before top-level registration" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template><p>ready</p></template>
+        \\<script lang="ts">
+        \\import { listen } from "./event.ts";
+        \\listen("run-event", () => {});
+        \\</script>
+    ;
+    var model = try compiler_compile.compile(source, "atelier-import-order.weiv", allocator);
+    defer model.deinit(allocator);
+    const js = try emitComponentJs(&model, allocator);
+    defer allocator.free(js);
+    const initialized = std.mem.indexOf(u8, js, "const listen = __weiv_getTrackedRoot(\"listen\", __weiv_import_listen);") orelse return error.MissingImportInitialization;
+    const registration = std.mem.indexOf(u8, js, "listen(\"run-event\", () => {});") orelse return error.MissingListenerRegistration;
+    try std.testing.expect(initialized < registration);
+}
+
+test "Atelier compound loop expression resolves both item and component helper" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\<template><article #for="message in messages">{{ message.role === 'user' ? 'You' : engineName() }}</article></template>
+        \\<script lang="ts">
+        \\let messages = [{ role: "assistant" }];
+        \\function engineName() { return "Codex"; }
+        \\</script>
+    ;
+    var model = try compiler_compile.compile(source, "atelier-compound.weiv", allocator);
+    defer model.deinit(allocator);
+    const js = try emitComponentJs(&model, allocator);
+    defer allocator.free(js);
+    try std.testing.expect(std.mem.indexOf(u8, js, "scope.message.role === 'user' ? 'You' : scope.engineName()") != null);
+}
+
 test "template dependency analysis uses bound expression references" {
     var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();

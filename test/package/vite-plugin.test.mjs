@@ -21,7 +21,7 @@ try {
   );
   writeFileSync(
     join(tempRoot, "main.js"),
-    'import * as App from "./App.weiv"; App.mount(document.querySelector("#app"), {});',
+    'import * as App from "./App.weiv"; import "./App.weiv?weiv-style.css"; App.mount(document.querySelector("#app"), {});',
   );
   writeFileSync(
     join(tempRoot, "App.weiv"),

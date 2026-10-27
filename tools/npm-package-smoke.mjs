@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -102,6 +102,17 @@ try {
       WEIV_BINARY_PATH: weivBin,
     }
   );
+
+  const boundaryFixture = join(appRoot, "ExternalCallback.weiv");
+  writeFileSync(boundaryFixture, `<template><p>{{ count }}</p></template>\n<script lang="ts">let count = 0; window.addEventListener("message", () => weivUpdate(() => { count += 1; }));</script>\n`);
+  const emitted = execFileSync("node", [join(nodeModules, "weivjs", "bin", "weiv.mjs"), "emit", "js", boundaryFixture], {
+    cwd: appRoot,
+    encoding: "utf8",
+    env: { ...process.env, WEIV_BINARY_PATH: "" },
+  });
+  if (!emitted.includes("const weivUpdate = (callback) => __weiv_runBoundary(callback);")) {
+    throw new Error("Packed platform binary did not define the component-scoped weivUpdate boundary");
+  }
 
   console.log(`Smoke test completed in ${tempRoot}`);
 } finally {

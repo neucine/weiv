@@ -49,6 +49,16 @@ pub fn buildSetupCode(model: *const component.ComponentUnit, allocator: std.mem.
         \\
     );
 
+    for (model.script.imports) |import_record| {
+        if (import_record.local_name.len == 0) continue;
+        if (std.mem.endsWith(u8, import_record.source, ".weiv")) continue;
+        try out.print(allocator, "  const {s} = __weiv_getTrackedRoot(\"{s}\", __weiv_import_{s});\n", .{
+            import_record.local_name,
+            import_record.local_name,
+            import_record.local_name,
+        });
+    }
+
     var lines = std.mem.tokenizeScalar(u8, model.script_js, '\n');
     while (lines.next()) |line_raw| {
         const line = std.mem.trim(u8, line_raw, &std.ascii.whitespace);
@@ -62,7 +72,20 @@ pub fn buildSetupCode(model: *const component.ComponentUnit, allocator: std.mem.
             continue;
         }
         try out.appendSlice(allocator, "  ");
-        try out.appendSlice(allocator, line);
+        var emitted_line = line;
+        if (std.mem.startsWith(u8, line, "const ")) {
+            for (model.script.bindings) |binding| {
+                if (!std.mem.eql(u8, binding.kind, "immutable")) continue;
+                if (!tracked_roots.isLocalTrackedBinding(model, binding.name)) continue;
+                if (!std.mem.startsWith(u8, line["const ".len..], binding.name)) continue;
+                const suffix = line["const ".len + binding.name.len ..];
+                if (suffix.len == 0 or (suffix[0] != ' ' and suffix[0] != '=' and suffix[0] != ':')) continue;
+                try out.appendSlice(allocator, "let ");
+                emitted_line = line["const ".len..];
+                break;
+            }
+        }
+        try out.appendSlice(allocator, emitted_line);
         try out.appendSlice(allocator, "\n");
     }
 
@@ -76,15 +99,6 @@ pub fn buildSetupCode(model: *const component.ComponentUnit, allocator: std.mem.
         );
     }
 
-    for (model.script.imports) |import_record| {
-        if (import_record.local_name.len == 0) continue;
-        if (std.mem.endsWith(u8, import_record.source, ".weiv")) continue;
-        try out.print(allocator, "  const {s} = __weiv_getTrackedRoot(\"{s}\", __weiv_import_{s});\n", .{
-            import_record.local_name,
-            import_record.local_name,
-            import_record.local_name,
-        });
-    }
     if (model.script.props) |props_record| {
         if (props_record.props_binding_name) |binding_name| {
             try out.print(allocator, "  props = __weiv_getTrackedRoot(\"{s}\", props);\n", .{binding_name});

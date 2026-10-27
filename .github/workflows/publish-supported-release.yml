@@ -101,6 +101,8 @@ jobs:
           zig build -Dtarget=x86_64-windows-msvc -Doptimize=ReleaseFast
           cp zig-out/bin/weiv.exe packages/weiv-win32-x64-msvc/bin/weiv.exe
           ./packages/weiv-win32-x64-msvc/bin/weiv.exe --help
+          ./packages/weiv-win32-x64-msvc/bin/weiv.exe emit js test/examples/basic/external-callback.weiv |
+            grep -Fq 'const weivUpdate = (callback) => __weiv_runBoundary(callback);'
 
       - name: Upload Windows x64 release asset
         env:

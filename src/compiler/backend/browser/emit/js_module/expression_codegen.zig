@@ -1,12 +1,6 @@
 const std = @import("std");
 const script_backend = @import("../../../../../ffi/script_backend.zig");
 
-fn nextNonSpaceIs(expr: []const u8, start: usize, needle: u8) bool {
-    var cursor = start;
-    while (cursor < expr.len and isWhitespace(expr[cursor])) cursor += 1;
-    return cursor < expr.len and expr[cursor] == needle;
-}
-
 fn isPropertyAccessExpr(expr: []const u8, ident_start: usize) bool {
     var cursor = ident_start;
     while (cursor > 0) {
@@ -176,8 +170,6 @@ fn tryRewriteScopedExpressionWithLocals(
             cursor += 1;
             while (cursor < expression.len and isIdentContinue(expression[cursor])) cursor += 1;
             const ident = expression[start..cursor];
-
-            if (nextNonSpaceIs(expression, cursor, '(')) return false;
 
             if (isKeyword(ident)) {
                 try rewritten.appendSlice(allocator, ident);

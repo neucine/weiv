@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveWeivBinaryPath } from "./platform.mjs";
 
@@ -61,11 +62,15 @@ export function weiv() {
   return {
     name: "weiv",
     enforce: "pre",
-    resolveId(id) {
+    resolveId(id, importer) {
       if (id === "weiv:observable" || id === "weiv:router") {
         return `\0${id}`;
       }
       if (id.endsWith(WEIV_STYLE_SUFFIX)) {
+        const source = id.slice(0, -WEIV_STYLE_SUFFIX.length);
+        if (source.startsWith(".") && importer) {
+          return `${resolve(dirname(importer.split("?")[0]), source)}${WEIV_STYLE_SUFFIX}`;
+        }
         return id;
       }
       return null;

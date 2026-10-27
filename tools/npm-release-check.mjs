@@ -34,25 +34,29 @@ function detectPlaceholder(platformTar) {
   for (const file of candidates) {
     let content = null;
     try {
-      content = readFileSync(file, "utf8");
+      content = readFileSync(file);
     } catch {
       continue;
     }
-    if (content && content.toLowerCase().includes("placeholder")) {
+    const isElf = content.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]));
+    const isMachO = content.subarray(0, 4).equals(Buffer.from([0xcf, 0xfa, 0xed, 0xfe])) ||
+      content.subarray(0, 4).equals(Buffer.from([0xfe, 0xed, 0xfa, 0xcf]));
+    const isPe = content.subarray(0, 2).toString("ascii") === "MZ";
+    if (!isElf && !isMachO && !isPe) {
       throw new Error(`Placeholder binary detected in ${platformTar}. Replace with real platform binary before publish.`);
     }
+    return;
   }
+  throw new Error(`No platform binary found in ${platformTar}`);
 }
 
 try {
   const mainTar = pack("./packages/weiv");
-  const platformTars = [
-    pack("./packages/weiv-darwin-arm64"),
-    pack("./packages/weiv-darwin-x64"),
-    pack("./packages/weiv-linux-x64-gnu"),
-    pack("./packages/weiv-linux-arm64-gnu"),
-    pack("./packages/weiv-win32-x64-msvc"),
-  ];
+  const version = JSON.parse(readFileSync(join(repoRoot, "packages/weiv/package.json"), "utf8")).version;
+  const platformDirs = ["weiv-darwin-arm64", "weiv-darwin-x64", "weiv-linux-x64-gnu", "weiv-linux-arm64-gnu", "weiv-win32-x64-msvc"];
+  const platformTars = platformDirs
+    .filter((name) => JSON.parse(readFileSync(join(repoRoot, "packages", name, "package.json"), "utf8")).version === version)
+    .map((name) => pack(`./packages/${name}`));
 
   for (const t of platformTars) detectPlaceholder(t);
 
