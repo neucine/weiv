@@ -56,6 +56,66 @@ You can build normal components without any `weiv:*` imports.
 
 Use `weiv:*` imports only when you need shared state or routing.
 
+### When state changes reach the DOM
+
+Weiv bindings render **from component state to the DOM**. For example,
+`:value="name"` writes `name` to an input; it does not copy user edits back to
+`name`. An `@input` handler must read the input and assign `name` if that is the
+intended behavior.
+
+There are two timing steps to distinguish: **when an update is scheduled** and
+**how the update runs once it starts**. Weiv uses these paths:
+
+```mermaid
+flowchart TD
+  subgraph current["Current JavaScript call — synchronous"]
+    event["@event handler or weivUpdate"] --> local["Change local state"]
+    local --> boundary["Owned boundary updates affected DOM regions"]
+
+    tracked["Compiler tracked object write"] --> pathSet["Add path IDs to module pending Set"]
+    observable["Shared observable write"] --> pathMap["Add changed paths to observable pending Map"]
+  end
+
+  subgraph later["Scheduled microtasks — start later, run synchronously"]
+    trackedFlush["Tracked flush: take and clear Set"] --> instances["Update subscribed instances in sequence"]
+    observableFlush["Observable flush: take and clear Map"] --> listeners["Notify subscribers in sequence"]
+    listeners --> componentUpdates["Each component updates affected DOM regions"]
+  end
+
+  pathSet -. "schedule one microtask" .-> trackedFlush
+  pathMap -. "schedule one microtask" .-> observableFlush
+  boundary --> paint["Browser may paint after JavaScript yields"]
+  instances --> paint
+  componentUpdates --> paint
+```
+
+| Change source | During the current JavaScript call | Later work |
+|---|---|---|
+| Local state changed by a template `@event` handler or `weivUpdate` | The owned update boundary runs the callback, then synchronously finds changed bindings and updates affected DOM regions. | If the callback returns a Promise, the boundary also checks for changes when it settles. |
+| Compiler tracked object or array write | The Proxy records affected path IDs in a pending `Set` scoped to the generated component module. | One scheduled microtask takes and clears those paths, then synchronously updates subscribed instances in sequence. |
+| Shared `weiv:observable` write | The Proxy records changed property paths in a pending `Map` scoped to the observable root. | One scheduled microtask takes and clears the map, then synchronously calls each subscriber in sequence. A generated component subscriber synchronously updates its affected DOM regions. |
+
+The `Set` and `Map` are separate mechanisms, not one global change queue. Several
+writes before a scheduled flush are combined. Only the **start** of a scheduled
+microtask is deferred: its callback and the component updates inside it run
+synchronously until they return. For a shared observable used by components A
+and B, the sequence is:
+
+```text
+Current call:       write observable → record change → schedule notification microtask
+After call returns: notification microtask starts
+                   → notify A → update A's DOM
+                   → notify B → update B's DOM
+                   → notification microtask ends
+Later:              browser may paint a frame containing both updates
+```
+
+DOM writes take effect immediately in the in-memory DOM. The browser decides
+when to paint; Weiv does not force a paint after each component update. If an
+owned event boundary consumes pending compiler tracked paths, its scheduled
+tracked flush may later find its `Set` empty. That does not clear a shared
+observable's pending `Map` or suppress its subscriber notifications.
+
 ### Updates from external callbacks
 
 Weiv flushes local state changes automatically after template handlers such as

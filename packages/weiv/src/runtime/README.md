@@ -28,6 +28,9 @@ Semantics:
   parent chain
 - `snapshot()` returns a frozen plain-object view detached from later writes
 
+For the timing of observable notifications versus component DOM updates, see
+[When state changes reach the DOM](../../README.md#when-state-changes-reach-the-dom).
+
 ## Router (`router.ts`)
 
 Client-side router that integrates with Weiv's `mountIntoBoundary`/`destroy`
