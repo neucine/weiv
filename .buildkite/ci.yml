@@ -32,7 +32,7 @@ steps:
   - label: ":windows: Windows release candidate"
     key: candidate-windows
     if: build.tag == null && build.branch =~ /^release\/v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?$/
-    command: pwsh -File scripts/buildkite/release-candidate-windows.ps1
+    command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/buildkite/release-candidate-windows.ps1
     agents:
       queue: windows-local
 
@@ -76,7 +76,7 @@ steps:
   - label: ":windows: Check published Windows package"
     key: published-windows
     if: build.tag == null && build.branch =~ /^release\/v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.]+)?$/ && build.env("RELEASE_PUBLISH") == "1"
-    command: pwsh -File scripts/buildkite/published-smoke-windows.ps1
+    command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/buildkite/published-smoke-windows.ps1
     agents:
       queue: windows-local
 
