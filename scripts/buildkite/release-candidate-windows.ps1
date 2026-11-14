@@ -5,6 +5,7 @@ git -c core.autocrlf=false checkout-index --all --force
 if ($LASTEXITCODE -ne 0) { throw 'Checkout line ending setup failed' }
 $env:CARGO_HOME = 'C:\neucine-tools\cargo'
 $env:RUSTUP_HOME = 'C:\neucine-tools\rustup'
+$env:CARGO_BUILD_JOBS = '1'
 $env:PATH = "C:\neucine-tools\node-v22.22.1-win-x64;C:\neucine-tools\bun-windows-x64;$(Join-Path $env:CARGO_HOME 'bin');$env:PATH"
 if (-not $env:BUILDKITE_COMMIT -or (git rev-parse HEAD) -ne $env:BUILDKITE_COMMIT) {
   throw 'Checkout does not match Buildkite commit'
