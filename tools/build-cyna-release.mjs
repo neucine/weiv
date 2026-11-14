@@ -67,7 +67,7 @@ if (rustTarget) {
     copyFileSync(source, resolve(linkDir, name));
   }
 }
-execFileSync(compiler, ["build", manifest, "--output", output], {
+execFileSync(compiler, ["build", manifest, "--output", output, "--verbose", "--timings"], {
   cwd: repoRoot,
   env,
   stdio: "inherit",
