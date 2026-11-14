@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 source scripts/buildkite/runner-path.sh
-test "${RELEASE_PUBLISH:-}" = 1
 test "$(git rev-parse HEAD)" = "${BUILDKITE_COMMIT:?Buildkite commit required}"
-buildkite-agent artifact download 'dist/release/collected/*' . --step collect-release
+test "${BUILDKITE_BRANCH:?Buildkite branch required}" = main
+buildkite-agent artifact download 'dist/release/collected/*' . --step merged-collect-release
 node scripts/buildkite/publish-release.mjs

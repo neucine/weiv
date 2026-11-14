@@ -5,14 +5,13 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-if (process.env.RELEASE_PUBLISH !== "1") throw Error("Set RELEASE_PUBLISH=1 on the manual release build");
+if (process.env.BUILDKITE_BRANCH !== "main") throw Error("Publication requires the merged main build");
 const root = process.cwd();
 const directory = join(root, "dist/release/collected");
 const manifest = JSON.parse(readFileSync(join(directory, "manifest.json")));
 const run = (cmd, args, options = {}) => execFileSync(cmd, args, { cwd: root, encoding: "utf8", ...options }).trim();
 if (manifest.commit !== process.env.BUILDKITE_COMMIT || run("git", ["rev-parse", "HEAD"]) !== manifest.commit)
   throw Error("Release manifest is for a different commit");
-if (process.env.BUILDKITE_BRANCH !== `release/${manifest.tag}`) throw Error("Release branch does not match manifest");
 if (run("git", ["status", "--porcelain"])) throw Error("Release checkout is dirty");
 for (const item of manifest.outputs) {
   const file = join(directory, item.name);

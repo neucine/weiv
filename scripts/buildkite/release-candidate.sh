@@ -17,10 +17,14 @@ case "$platform:$(uname -s):$(uname -m)" in
   *) echo "Wrong runner for $platform" >&2; exit 1 ;;
 esac
 branch="${BUILDKITE_BRANCH:?Buildkite branch required}"
-[[ "$branch" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?)$ ]] || {
-  echo "Expected release/vX.Y.Z branch" >&2; exit 1;
-}
-version="${BASH_REMATCH[1]}"
+if [[ "$branch" =~ ^release/v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?)$ ]]; then
+  version="${BASH_REMATCH[1]}"
+elif [ "$branch" = main ]; then
+  version="$(buildkite-agent meta-data get release_version)"
+else
+  echo "Expected release/vX.Y.Z or merged main build" >&2; exit 1
+fi
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || exit 1
 test "$(git rev-parse HEAD)" = "${BUILDKITE_COMMIT:?Buildkite commit required}"
 cyna_version="${CYNA_VERSION:-0.5.2}"
 case "$platform" in

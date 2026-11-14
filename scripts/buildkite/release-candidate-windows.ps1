@@ -6,11 +6,15 @@ $env:PATH = "C:\neucine-tools\node-v22.22.1-win-x64;C:\neucine-tools\bun-windows
 if (-not $env:BUILDKITE_COMMIT -or (git rev-parse HEAD) -ne $env:BUILDKITE_COMMIT) {
   throw 'Checkout does not match Buildkite commit'
 }
-if ($env:BUILDKITE_BRANCH -notmatch '^release/v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$') {
-  throw 'Expected release/vX.Y.Z branch'
+if ($env:BUILDKITE_BRANCH -match '^release/v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$') {
+  $version = $Matches[1]
+} elseif ($env:BUILDKITE_BRANCH -eq 'main') {
+  $version = buildkite-agent meta-data get release_version
+  if ($LASTEXITCODE -ne 0 -or $version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$') { throw 'Missing merged release version' }
+} else {
+  throw 'Expected release/vX.Y.Z or merged main build'
 }
-$version = $Matches[1]
-if ((node -p 'process.platform + "-" + process.arch') -ne 'win32-x64') {
+if (-not [Environment]::Is64BitOperatingSystem -or $env:OS -ne 'Windows_NT') {
   throw 'Windows x64 runner required'
 }
 $cynaVersion = if ($env:CYNA_VERSION) { $env:CYNA_VERSION } else { '0.5.2' }

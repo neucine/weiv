@@ -7,7 +7,7 @@ case "$platform:$(uname -s):$(uname -m)" in
   macos:Darwin:arm64|linux:Linux:x86_64) ;;
   *) echo "Wrong runner for $platform" >&2; exit 1 ;;
 esac
-buildkite-agent artifact download 'dist/release/collected/manifest.json' . --step collect-release
+buildkite-agent artifact download 'dist/release/collected/manifest.json' . --step merged-collect-release
 version="$(node -p "JSON.parse(require('fs').readFileSync('dist/release/collected/manifest.json')).version")"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT

@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, copyFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
 const commit = process.env.BUILDKITE_COMMIT;
 const branch = process.env.BUILDKITE_BRANCH;
-const version = branch?.match(/^release\/v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$/)?.[1];
-if (!commit || !version) throw Error("Expected a release branch and Buildkite commit");
+const version = branch?.match(/^release\/v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$/)?.[1]
+  ?? (branch === "main" ? execFileSync("buildkite-agent", ["meta-data", "get", "release_version"], { encoding: "utf8" }).trim() : null);
+if (!commit || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/.test(version ?? ""))
+  throw Error("Expected a release version and Buildkite commit");
 const platforms = process.argv.slice(2);
 if (!platforms.length) throw Error("Pass the candidate platform names");
 const sha256 = file => createHash("sha256").update(readFileSync(file)).digest("hex");

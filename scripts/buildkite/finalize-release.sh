@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 source scripts/buildkite/runner-path.sh
-buildkite-agent artifact download 'dist/release/collected/*' . --step collect-release
+buildkite-agent artifact download 'dist/release/collected/*' . --step merged-collect-release
 tag="$(node -p "JSON.parse(require('fs').readFileSync('dist/release/collected/manifest.json')).tag")"
 commit="$(node -p "JSON.parse(require('fs').readFileSync('dist/release/collected/manifest.json')).commit")"
 test "$commit" = "${BUILDKITE_COMMIT:?Buildkite commit required}"

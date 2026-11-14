@@ -190,7 +190,12 @@ function verify() {
       run("bun", ["test", "test/component", "test/runtime", "test/ui-core", "test/inspect"], {
         stdio: "inherit",
       });
-      run("cyna", ["test", "."], { stdio: "inherit" });
+      const cynaTestManifest = process.platform === "linux"
+        ? "cyna.release.linux.toml"
+        : process.platform === "win32"
+          ? "cyna.release.windows.toml"
+          : ".";
+      run("cyna", ["test", cynaTestManifest], { stdio: "inherit" });
       run("npm", ["run", "pkg:release-check"], { stdio: "inherit" });
       run("npm", ["run", "pkg:smoke"], { stdio: "inherit" });
       run("node", ["test/package/vite-plugin.test.mjs"], {

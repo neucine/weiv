@@ -7,9 +7,10 @@ test "${#platforms[@]}" -eq 3
 for platform in "${platforms[@]}"; do
   destination="dist/release/candidates/$platform"
   mkdir -p "$destination"
-  buildkite-agent artifact download 'dist/release/artifacts/*' "$destination" --step "candidate-$platform"
-  buildkite-agent artifact download 'dist/release/state/plan.json' "$destination" --step "candidate-$platform"
-  buildkite-agent artifact download 'dist/release/state/verify.json' "$destination" --step "candidate-$platform"
+  step="${CANDIDATE_STEP_PREFIX:-candidate}-$platform"
+  buildkite-agent artifact download 'dist/release/artifacts/*' "$destination" --step "$step"
+  buildkite-agent artifact download 'dist/release/state/plan.json' "$destination" --step "$step"
+  buildkite-agent artifact download 'dist/release/state/verify.json' "$destination" --step "$step"
 done
 node scripts/buildkite/collect-release.mjs "${platforms[@]}"
 buildkite-agent artifact upload 'dist/release/collected/*'
