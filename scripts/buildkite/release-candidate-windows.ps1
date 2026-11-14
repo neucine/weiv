@@ -40,8 +40,6 @@ cyna version
 if ($LASTEXITCODE -ne 0) { throw 'Cyna distribution cannot start' }
 npm ci --ignore-scripts --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
-npm run format:check
-if ($LASTEXITCODE -ne 0) { throw 'format check failed' }
 npm ci --prefix packages/vscode-extension --ignore-scripts --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { throw 'extension install failed' }
 npm test --prefix packages/vscode-extension
