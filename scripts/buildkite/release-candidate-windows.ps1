@@ -19,11 +19,19 @@ if (-not [Environment]::Is64BitOperatingSystem -or $env:OS -ne 'Windows_NT') {
 }
 $cynaVersion = if ($env:CYNA_VERSION) { $env:CYNA_VERSION } else { '0.5.2' }
 $uri = "https://downloads.cyna.dev/distributions/$cynaVersion/x86_64-pc-windows-gnu.zip"
-$archive = Join-Path $env:TEMP 'cyna-windows-distribution.zip'
 $install = Join-Path $env:TEMP "cyna-weiv-$cynaVersion"
-New-Item -ItemType Directory -Force -Path $install | Out-Null
-Invoke-WebRequest -Uri $uri -OutFile $archive
-Expand-Archive -Path $archive -DestinationPath $install -Force
+$cynaExe = Join-Path $install 'x86_64-pc-windows-gnu/bin/cyna.exe'
+$ready = Join-Path $install '.complete'
+if (-not (Test-Path $ready)) {
+  $archive = Join-Path $env:TEMP "cyna-$cynaVersion-windows.zip"
+  New-Item -ItemType Directory -Force -Path $install | Out-Null
+  Invoke-WebRequest -Uri $uri -OutFile $archive
+  tar -xf $archive -C $install
+  if ($LASTEXITCODE -ne 0) { throw 'Cyna distribution extraction failed' }
+  Remove-Item $archive
+  New-Item -ItemType File -Path $ready -Force | Out-Null
+}
+if (-not (Test-Path $cynaExe)) { throw 'Cyna distribution is incomplete' }
 $env:PATH = "$(Join-Path $install 'x86_64-pc-windows-gnu/bin');$env:PATH"
 cyna version
 if ($LASTEXITCODE -ne 0) { throw 'Cyna distribution cannot start' }
