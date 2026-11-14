@@ -1,5 +1,8 @@
 $ErrorActionPreference = 'Stop'
 Set-Location (Resolve-Path (Join-Path $PSScriptRoot '../..'))
+# Apply repository line endings even when this agent reuses an older checkout.
+git -c core.autocrlf=false checkout-index --all --force
+if ($LASTEXITCODE -ne 0) { throw 'Checkout line ending setup failed' }
 $env:CARGO_HOME = 'C:\neucine-tools\cargo'
 $env:RUSTUP_HOME = 'C:\neucine-tools\rustup'
 $env:PATH = "C:\neucine-tools\node-v22.22.1-win-x64;C:\neucine-tools\bun-windows-x64;$(Join-Path $env:CARGO_HOME 'bin');$env:PATH"

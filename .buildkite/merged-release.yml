@@ -44,7 +44,7 @@ steps:
     command: scripts/buildkite/publish-release.sh
     secrets:
       - NPM_TOKEN
-      - GH_TOKEN
+      - GITHUB_RELEASE_TOKEN
     agents:
       queue: macos-local
 
@@ -74,6 +74,6 @@ steps:
     key: merged-finalize-release
     command: scripts/buildkite/finalize-release.sh
     secrets:
-      - GH_TOKEN
+      - GITHUB_RELEASE_TOKEN
     agents:
       queue: macos-local

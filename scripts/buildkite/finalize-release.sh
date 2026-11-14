@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 source scripts/buildkite/runner-path.sh
+export GH_TOKEN="${GITHUB_RELEASE_TOKEN:?GITHUB_RELEASE_TOKEN is required}"
 buildkite-agent artifact download 'dist/release/collected/*' . --step merged-collect-release
 tag="$(node -p "JSON.parse(require('fs').readFileSync('dist/release/collected/manifest.json')).tag")"
 commit="$(node -p "JSON.parse(require('fs').readFileSync('dist/release/collected/manifest.json')).commit")"
