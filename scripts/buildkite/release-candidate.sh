@@ -22,7 +22,7 @@ branch="${BUILDKITE_BRANCH:?Buildkite branch required}"
 }
 version="${BASH_REMATCH[1]}"
 test "$(git rev-parse HEAD)" = "${BUILDKITE_COMMIT:?Buildkite commit required}"
-cyna_version="${CYNA_VERSION:-0.5.1}"
+cyna_version="${CYNA_VERSION:-0.5.2}"
 case "$platform" in
   macos) cyna_host="aarch64-apple-darwin" ;;
   linux) cyna_host="x86_64-unknown-linux-gnu" ;;
