@@ -56,7 +56,7 @@ function currentPlatformPackageDir() {
     return "./packages/weiv-linux-x64-gnu";
   }
   if (process.platform === "win32" && process.arch === "x64") {
-    return "./packages/weiv-win32-x64-msvc";
+    return "./packages/weiv-win32-x64-gnu";
   }
   return null;
 }

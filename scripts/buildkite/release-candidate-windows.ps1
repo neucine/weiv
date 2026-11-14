@@ -20,24 +20,33 @@ if ($env:BUILDKITE_BRANCH -match '^release/v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)$'
 if (-not [Environment]::Is64BitOperatingSystem -or $env:OS -ne 'Windows_NT') {
   throw 'Windows x64 runner required'
 }
-$cynaVersion = if ($env:CYNA_VERSION) { $env:CYNA_VERSION } else { '0.5.2' }
+$cynaVersion = if ($env:CYNA_VERSION) { $env:CYNA_VERSION } else { '0.5.3' }
 $uri = "https://downloads.cyna.dev/distributions/$cynaVersion/x86_64-pc-windows-gnu.zip"
-$install = Join-Path $env:TEMP "cyna-weiv-$cynaVersion"
-$cynaExe = Join-Path $install 'x86_64-pc-windows-gnu/bin/cyna.exe'
+$env:HOME = $env:USERPROFILE
+$install = Join-Path $env:HOME ".cyna\$cynaVersion"
+$cynaExe = Join-Path $install 'bin/cyna.exe'
 $ready = Join-Path $install '.complete'
 if (-not (Test-Path $ready)) {
   $archive = Join-Path $env:TEMP "cyna-$cynaVersion-windows.zip"
+  $staging = Join-Path $env:TEMP "cyna-weiv-$cynaVersion"
+  if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+  New-Item -ItemType Directory -Force -Path $staging | Out-Null
   New-Item -ItemType Directory -Force -Path $install | Out-Null
   Invoke-WebRequest -Uri $uri -OutFile $archive
-  tar -xf $archive -C $install
+  tar -xf $archive -C $staging
   if ($LASTEXITCODE -ne 0) { throw 'Cyna distribution extraction failed' }
+  Copy-Item -Path (Join-Path $staging 'x86_64-pc-windows-gnu/*') -Destination $install -Recurse -Force
+  if (-not (Test-Path $cynaExe)) { throw 'Cyna distribution is incomplete' }
+  Remove-Item $staging -Recurse -Force
   Remove-Item $archive
   New-Item -ItemType File -Path $ready -Force | Out-Null
 }
 if (-not (Test-Path $cynaExe)) { throw 'Cyna distribution is incomplete' }
-$env:PATH = "$(Join-Path $install 'x86_64-pc-windows-gnu/bin');$env:PATH"
+$env:PATH = "$(Join-Path $install 'bin');$(Join-Path $install 'llvm/bin');$env:PATH"
 cyna version
 if ($LASTEXITCODE -ne 0) { throw 'Cyna distribution cannot start' }
+rustup target add x86_64-pc-windows-gnu
+if ($LASTEXITCODE -ne 0) { throw 'Windows Rust target setup failed' }
 npm ci --ignore-scripts --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
 npm ci --prefix packages/vscode-extension --ignore-scripts --no-audit --no-fund

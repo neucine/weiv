@@ -19,7 +19,7 @@ const project = existsSync(join(root, "packages/weiv/package.json")) ? "weiv" : 
 const weivPlatform = {
   "darwin-arm64": { directory: "weiv-darwin-arm64" },
   "linux-x64": { directory: "weiv-linux-x64-gnu" },
-  "win32-x64": { directory: "weiv-win32-x64-msvc" },
+  "win32-x64": { directory: "weiv-win32-x64-gnu" },
 }[`${process.platform}-${process.arch}`];
 const weivBinaryName = process.platform === "win32" ? "weiv.exe" : "weiv";
 function assertPlatformBinary(path) {
@@ -91,7 +91,7 @@ function preflight() {
       }
     }
     const p = JSON.parse(readFileSync(join(root, files[0])));
-    for (const directory of ["weiv-darwin-arm64", "weiv-linux-x64-gnu", "weiv-win32-x64-msvc"]) {
+    for (const directory of ["weiv-darwin-arm64", "weiv-linux-x64-gnu", "weiv-win32-x64-gnu"]) {
       versions.push(JSON.parse(readFileSync(join(root, `packages/${directory}/package.json`))).version);
       versions.push(p.optionalDependencies[`@weivjs/${directory}`]);
     }

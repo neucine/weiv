@@ -1,8 +1,11 @@
 // Address carriers avoid Cyna 0.4.1's incorrect nullable-pointer C return ABI.
 // The Rust ABI and allocation ownership stay unchanged.
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 _Static_assert(sizeof(uintptr_t) == sizeof(size_t), "Address carriers require pointer-sized size_t");
 
@@ -20,7 +23,7 @@ void weiv_cyna_release(uintptr_t address) {
 void weiv_cyna_write_stderr(uintptr_t address, size_t length) {
     const char *cursor = (const char *)address;
     while (length > 0) {
-        ssize_t written = write(STDERR_FILENO, cursor, length);
+        size_t written = fwrite(cursor, 1, length, stderr);
         if (written <= 0) return;
         cursor += (size_t)written;
         length -= (size_t)written;
@@ -71,8 +74,12 @@ size_t weiv_cyna_expression_supported(uintptr_t source) {
     return weiv_cell_expression_supported((const char *)source) ? 1 : 0;
 }
 
-// POSIX canonical path resolution for managed module identity. The caller frees
+// Canonical path resolution for managed module identity. The caller frees
 // the returned buffer with weiv_cyna_release.
 uintptr_t weiv_cyna_realpath(uintptr_t path) {
+#ifdef _WIN32
+    return (uintptr_t)_fullpath(NULL, (const char *)path, 0);
+#else
     return (uintptr_t)realpath((const char *)path, NULL);
+#endif
 }

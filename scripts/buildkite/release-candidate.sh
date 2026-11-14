@@ -26,7 +26,7 @@ else
 fi
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || exit 1
 test "$(git rev-parse HEAD)" = "${BUILDKITE_COMMIT:?Buildkite commit required}"
-cyna_version="${CYNA_VERSION:-0.5.2}"
+cyna_version="${CYNA_VERSION:-0.5.3}"
 case "$platform" in
   macos) cyna_host="aarch64-apple-darwin" ;;
   linux) cyna_host="x86_64-unknown-linux-gnu" ;;

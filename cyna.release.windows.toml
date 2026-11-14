@@ -12,8 +12,8 @@ opt = "release"
 dir = "test/cyna"
 
 [link]
-libs = ["weiv_parser_backend"]
-search_paths = ["libs/parser-backend/target/release"]
+libs = ["weiv_parser_backend", "ws2_32", "userenv", "kernel32", "Synchronization", "gcc_eh"]
+search_paths = ["libs/parser-backend/target/x86_64-pc-windows-gnu/release"]
 
 [c]
 sources = ["src/ffi/script_backend_bridge.c"]
