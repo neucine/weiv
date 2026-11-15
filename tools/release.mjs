@@ -67,6 +67,29 @@ const write = (name, value) => {
   writeFileSync(join(state, name + ".json"), JSON.stringify(value, null, 2) + "\n");
 };
 const sha = p => createHash("sha256").update(readFileSync(p)).digest("hex");
+function normalizeSharedPackageText(directory) {
+  if (process.platform !== "win32") return;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) normalizeSharedPackageText(path);
+    else if (/\.(?:md|mjs|js|ts)$/.test(entry.name)) {
+      const source = readFileSync(path, "utf8");
+      const normalized = source.replace(/\r\n/g, "\n");
+      if (normalized !== source) writeFileSync(path, normalized);
+    }
+  }
+}
+function normalizeWeivPackage() {
+  const packageRoot = join(root, "packages/weiv");
+  for (const entry of ["README.md", "bin", "dist", "types"]) {
+    const path = join(packageRoot, entry);
+    if (entry === "README.md") {
+      const source = readFileSync(path, "utf8");
+      const normalized = source.replace(/\r\n/g, "\n");
+      if (normalized !== source) writeFileSync(path, normalized);
+    } else normalizeSharedPackageText(path);
+  }
+}
 const files =
   project === "weiv"
     ? ["packages/weiv/package.json", `packages/${weivPlatform?.directory || "unsupported"}/package.json`]
@@ -216,6 +239,7 @@ function verify() {
     if (project === "neiv") run("sh", ["packages/neiv/scripts/ensure-cyna-package.sh"], { stdio: "inherit" });
     if (project === "weiv" && pkg === "packages/weiv") {
       run("node", ["packages/weiv/scripts/generate-types.mjs"], { stdio: "inherit" });
+      normalizeWeivPackage();
     }
     if (project === "neiv") run("node", ["packages/neiv/scripts/build-frontend.mjs"], { stdio: "inherit" });
     const output = JSON.parse(
