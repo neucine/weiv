@@ -25,7 +25,7 @@ import { decode as decode_module_cells } from .compiler.backend.browser.emit.js_
 import { JavaScriptError } from .compiler.backend.browser.emit.javascript_errors;
 import { ComponentManifests, ComponentSlotManifest } from .compiler.sema.component_manifests;
 import { dirname } from std.path;
-import { normalize } from .compiler.project.resolve_component_path;
+import { normalize, absolute } from .compiler.project.resolve_component_path;
 import { resolve_local } from .compiler.project.module_graph;
 import { collect, GraphError } from .compiler.project.collect_component_graph;
 import { ComponentGraph, ComponentNode } from .compiler.project.component_graph;
@@ -559,12 +559,9 @@ fn module_cell_error_label(code: JavaScriptError): string {
 fn runtime_complete(path: string): bool {
     const names: [6]string = ["binding.js", "cell.js", "index.js", "observable.js", "reactive-core.js", "router.js"];
     for name in names {
-        const found = fs.exists($"{path}/{name}") catch (code) {
+        const _ = fs.read_file($"{path}/{name}") catch (code) {
             return false;
         };
-        if not found {
-            return false;
-        }
     }
     return true;
 }
@@ -1086,7 +1083,7 @@ fn main(): i32 {
         if runtime_dir is path {
             runtime_for_manifest = path;
         }
-        if runtime_for_manifest.bytes()[0] != 47 {
+        if not absolute(runtime_for_manifest) {
             runtime_for_manifest = $"{cwd_for_manifest}/{runtime_for_manifest}";
         }
         if not runtime_complete(runtime_for_manifest) {
@@ -1098,7 +1095,7 @@ fn main(): i32 {
             io.write_line("Invalid output path");
             return 1;
         }
-        if output_for_manifest.bytes()[0] != 47 {
+        if not absolute(output_for_manifest) {
             output_for_manifest = $"{cwd_for_manifest}/{output_for_manifest}";
         }
         emit_managed_project(args[3], output_for_manifest, runtime_for_manifest) catch (code) {
@@ -1145,7 +1142,7 @@ fn main(): i32 {
         io.write_line("Invalid entry path");
         return 1;
     }
-    if entry_arg.bytes()[0] != 47 {
+    if not absolute(entry_arg) {
         entry_path = $"{cwd}/{entry_arg}";
     }
     const entry = normalize(entry_path) catch (code) {
@@ -1397,7 +1394,7 @@ fn main(): i32 {
         if runtime_dir is path {
             runtime = path;
         }
-        if runtime.bytes()[0] != 47 {
+        if not absolute(runtime) {
             runtime = $"{cwd}/{runtime}";
         }
         var preview_output = "dist";
@@ -1417,7 +1414,7 @@ fn main(): i32 {
             io.write_line("Invalid output path");
             return 1;
         }
-        if preview_output.bytes()[0] != 47 {
+        if not absolute(preview_output) {
             preview_output = $"{cwd}/{preview_output}";
         }
         if not runtime_complete(runtime) {
@@ -1450,7 +1447,7 @@ fn main(): i32 {
         io.write_line("Invalid output path");
         return 1;
     }
-    if output_arg.bytes()[0] != 47 {
+    if not absolute(output_arg) {
         output_path = $"{cwd}/{output_arg}";
     }
     const output = normalize(output_path) catch (code) {
@@ -1464,7 +1461,7 @@ fn main(): i32 {
             io.write_line("Invalid runtime directory");
             return 1;
         }
-        if runtime_arg.bytes()[0] != 47 {
+        if not absolute(runtime_arg) {
             runtime_path = $"{cwd}/{runtime_arg}";
         }
         const runtime = normalize(runtime_path) catch (code) {

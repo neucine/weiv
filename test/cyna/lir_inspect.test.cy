@@ -11,14 +11,25 @@ import { format as format_ast } from .compiler.inspect.ast;
 import { format as format_sir } from .compiler.inspect.sir;
 import std.fs;
 
+fn lf_lines(text: string): string {
+    var bytes = list<u8>();
+    for byte in text.bytes() {
+        if byte != 13 {
+            bytes.push(byte);
+        }
+    }
+    return string.from(bytes.view());
+}
+
 test "AST and SIR inspectors format repository component as reference text" {
     const directory = cwd() catch (code) {
         panic("Expected current directory");
     };
     const path = $"{directory}/test/examples/basic/basic-counter.weiv";
-    const source = fs.read_file(path) catch (code) {
+    const raw = fs.read_file(path) catch (code) {
         panic("Expected counter fixture");
     };
+    const source = lf_lines(raw);
     const manifests: ComponentManifests = {
         entries: list<ComponentSlotManifest>()
     };

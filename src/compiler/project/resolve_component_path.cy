@@ -14,16 +14,37 @@ pub enum PathError {
     invalid_import;
 }
 
+fn separator(byte: u8): bool {
+    return byte == 47 or byte == 92;
+}
+
+pub fn absolute(path: string): bool {
+    const bytes = path.bytes();
+    if bytes.len() == 0 {
+        return false;
+    }
+    if bytes[0] == 47 {
+        return true;
+    }
+    return bytes.len() >= 3 and
+        ((bytes[0] >= 65 and bytes[0] <= 90) or (bytes[0] >= 97 and bytes[0] <= 122)) and
+        bytes[1] == 58 and separator(bytes[2]);
+}
+
 pub fn normalize(path: string): string ! PathError {
     const bytes = path.bytes();
-    if bytes.len() == 0 or bytes[0] != 47 {
+    if not absolute(path) {
         throw PathError.relative_root;
     }
+    const drive = bytes[0] != 47;
     var parts = list<string>();
     var start: usize = 1;
-    var i: usize = 1;
+    if drive {
+        start = 3;
+    }
+    var i: usize = start;
     while i <= bytes.len() {
-        if i == bytes.len() or bytes[i] == 47 {
+        if i == bytes.len() or separator(bytes[i]) {
             if i > start {
                 const part = string.from(bytes[start..i]);
                 if part == ".." {
@@ -40,7 +61,12 @@ pub fn normalize(path: string): string ! PathError {
         i = i + 1;
     }
     var out = list<u8>();
-    append(&out, "/");
+    if drive {
+        out.push(bytes[0]);
+        append(&out, ":/");
+    } else {
+        append(&out, "/");
+    }
     i = 0;
     while i < parts.len() {
         if i > 0 {

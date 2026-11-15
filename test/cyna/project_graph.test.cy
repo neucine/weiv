@@ -1,6 +1,6 @@
 import std.mem;
 import { cwd } from std.process;
-import { normalize, component, module_path } from .compiler.project.resolve_component_path;
+import { normalize, absolute, component, module_path } from .compiler.project.resolve_component_path;
 import { collect } from .compiler.project.collect_component_graph;
 import { build, ProjectBuildError } from .compiler.project.build_project;
 import { ProjectBuild, ProjectModule } from .compiler.project.project_build;
@@ -18,6 +18,20 @@ test "component paths normalize dot segments and retain relative module output" 
     assert(path == "/project/src/Card.weiv");
     const output = module_path("/project", path) catch (code) {
         panic("Expected module output");
+    };
+    assert(output == "src/Card.mjs");
+}
+
+test "Windows drive paths normalize and retain relative module output" {
+    assert(absolute("C:/project/src/App.weiv"));
+    assert(absolute("C:\\project\\src\\App.weiv"));
+    assert(not absolute("project/src/App.weiv"));
+    const path = normalize("C:\\project\\src\\cards\\..\\Card.weiv") catch (code) {
+        panic("Expected Windows component path");
+    };
+    assert(path == "C:/project/src/Card.weiv");
+    const output = module_path("C:\\project", path) catch (code) {
+        panic("Expected Windows module output");
     };
     assert(output == "src/Card.mjs");
 }

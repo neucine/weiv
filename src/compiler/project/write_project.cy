@@ -109,12 +109,6 @@ pub fn write_with_runtime(build: &const ProjectBuild, output_dir: string, runtim
     const names: [6]string = ["binding.js", "cell.js", "index.js", "observable.js", "reactive-core.js", "router.js"];
     var runtime_sources = list<string>();
     for name in names {
-        const present = fs.exists($"{runtime}/{name}") catch (code) {
-            throw WriteError.filesystem;
-        };
-        if not present {
-            throw WriteError.filesystem;
-        }
         const source = fs.read_file($"{runtime}/{name}") catch (code) {
             throw WriteError.filesystem;
         };
@@ -157,17 +151,15 @@ fn ensure_directory(path: string): void ! WriteError {
     };
     const bytes = normalized.bytes();
     var i: usize = 1;
+    if bytes.len() >= 3 and bytes[1] == 58 {
+        i = 3;
+    }
     while i <= bytes.len() {
         if i == bytes.len() or bytes[i] == 47 {
             const current = string.from(bytes[..i]);
-            const exists = fs.exists(current) catch (code) {
-                throw WriteError.filesystem;
-            };
-            if not exists {
-                fs.create_dir(current) catch (code) {
-                    throw WriteError.filesystem;
-                };
-            }
+            // An existing directory also makes create_dir fail on Windows.
+            // The following file write reports a real creation failure.
+            fs.create_dir(current) catch (code) {};
         }
         i = i + 1;
     }
