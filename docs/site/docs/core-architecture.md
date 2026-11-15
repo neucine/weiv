@@ -200,7 +200,7 @@ which regions and where mutations enter the update graph.
 | Public CLI launcher | `packages/weiv/bin/` |
 | Generated runtime typings | `packages/weiv/types/` |
 | Browser and component coverage | `test/` |
-| Public guides | `site/docs/` |
+| Public guides | `docs/site/docs/` |
 
 For public command and module signatures, continue to the
 [API Guide](./api-guide.md).

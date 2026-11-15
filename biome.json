@@ -9,7 +9,7 @@
       "packages/**/*.{ts,tsx,js,mjs,cjs,json,css}",
       "test/**/*.{ts,tsx,js,mjs,cjs,json,css}",
       "tools/**/*.{ts,tsx,js,mjs,cjs,json,css}",
-      "site/site.json",
+      "docs/site/site.json",
       "!test/fixtures/expected/**",
       "!apps/storybook/storybook-static/**",
       "!**/dist/**",

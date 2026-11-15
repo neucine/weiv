@@ -100,7 +100,7 @@ function preflight() {
   const versions = files.map(f => JSON.parse(readFileSync(join(root, f))).version);
   if (project === "weiv") {
     if (!weivPlatform) throw Error(`Unsupported release platform: ${process.platform}-${process.arch}`);
-    versions.push(JSON.parse(readFileSync(join(root, "site/site.json"))).version);
+    versions.push(JSON.parse(readFileSync(join(root, "docs/site/site.json"))).version);
     findTool("bun");
     if (!preflightOnly) {
       try {

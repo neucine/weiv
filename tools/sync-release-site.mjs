@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sites = resolve(process.env.WEIV_SITES_REPO ?? join(root, "..", "sites"));
 const version = JSON.parse(readFileSync(join(root, "packages/weiv/package.json"), "utf8")).version;
-const siteVersion = JSON.parse(readFileSync(join(root, "site/site.json"), "utf8")).version;
+const siteVersion = JSON.parse(readFileSync(join(root, "docs/site/site.json"), "utf8")).version;
 const tag = `v${version}`;
 
 function run(command, args, cwd = root) {
@@ -22,7 +22,7 @@ function requireEqual(actual, expected, label) {
 try {
   requireEqual(siteVersion, version, "site version");
   if (!existsSync(join(sites, "sites/weiv-dev"))) throw new Error(`sites checkout is missing: ${sites}`);
-  requireEqual(run("git", ["status", "--porcelain", "--", "site"]), "", "Weiv site source status");
+  requireEqual(run("git", ["status", "--porcelain", "--", "docs/site"]), "", "Weiv site source status");
   requireEqual(
     run("git", ["ls-remote", "origin", "refs/heads/main"]).split("\t")[0],
     run("git", ["rev-parse", "HEAD"]),
