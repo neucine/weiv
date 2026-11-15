@@ -3,6 +3,26 @@ Set-Location (Resolve-Path (Join-Path $PSScriptRoot '../..'))
 # Apply repository line endings even when this agent reuses an older checkout.
 git -c core.autocrlf=false checkout-index --all --force
 if ($LASTEXITCODE -ne 0) { throw 'Checkout line ending setup failed' }
+# Buildkite cleans untracked checkout files between builds. Keep compiler outputs
+# outside the checkout and recreate only the directory junctions each time.
+$cacheRoot = 'C:\neucine-tools\cache\weiv'
+foreach ($cache in @(
+  @{ Link = 'libs/parser-backend/target'; Store = 'cargo-target' },
+  @{ Link = '.cyna-cache'; Store = 'cyna-cache' }
+)) {
+  $link = Join-Path (Get-Location).Path $cache.Link
+  $store = Join-Path $cacheRoot $cache.Store
+  New-Item -ItemType Directory -Force -Path $store | Out-Null
+  if (Test-Path $link) {
+    $item = Get-Item $link -Force
+    if (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+      throw "Checkout cache path is a real directory: $link"
+    }
+    Remove-Item $link -Force
+  }
+  New-Item -ItemType Junction -Path $link -Target $store | Out-Null
+  Write-Host "Persistent build cache: $link -> $store"
+}
 $env:CARGO_HOME = 'C:\neucine-tools\cargo'
 $env:RUSTUP_HOME = 'C:\neucine-tools\rustup'
 $env:CARGO_BUILD_JOBS = '1'
