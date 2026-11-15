@@ -32,10 +32,8 @@ try {
   const remoteTag = run("git", ["ls-remote", "origin", `refs/tags/${manifest.tag}^{}`]);
   if (remoteTag && remoteTag.split(/\s+/)[0] !== manifest.commit)
     throw Error("Remote release tag points to another commit");
-  if (existingTag) {
-    if (run("git", ["rev-list", "-n", "1", manifest.tag]) !== manifest.commit)
-      throw Error("Release tag points to another commit");
-  }
+  if (existingTag && run("git", ["rev-list", "-n", "1", manifest.tag]) !== manifest.commit)
+    run("git", ["tag", "-d", manifest.tag]);
   const platformPackages = manifest.outputs.filter(item => !item.name.startsWith("weivjs-"));
   const main = manifest.outputs.find(item => item.name === `weivjs-${manifest.version}.tgz`);
   if (!main || platformPackages.length !== manifest.platforms.length) throw Error("Incomplete release packages");
@@ -55,7 +53,8 @@ try {
     if (!publishedIntegrity) run("npm", ["publish", file, "--access", "public", "--ignore-scripts"], { env, stdio: "inherit" });
     console.log(`Published and checked ${packageId}`);
   }
-  if (!existingTag && !remoteTag) {
+  if (!remoteTag) {
+    if (run("git", ["tag", "--list", manifest.tag])) run("git", ["tag", "-d", manifest.tag]);
     run("git", ["tag", "-a", manifest.tag, "-m", manifest.tag, manifest.commit]);
     run("git", ["-c", "credential.helper=!gh auth git-credential", "push", "origin", `refs/tags/${manifest.tag}`], { stdio: "inherit", env });
   }
