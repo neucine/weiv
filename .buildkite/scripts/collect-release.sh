@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-source scripts/buildkite/runner-path.sh
+source .buildkite/scripts/runner-path.sh
 platforms=("$@")
 test "${#platforms[@]}" -eq 3
 for platform in "${platforms[@]}"; do
@@ -12,5 +12,5 @@ for platform in "${platforms[@]}"; do
   buildkite-agent artifact download 'dist/release/state/plan.json' "$destination" --step "$step"
   buildkite-agent artifact download 'dist/release/state/verify.json' "$destination" --step "$step"
 done
-node scripts/buildkite/collect-release.mjs "${platforms[@]}"
+node .buildkite/scripts/collect-release.mjs "${platforms[@]}"
 buildkite-agent artifact upload 'dist/release/collected/*'

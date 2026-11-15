@@ -3,7 +3,7 @@ steps:
 
   - label: ":mag: Release prerequisites"
     key: merged-release-prerequisites
-    command: scripts/buildkite/release-prerequisites.sh
+    command: .buildkite/scripts/release-prerequisites.sh
     agents:
       queue: macos-local
 
@@ -11,19 +11,19 @@ steps:
 
   - label: ":mac: Verify macOS release archive"
     key: merged-candidate-macos
-    command: scripts/buildkite/release-candidate.sh macos
+    command: .buildkite/scripts/release-candidate.sh macos
     agents:
       queue: macos-local
 
   - label: ":linux: Verify Linux release archive"
     key: merged-candidate-linux
-    command: scripts/buildkite/release-candidate.sh linux
+    command: .buildkite/scripts/release-candidate.sh linux
     agents:
       queue: linux-local-gpu
 
   - label: ":windows: Verify Windows release archive"
     key: merged-candidate-windows
-    command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/buildkite/release-candidate-windows.ps1
+    command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .buildkite/scripts/release-candidate-windows.ps1
     agents:
       queue: windows-local
 
@@ -31,7 +31,7 @@ steps:
 
   - label: ":package: Collect and compare release artifacts"
     key: merged-collect-release
-    command: CANDIDATE_STEP_PREFIX=merged-candidate scripts/buildkite/collect-release.sh macos linux windows
+    command: CANDIDATE_STEP_PREFIX=merged-candidate .buildkite/scripts/collect-release.sh macos linux windows
     agents:
       queue: macos-local
 
@@ -41,7 +41,7 @@ steps:
 
   - label: ":npm: Publish verified packages"
     key: merged-publish-release
-    command: scripts/buildkite/publish-release.sh
+    command: .buildkite/scripts/publish-release.sh
     secrets:
       - NPM_TOKEN
       - GITHUB_RELEASE_TOKEN
@@ -52,19 +52,19 @@ steps:
 
   - label: ":mac: Check published macOS package"
     key: merged-published-macos
-    command: scripts/buildkite/published-smoke.sh macos
+    command: .buildkite/scripts/published-smoke.sh macos
     agents:
       queue: macos-local
 
   - label: ":linux: Check published Linux package"
     key: merged-published-linux
-    command: scripts/buildkite/published-smoke.sh linux
+    command: .buildkite/scripts/published-smoke.sh linux
     agents:
       queue: linux-local-gpu
 
   - label: ":windows: Check published Windows package"
     key: merged-published-windows
-    command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/buildkite/published-smoke-windows.ps1
+    command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .buildkite/scripts/published-smoke-windows.ps1
     agents:
       queue: windows-local
 
@@ -72,7 +72,7 @@ steps:
 
   - label: ":github: Record GitHub release"
     key: merged-finalize-release
-    command: scripts/buildkite/finalize-release.sh
+    command: .buildkite/scripts/finalize-release.sh
     secrets:
       - GITHUB_RELEASE_TOKEN
     agents:
