@@ -2,14 +2,15 @@ import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { npmCommand } from "./npm-command.mjs";
 
 const repoRoot = process.cwd();
-const weivBin = resolve(repoRoot, "cyna-out/bin/weiv");
+const weivBin = resolve(repoRoot, "cyna-out/bin", process.platform === "win32" ? "weiv.exe" : "weiv");
 const tempRoot = mkdtempSync(join(tmpdir(), "weiv-npm-smoke-"));
 const packedTarballs = [];
 
 function run(cmd, args, cwd, env = process.env) {
-  execFileSync(cmd, args, {
+  execFileSync(...npmCommand(cmd, args), {
     cwd,
     env,
     stdio: "inherit",
@@ -17,7 +18,7 @@ function run(cmd, args, cwd, env = process.env) {
 }
 
 function runCapture(cmd, args, cwd) {
-  return execFileSync(cmd, args, {
+  return execFileSync(...npmCommand(cmd, args), {
     cwd,
     encoding: "utf8",
   }).trim();
@@ -54,6 +55,9 @@ function currentPlatformPackageDir() {
   }
   if (process.platform === "linux" && process.arch === "x64") {
     return "./packages/weiv-linux-x64-gnu";
+  }
+  if (process.platform === "win32" && process.arch === "x64") {
+    return "./packages/weiv-win32-x64-gnu";
   }
   return null;
 }

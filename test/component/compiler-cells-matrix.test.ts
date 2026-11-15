@@ -124,10 +124,19 @@ test("supported writes preserve native semantics across the mounted callback mat
     const oracle = new Function(
       `"use strict";${storage}${operations.map(({ id, body }) => `function oracle_${id}(detail){${body}matrixComplete(detail);}`).join("\n")}return {reset:matrixReset,snapshot:matrixSnapshot,actions:{${operations.map(({ id }) => `${JSON.stringify(id)}:oracle_${id}`).join(",")}}};`,
     )();
-    const compiled = Bun.spawnSync(["cyna-out/bin/weiv", "--json-diagnostics", "emit", "js", path], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const compiled = Bun.spawnSync(
+      [
+        process.platform === "win32" ? "cyna-out/bin/weiv.exe" : "cyna-out/bin/weiv",
+        "--json-diagnostics",
+        "emit",
+        "js",
+        path,
+      ],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
     if (compiled.exitCode) throw new Error(new TextDecoder().decode(compiled.stderr));
     const diagnostics = new TextDecoder().decode(compiled.stderr);
     // These intentionally effectful getter/iterator inputs may retain boundary

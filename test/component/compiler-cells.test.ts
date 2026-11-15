@@ -30,7 +30,10 @@ test("inline type-only named import from neiv/http has no runtime reference", ()
 }, 30000);
 
 function emit(path: string) {
-  return Bun.spawnSync(["cyna-out/bin/weiv", "emit", "js", path], { stdout: "pipe", stderr: "pipe" });
+  return Bun.spawnSync(
+    [process.platform === "win32" ? "cyna-out/bin/weiv.exe" : "cyna-out/bin/weiv", "emit", "js", path],
+    { stdout: "pipe", stderr: "pipe" },
+  );
 }
 async function fixture(path = "test/examples/basic/compiler-cells.weiv") {
   const result = emit(path);

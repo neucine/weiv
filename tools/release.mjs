@@ -14,12 +14,36 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { npmCommand } from "./npm-command.mjs";
 const root = resolve(import.meta.dirname, "..");
 const project = existsSync(join(root, "packages/weiv/package.json")) ? "weiv" : "neiv";
 const weivPlatform = {
-  "darwin-arm64": { directory: "weiv-darwin-arm64", format: /Mach-O 64-bit (?:executable )?arm64/ },
-  "linux-x64": { directory: "weiv-linux-x64-gnu", format: /ELF 64-bit.*x86-64/ },
+  "darwin-arm64": { directory: "weiv-darwin-arm64" },
+  "linux-x64": { directory: "weiv-linux-x64-gnu" },
+  "win32-x64": { directory: "weiv-win32-x64-gnu" },
 }[`${process.platform}-${process.arch}`];
+const weivBinaryName = process.platform === "win32" ? "weiv.exe" : "weiv";
+function assertPlatformBinary(path) {
+  const data = readFileSync(path);
+  let valid = false;
+  if (process.platform === "darwin") {
+    valid = data.length >= 8 && data.readUInt32LE(0) === 0xfeedfacf && data.readUInt32LE(4) === 0x0100000c;
+  } else if (process.platform === "linux") {
+    valid =
+      data.length >= 20 &&
+      data.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46])) &&
+      data[4] === 2 &&
+      data.readUInt16LE(18) === 0x3e;
+  } else if (process.platform === "win32") {
+    const pe = data.length >= 0x40 ? data.readUInt32LE(0x3c) : data.length;
+    valid =
+      data.subarray(0, 2).toString("ascii") === "MZ" &&
+      pe + 6 <= data.length &&
+      data.subarray(pe, pe + 4).toString("ascii") === "PE\0\0" &&
+      data.readUInt16LE(pe + 4) === 0x8664;
+  }
+  if (!valid) throw Error(`Unexpected platform binary format: ${path}`);
+}
 let state = join(root, "dist/release/state");
 let artifacts = join(root, "dist/release/artifacts");
 let sink = join(root, "dist/release/sink");
@@ -29,7 +53,7 @@ const allowDirty = args.includes("--allow-dirty");
 const preflightOnly = args.includes("--preflight-only");
 const run = (cmd, a, opts = {}) =>
   (
-    execFileSync(cmd, a, {
+    execFileSync(...npmCommand(cmd, a), {
       cwd: root,
       encoding: "utf8",
       stdio: opts.stdio || "pipe",
@@ -43,20 +67,44 @@ const write = (name, value) => {
   writeFileSync(join(state, name + ".json"), JSON.stringify(value, null, 2) + "\n");
 };
 const sha = p => createHash("sha256").update(readFileSync(p)).digest("hex");
+function normalizeSharedPackageText(directory) {
+  if (process.platform !== "win32") return;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) normalizeSharedPackageText(path);
+    else if (/\.(?:md|mjs|js|ts)$/.test(entry.name)) {
+      const source = readFileSync(path, "utf8");
+      const normalized = source.replace(/\r\n/g, "\n");
+      if (normalized !== source) writeFileSync(path, normalized);
+    }
+  }
+}
+function normalizeWeivPackage() {
+  const packageRoot = join(root, "packages/weiv");
+  for (const entry of ["README.md", "bin", "dist", "types"]) {
+    const path = join(packageRoot, entry);
+    if (entry === "README.md") {
+      const source = readFileSync(path, "utf8");
+      const normalized = source.replace(/\r\n/g, "\n");
+      if (normalized !== source) writeFileSync(path, normalized);
+    } else normalizeSharedPackageText(path);
+  }
+}
 const files =
   project === "weiv"
     ? ["packages/weiv/package.json", `packages/${weivPlatform?.directory || "unsupported"}/package.json`]
     : ["packages/neiv/package.json"];
 function preflight() {
-  for (const tool of ["git", "node", "npm", "tar"]) run("which", [tool]);
+  const findTool = tool => run(process.platform === "win32" ? "where.exe" : "which", [tool]);
+  for (const tool of ["git", "node", "npm", "tar"]) findTool(tool);
   const versions = files.map(f => JSON.parse(readFileSync(join(root, f))).version);
   if (project === "weiv") {
     if (!weivPlatform) throw Error(`Unsupported release platform: ${process.platform}-${process.arch}`);
     versions.push(JSON.parse(readFileSync(join(root, "site/site.json"))).version);
-    run("which", ["bun"]);
+    findTool("bun");
     if (!preflightOnly) {
       try {
-        run("which", ["cyna"]);
+        findTool("cyna");
       } catch {
         throw Error("Missing Cyna toolchain: install the pinned release before verify");
       }
@@ -67,18 +115,17 @@ function preflight() {
       }
     }
     const p = JSON.parse(readFileSync(join(root, files[0])));
-    for (const directory of ["weiv-darwin-arm64", "weiv-linux-x64-gnu"]) {
+    for (const directory of ["weiv-darwin-arm64", "weiv-linux-x64-gnu", "weiv-win32-x64-gnu"]) {
       versions.push(JSON.parse(readFileSync(join(root, `packages/${directory}/package.json`))).version);
       versions.push(p.optionalDependencies[`@weivjs/${directory}`]);
     }
-    const binary = `packages/${weivPlatform.directory}/bin/weiv`;
+    const binary = `packages/${weivPlatform.directory}/bin/${weivBinaryName}`;
     if (!preflightOnly) {
       if (!existsSync(join(root, binary))) throw Error(`Missing platform binary: ${binary}`);
-      const kind = run("file", [binary]);
-      if (!weivPlatform.format.test(kind)) throw Error(`Unexpected platform binary format: ${kind}`);
+      assertPlatformBinary(join(root, binary));
     }
   } else {
-    if (!preflightOnly) run("which", ["cyna"]);
+    if (!preflightOnly) findTool("cyna");
     const manifest = readFileSync(join(root, "cyna.toml"), "utf8").match(/^version = "([^"]+)"/m)?.[1];
     versions.push(manifest);
     const script = readFileSync(join(root, "packages/neiv/scripts/ensure-cyna-package.sh"), "utf8");
@@ -153,23 +200,35 @@ function verify() {
   const outputs = [];
   if (project === "weiv") {
     run("node", ["packages/weiv/scripts/build.mjs"], { stdio: "inherit" });
-    const legacy = join(root, "cyna-out/bin/weiv"),
-      backup = join(root, "cyna-out/bin/weiv.release-backup");
+    run("cargo", ["build", "--release", "--locked", "--manifest-path", "libs/parser-backend/Cargo.toml"], {
+      stdio: "inherit",
+    });
+    const legacy = join(root, "cyna-out/bin", weivBinaryName),
+      backup = join(root, "cyna-out/bin", `${weivBinaryName}.release-backup`);
     mkdirSync(join(root, "cyna-out/bin"), { recursive: true });
     if (existsSync(backup)) throw Error("Previous binary backup exists: " + backup);
     const hadLegacy = existsSync(legacy);
     if (hadLegacy) renameSync(legacy, backup);
     try {
-      copyFileSync(join(root, `packages/${weivPlatform.directory}/bin/weiv`), legacy);
+      copyFileSync(join(root, `packages/${weivPlatform.directory}/bin/${weivBinaryName}`), legacy);
       run("bun", ["test", "test/component", "test/runtime", "test/ui-core", "test/inspect"], {
         stdio: "inherit",
       });
-      run("cyna", ["test", "."], { stdio: "inherit" });
+      const cynaTestManifest =
+        process.platform === "linux"
+          ? "cyna.release.linux.toml"
+          : process.platform === "win32"
+            ? "cyna.release.windows.toml"
+            : ".";
+      run("cyna", ["test", cynaTestManifest], { stdio: "inherit" });
       run("npm", ["run", "pkg:release-check"], { stdio: "inherit" });
       run("npm", ["run", "pkg:smoke"], { stdio: "inherit" });
       run("node", ["test/package/vite-plugin.test.mjs"], {
         stdio: "inherit",
-        env: { ...process.env, WEIV_BINARY_PATH: join(root, `packages/${weivPlatform.directory}/bin/weiv`) },
+        env: {
+          ...process.env,
+          WEIV_BINARY_PATH: join(root, `packages/${weivPlatform.directory}/bin/${weivBinaryName}`),
+        },
       });
     } finally {
       rmSync(legacy, { force: true });
@@ -180,6 +239,7 @@ function verify() {
     if (project === "neiv") run("sh", ["packages/neiv/scripts/ensure-cyna-package.sh"], { stdio: "inherit" });
     if (project === "weiv" && pkg === "packages/weiv") {
       run("node", ["packages/weiv/scripts/generate-types.mjs"], { stdio: "inherit" });
+      normalizeWeivPackage();
     }
     if (project === "neiv") run("node", ["packages/neiv/scripts/build-frontend.mjs"], { stdio: "inherit" });
     const output = JSON.parse(
@@ -224,7 +284,10 @@ function verify() {
     }
     run("node", [join(unpack, "package/bin/weiv.mjs"), "--help"], {
       stdio: "inherit",
-      env: { ...process.env, WEIV_BINARY_PATH: join(root, `packages/${weivPlatform.directory}/bin/weiv`) },
+      env: {
+        ...process.env,
+        WEIV_BINARY_PATH: join(root, `packages/${weivPlatform.directory}/bin/${weivBinaryName}`),
+      },
     });
   } else {
     run("node", [

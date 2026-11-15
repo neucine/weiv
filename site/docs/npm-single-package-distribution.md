@@ -19,7 +19,7 @@ supports both CLI and bundler adapters.
   - `@weivjs/weiv-darwin-x64`
   - `@weivjs/weiv-linux-x64-gnu`
   - `@weivjs/weiv-linux-arm64-gnu`
-  - `@weivjs/weiv-win32-x64-msvc`
+  - `@weivjs/weiv-win32-x64-gnu`
 
 ## Resolution Order
 
@@ -55,6 +55,6 @@ This validates:
 ## Important
 
 Release `0.1.1` ships real binaries through
-`@weivjs/weiv-darwin-arm64` and `@weivjs/weiv-win32-x64-msvc`. The macOS x64
+`@weivjs/weiv-darwin-arm64` and `@weivjs/weiv-win32-x64-gnu`. The macOS x64
 and Linux package variants remain at `0.1.0` and still need real release
 binaries before Weiv has full cross-platform coverage.
