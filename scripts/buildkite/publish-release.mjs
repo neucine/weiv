@@ -34,8 +34,9 @@ try {
     throw Error("Remote release tag points to another commit");
   if (existingTag && run("git", ["rev-list", "-n", "1", manifest.tag]) !== manifest.commit)
     run("git", ["tag", "-d", manifest.tag]);
-  const platformPackages = manifest.outputs.filter(item => !item.name.startsWith("weivjs-"));
-  const main = manifest.outputs.find(item => item.name === `weivjs-${manifest.version}.tgz`);
+  const mainName = `weivjs-${manifest.version}.tgz`;
+  const platformPackages = manifest.outputs.filter(item => item.name !== mainName);
+  const main = manifest.outputs.find(item => item.name === mainName);
   if (!main || platformPackages.length !== manifest.platforms.length) throw Error("Incomplete release packages");
   for (const item of [...platformPackages, main]) {
     const file = join(directory, item.name);
