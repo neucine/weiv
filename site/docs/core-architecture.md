@@ -5,8 +5,9 @@ The compiler owns component structure, dependency discovery, update regions, and
 the shape of generated DOM code. The runtime keeps those generated components
 alive, tracks supported shared state, and applies batched updates.
 
-::: info Package version
-This guide describes the compiler and runtime published in `0.1.3`.
+::: info Source and release status
+This guide describes the current source checkout. Published versions may lag
+behind compiler and runtime features documented here.
 :::
 
 ## Design constraints
@@ -201,8 +202,6 @@ which regions and where mutations enter the update graph.
 | Browser and component coverage | `test/` |
 | Public guides | `site/docs/` |
 
-For the compiler-stage ownership map, see the
-[compiler architecture record](https://github.com/neucine/weiv/blob/main/docs/compiler/ARCHITECTURE.md).
 For public command and module signatures, continue to the
 [API Guide](./api-guide.md).
 

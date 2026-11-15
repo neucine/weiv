@@ -48,6 +48,5 @@ module for managed shared state. `analyze state-boundaries` reports dependency
 warnings. `--json-diagnostics` selects structured CLI diagnostics.
 
 The compiler sources live under `src`; permanent Cyna tests live under
-`test/cyna`, selected by the manifest's `[test]` directory.
-`docs/compiler/ARCHITECTURE.md` describes the pipeline. The former compiler
+`test/cyna`, selected by the manifest's `[test]` directory. The former compiler
 and its comparison history are retained on the `legacy` branch.

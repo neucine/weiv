@@ -21,10 +21,8 @@ Public docs kept here:
 - [UI Library Direction](./ui-library-direction.md)
 - [UI Library Spec](./ui-library-spec.md)
 
-Compiler internals are described in
-[`docs/compiler/ARCHITECTURE.md`](../../docs/compiler/ARCHITECTURE.md). Neucine
-maintains design and planning records in its central documentation repository.
-The public API contract and user guides live here.
+This folder holds the public API contract and user guides. Neucine keeps
+internal design and planning records in its central documentation repository.
 
 Current publish flow:
 
