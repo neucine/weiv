@@ -3,10 +3,8 @@
 The managed default uses one observable notification and scheduling core for
 local state, managed project shared state and compatible explicit observables.
 
-::: info Source and release status
-This describes the managed default in the current Weiv source. Published packages
-need a matching compiler/runtime release to provide it. Updating this site does
-not publish new packages.
+::: info Package version
+The managed default is available in the published `0.1.3` compiler and runtime.
 :::
 
 ## State now, DOM in a microtask

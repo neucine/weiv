@@ -5,10 +5,8 @@ automatically inside Weiv's managed compilation boundary. Both use the same
 observable tracking and scheduling core. External mutable state needs a known
 observable or subscription contract.
 
-::: info Source and release status
-This describes the managed default in the current Weiv source. Published packages
-need a matching compiler/runtime release to provide it. Updating this site does
-not publish new packages.
+::: info Package version
+The managed default is available in the published `0.1.3` compiler and runtime.
 :::
 
 ## Local state
