@@ -1,16 +1,15 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { run as runCommand, selectPackages } from "./publish-release-helpers.mjs";
 
 if (process.env.BUILDKITE_BRANCH !== "main") throw Error("Publication requires the merged main build");
 const root = process.cwd();
 const directory = join(root, "dist/release/collected");
 const manifest = JSON.parse(readFileSync(join(directory, "manifest.json")));
-const run = (cmd, args, options = {}) =>
-  execFileSync(cmd, args, { cwd: root, encoding: "utf8", ...options })?.trim() ?? "";
+const run = (cmd, args, options = {}) => runCommand(cmd, args, { cwd: root, ...options });
 if (manifest.commit !== process.env.BUILDKITE_COMMIT || run("git", ["rev-parse", "HEAD"]) !== manifest.commit)
   throw Error("Release manifest is for a different commit");
 if (run("git", ["status", "--porcelain"])) throw Error("Release checkout is dirty");
@@ -34,11 +33,7 @@ try {
     throw Error("Remote release tag points to another commit");
   if (existingTag && run("git", ["rev-list", "-n", "1", manifest.tag]) !== manifest.commit)
     run("git", ["tag", "-d", manifest.tag]);
-  const mainName = `weivjs-${manifest.version}.tgz`;
-  const platformPackages = manifest.outputs.filter(item => item.name !== mainName);
-  const main = manifest.outputs.find(item => item.name === mainName);
-  if (!main || platformPackages.length !== manifest.platforms.length) throw Error("Incomplete release packages");
-  for (const item of [...platformPackages, main]) {
+  for (const item of selectPackages(manifest)) {
     const file = join(directory, item.name);
     const metadata = JSON.parse(run("tar", ["-xOzf", file, "package/package.json"]));
     const packageId = `${metadata.name}@${metadata.version}`;

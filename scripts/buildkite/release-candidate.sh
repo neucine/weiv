@@ -27,13 +27,11 @@ fi
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || exit 1
 test "$(git rev-parse HEAD)" = "${BUILDKITE_COMMIT:?Buildkite commit required}"
 cyna_version="${CYNA_VERSION:-0.5.3}"
-case "$platform" in
-  macos) cyna_host="aarch64-apple-darwin" ;;
-  linux) cyna_host="x86_64-unknown-linux-gnu" ;;
-esac
-curl --fail --location --retry 3 --silent --show-error https://cyna.dev/install.sh | \
-  sh -s -- "$cyna_version" "$cyna_host"
-cyna version
+installed_cyna="$(cyna version)"
+if [ "$installed_cyna" != "cyna $cyna_version" ]; then
+  echo "Expected Cyna $cyna_version on $HOSTNAME, found $installed_cyna. Prepare the runner before starting the build." >&2
+  exit 1
+fi
 npm ci --ignore-scripts --no-audit --no-fund
 npm run format:check
 npm ci --prefix packages/vscode-extension --ignore-scripts --no-audit --no-fund

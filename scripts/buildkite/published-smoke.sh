@@ -8,14 +8,4 @@ case "$platform:$(uname -s):$(uname -m)" in
   *) echo "Wrong runner for $platform" >&2; exit 1 ;;
 esac
 buildkite-agent artifact download 'dist/release/collected/manifest.json' . --step merged-collect-release
-version="$(node -p "JSON.parse(require('fs').readFileSync('dist/release/collected/manifest.json')).version")"
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
-cd "$tmp"
-for attempt in 1 2 3; do
-  if npm install --no-audit --no-fund --ignore-scripts "weivjs@$version"; then break; fi
-  if [ "$attempt" = 3 ]; then exit 1; fi
-  sleep 10
-done
-node node_modules/weivjs/bin/weiv.mjs --help
-node --input-type=module -e "await import('weivjs/vite'); await import('weivjs/bun')"
+node scripts/buildkite/published-smoke.mjs
