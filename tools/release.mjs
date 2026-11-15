@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { npmCommand } from "./npm-command.mjs";
 const root = resolve(import.meta.dirname, "..");
 const project = existsSync(join(root, "packages/weiv/package.json")) ? "weiv" : "neiv";
 const weivPlatform = {
@@ -52,7 +53,7 @@ const allowDirty = args.includes("--allow-dirty");
 const preflightOnly = args.includes("--preflight-only");
 const run = (cmd, a, opts = {}) =>
   (
-    execFileSync(cmd, a, {
+    execFileSync(...npmCommand(cmd, a), {
       cwd: root,
       encoding: "utf8",
       stdio: opts.stdio || "pipe",

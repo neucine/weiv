@@ -2,17 +2,18 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { npmCommand } from "./npm-command.mjs";
 
 const repoRoot = process.cwd();
 const tmp = mkdtempSync(join(tmpdir(), "weiv-release-check-"));
 const tarballs = [];
 
 function run(cmd, args, cwd, env = process.env) {
-  execFileSync(cmd, args, { cwd, env, stdio: "inherit" });
+  execFileSync(...npmCommand(cmd, args), { cwd, env, stdio: "inherit" });
 }
 
 function pack(dir) {
-  const raw = execFileSync("npm", ["pack", "--json", dir], { cwd: repoRoot, encoding: "utf8" });
+  const raw = execFileSync(...npmCommand("npm", ["pack", "--json", dir]), { cwd: repoRoot, encoding: "utf8" });
   const jsonStart = raw.indexOf("[");
   const parsed = JSON.parse(raw.slice(jsonStart));
   const filename = parsed[0]?.filename;
