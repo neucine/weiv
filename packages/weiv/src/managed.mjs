@@ -27,7 +27,10 @@ export function validateOptions(options) {
 
 export function canonical(path) {
   const clean = path.split("?")[0];
-  return existsSync(clean) ? realpathSync(clean) : resolve(clean);
+  const absolute = existsSync(clean) ? realpathSync(clean) : resolve(clean);
+  // Windows file names are case insensitive, but Vite and the native compiler
+  // can report different capitalization for the same temporary directory.
+  return process.platform === "win32" ? absolute.toLowerCase() : absolute;
 }
 
 export function inside(root, path) {
