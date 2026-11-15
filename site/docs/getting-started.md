@@ -2,8 +2,8 @@
 
 ## Status
 
-`weiv` is runnable today, but still pre-v1. The current source package version
-is `0.1.2`.
+`weiv` is runnable today, but still pre-v1. The current published package version
+is `0.1.3`.
 
 The current checkpoint includes a working direct-DOM browser path,
 compiler-driven invalidation, slot composition, shared observable runtime
@@ -84,7 +84,7 @@ For concrete examples, see [Shared State](./shared-state.md) and
 
 Current source enables automatic supported local and managed project shared state
 by default. State writes are immediate; later DOM patches are microtask-batched.
-Published installations need a matching compiler/runtime release for this default.
+The published `0.1.3` compiler and runtime include this default.
 See [Reactivity](./reactivity.md) for boundaries and deprecated legacy migration,
 and [Bundling](./bundling.md) for managed project ownership. Use the
 [API Guide](./api-guide.md) for the complete public surface and

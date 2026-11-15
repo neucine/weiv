@@ -6,10 +6,8 @@ Weiv is a pre-v1 compiler-first frontend framework with direct DOM output.
 The current source uses bounded managed reactivity as its only model for CLI component
 and app emission, the development server, and Vite/Bun plugins.
 
-::: info Source and release status
-This describes the managed default in the current Weiv source. Published packages
-need a matching compiler/runtime release to provide it. Updating this site does
-not publish new packages.
+::: info Package version
+The managed default is available in the published `0.1.3` compiler and runtime.
 :::
 
 ## Managed reactivity
@@ -74,6 +72,6 @@ Vite development changes rebuild the managed graph and reload the page; state-
 preserving fine-grained HMR is not promised. Some dependency guards remain
 conservative, and diagnostics/tooling can still improve.
 
-Next steps are matching compiler/runtime distribution, maintained application
-migration after legacy retirement. Expanding to every JavaScript case is
+Next steps include maintained application migration after legacy retirement.
+Expanding to every JavaScript case is
 not a prerequisite for those steps.

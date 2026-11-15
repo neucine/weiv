@@ -5,9 +5,8 @@ The compiler owns component structure, dependency discovery, update regions, and
 the shape of generated DOM code. The runtime keeps those generated components
 alive, tracks supported shared state, and applies batched updates.
 
-::: info Source and release status
-This guide describes the current source checkout. Published versions may lag
-behind compiler and runtime features documented here.
+::: info Package version
+This guide describes the compiler and runtime published in `0.1.3`.
 :::
 
 ## Design constraints
