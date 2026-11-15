@@ -9,7 +9,8 @@ if (process.env.BUILDKITE_BRANCH !== "main") throw Error("Publication requires t
 const root = process.cwd();
 const directory = join(root, "dist/release/collected");
 const manifest = JSON.parse(readFileSync(join(directory, "manifest.json")));
-const run = (cmd, args, options = {}) => execFileSync(cmd, args, { cwd: root, encoding: "utf8", ...options }).trim();
+const run = (cmd, args, options = {}) =>
+  execFileSync(cmd, args, { cwd: root, encoding: "utf8", ...options })?.trim() ?? "";
 if (manifest.commit !== process.env.BUILDKITE_COMMIT || run("git", ["rev-parse", "HEAD"]) !== manifest.commit)
   throw Error("Release manifest is for a different commit");
 if (run("git", ["status", "--porcelain"])) throw Error("Release checkout is dirty");
@@ -31,13 +32,8 @@ try {
   const remoteTag = run("git", ["ls-remote", "origin", `refs/tags/${manifest.tag}^{}`]);
   if (remoteTag && remoteTag.split(/\s+/)[0] !== manifest.commit)
     throw Error("Remote release tag points to another commit");
-  if (existingTag) {
-    if (run("git", ["rev-list", "-n", "1", manifest.tag]) !== manifest.commit)
-      throw Error("Release tag points to another commit");
-  } else if (!remoteTag) {
-    run("git", ["tag", "-a", manifest.tag, "-m", manifest.tag, manifest.commit]);
-    run("git", ["-c", "credential.helper=!gh auth git-credential", "push", "origin", `refs/tags/${manifest.tag}`], { stdio: "inherit", env });
-  }
+  if (existingTag && run("git", ["rev-list", "-n", "1", manifest.tag]) !== manifest.commit)
+    run("git", ["tag", "-d", manifest.tag]);
   const platformPackages = manifest.outputs.filter(item => !item.name.startsWith("weivjs-"));
   const main = manifest.outputs.find(item => item.name === `weivjs-${manifest.version}.tgz`);
   if (!main || platformPackages.length !== manifest.platforms.length) throw Error("Incomplete release packages");
@@ -56,6 +52,11 @@ try {
       throw Error(`Registry package differs from verified artifact: ${packageId}`);
     if (!publishedIntegrity) run("npm", ["publish", file, "--access", "public", "--ignore-scripts"], { env, stdio: "inherit" });
     console.log(`Published and checked ${packageId}`);
+  }
+  if (!remoteTag) {
+    if (run("git", ["tag", "--list", manifest.tag])) run("git", ["tag", "-d", manifest.tag]);
+    run("git", ["tag", "-a", manifest.tag, "-m", manifest.tag, manifest.commit]);
+    run("git", ["-c", "credential.helper=!gh auth git-credential", "push", "origin", `refs/tags/${manifest.tag}`], { stdio: "inherit", env });
   }
 } finally {
   rmSync(configRoot, { recursive: true, force: true });

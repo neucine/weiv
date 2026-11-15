@@ -152,8 +152,8 @@ function preflight() {
   const commit = run("git", ["rev-parse", "HEAD"]);
   if (!allowDirty && run("git", ["status", "--porcelain"])) throw Error("Working tree is dirty");
   const tag = "v" + version;
-  const existingTag = run("git", ["tag", "--list", tag]);
-  if (existingTag && !allowDirty) throw Error(`Tag ${tag} already exists`);
+  const publishedTag = run("git", ["ls-remote", "--tags", "origin", `refs/tags/${tag}`]);
+  if (publishedTag && !allowDirty) throw Error(`Tag ${tag} already exists on origin`);
   return {
     project,
     version,
