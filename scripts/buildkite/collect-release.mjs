@@ -14,6 +14,23 @@ if (!commit || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/.test(version ?? ""))
 const platforms = process.argv.slice(2);
 if (!platforms.length) throw Error("Pass the candidate platform names");
 const sha256 = file => createHash("sha256").update(readFileSync(file)).digest("hex");
+function samePackageFiles(left, right) {
+  const names = file =>
+    execFileSync("tar", ["-tzf", file], { encoding: "utf8" })
+      .trim()
+      .split("\n")
+      .sort();
+  const leftNames = names(left);
+  const rightNames = names(right);
+  if (leftNames.length !== rightNames.length || leftNames.some((name, index) => name !== rightNames[index]))
+    return false;
+  return leftNames.every(name => {
+    if (!name.startsWith("package/") || name.endsWith("/")) return false;
+    const leftBytes = execFileSync("tar", ["-xOzf", left, name]);
+    const rightBytes = execFileSync("tar", ["-xOzf", right, name]);
+    return leftBytes.equals(rightBytes);
+  });
+}
 const release = join(root, "dist/release/collected");
 mkdirSync(release, { recursive: true });
 const outputs = new Map();
@@ -35,7 +52,11 @@ for (const platform of platforms) {
     const file = join(source, "dist/release/artifacts", item.name);
     if (!existsSync(file) || sha256(file) !== item.sha256) throw Error(`Candidate hash mismatch: ${platform}/${item.name}`);
     const previous = outputs.get(item.name);
-    if (previous && previous.sha256 !== item.sha256) throw Error(`Cross-platform package mismatch: ${item.name}`);
+    // npm pack preserves file bytes on Windows but cannot preserve the Unix
+    // executable bit on bin/weiv.mjs. Publish the macOS archive after checking
+    // every shared package member against the other platforms.
+    if (previous && previous.sha256 !== item.sha256 && !samePackageFiles(join(release, item.name), file))
+      throw Error(`Cross-platform package mismatch: ${item.name}`);
     if (!previous) {
       copyFileSync(file, join(release, item.name));
       outputs.set(item.name, { name: item.name, sha256: item.sha256 });
