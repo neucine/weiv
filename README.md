@@ -40,8 +40,8 @@ before it should be treated as production-ready.
 
 Install the published package:
 
-The current compiler binary supports macOS arm64. Other platforms require a
-compatible binary supplied through `WEIV_BINARY_PATH`.
+The published compiler supports macOS arm64, Linux x64 GNU, and Windows x64 GNU.
+For another platform, supply a compatible binary through `WEIV_BINARY_PATH`.
 
 ```bash
 npm i -D weivjs
@@ -161,7 +161,7 @@ VS Code support is maintained in [packages/vscode-extension](packages/vscode-ext
 
 ## Contributor Commands
 
-Build the source checkout CLI and macOS arm64 package binary with Cyna 0.5.0
+Build the source checkout CLI and a binary for your platform with Cyna 0.5.0
 and Cargo. The previous compiler implementation is on the `legacy` branch.
 
 ```bash

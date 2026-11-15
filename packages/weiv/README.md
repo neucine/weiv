@@ -13,8 +13,9 @@ Compiler-first `.weiv` tooling in one package:
 npm i -D weivjs
 ```
 
-The 0.1.3 release targets macOS arm64 and Linux x64 GNU. Other native targets
-return an unsupported-platform error until their packages are available.
+The 0.1.3 release targets macOS arm64, Linux x64 GNU, and Windows x64 GNU.
+Other native targets return an unsupported-platform error until their packages
+are available.
 
 Then run:
 

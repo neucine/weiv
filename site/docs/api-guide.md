@@ -27,8 +27,9 @@ The package exposes:
 | `weiv:observable` | Explicit observable runtime |
 | `weiv:router` | Client-side router |
 
-The native compiler currently supports macOS arm64. Other platforms need a
-compatible compiler binary supplied through `WEIV_BINARY_PATH`.
+The published native compiler supports macOS arm64, Linux x64 GNU, and Windows
+x64 GNU. For another platform, supply a compatible binary through
+`WEIV_BINARY_PATH`.
 
 ## Component contract
 

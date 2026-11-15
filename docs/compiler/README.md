@@ -2,11 +2,12 @@
 
 The Weiv CLI is implemented in Cyna. It uses the retained Rust script backend
 for JavaScript and TypeScript analysis and the JavaScript runtime packaged by
-`weivjs`. The current native package target is macOS arm64.
+`weivjs`. Published native packages target macOS arm64, Linux x64 GNU, and
+Windows x64 GNU.
 
 ## Build and verify
 
-From the repository root, with Cyna 0.5.0, Cargo, and the macOS SDK installed:
+From the repository root, with Cyna 0.5.0 and Cargo installed, run:
 
 ```sh
 npm run build:cyna
@@ -19,9 +20,11 @@ npm run pkg:smoke
 ```
 
 The build command compiles the Rust backend with locked dependencies, creates
-`cyna-out/bin/weiv`, and copies that binary into the macOS arm64 platform
-package. Set `CYNA` to select a specific Cyna compiler executable. On macOS,
-the build script supplies `SDKROOT` from `xcrun` when it is unset.
+`cyna-out/bin/weiv` (or `weiv.exe` on Windows), and copies it into the matching
+platform package on supported systems. Set `CYNA` to select a specific Cyna
+compiler executable. On macOS, install the macOS SDK; the build script supplies
+`SDKROOT` from `xcrun` when it is unset. On Windows, the build uses the GNU Rust
+target and requires the MinGW linker and Windows SDK link inputs.
 
 ## CLI
 

@@ -8,7 +8,7 @@ Weiv 已经可以用于试做项目，但还没到 v1。依赖分析、大型应
 
 ## 快速开始
 
-目前发布的编译器二进制文件支持 Apple Silicon Mac。其他平台需要自行准备兼容的二进制文件，并通过 `WEIV_BINARY_PATH` 指定路径。
+目前发布的编译器支持 macOS arm64、Linux x64 GNU 和 Windows x64 GNU。其他平台需要自行准备兼容的二进制文件，并通过 `WEIV_BINARY_PATH` 指定路径。
 
 ```bash
 npm i -D weivjs
