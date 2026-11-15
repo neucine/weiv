@@ -2,7 +2,12 @@ import { test } from "bun:test";
 
 function runInspectInvalGraph(path: string): string {
   const proc = Bun.spawnSync({
-    cmd: [(process.platform === "win32" ? "cyna-out/bin/weiv.exe" : "cyna-out/bin/weiv"), "inspect", "invalidation-graph", path],
+    cmd: [
+      process.platform === "win32" ? "cyna-out/bin/weiv.exe" : "cyna-out/bin/weiv",
+      "inspect",
+      "invalidation-graph",
+      path,
+    ],
     stdout: "pipe",
     stderr: "pipe",
     cwd: process.cwd(),
