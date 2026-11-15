@@ -13,7 +13,10 @@ function run(cmd, args, cwd, env = process.env) {
 }
 
 function pack(dir) {
-  const raw = execFileSync(...npmCommand("npm", ["pack", "--json", dir]), { cwd: repoRoot, encoding: "utf8" });
+  const raw = execFileSync(...npmCommand("npm", ["pack", "--json", dir]), {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
   const jsonStart = raw.indexOf("[");
   const parsed = JSON.parse(raw.slice(jsonStart));
   const filename = parsed[0]?.filename;
