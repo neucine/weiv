@@ -1,6 +1,6 @@
 ---
 layout: home
-title: Weiv.js
+title: Weiv TypeScript frontend framework
 
 hero:
   name: ""
